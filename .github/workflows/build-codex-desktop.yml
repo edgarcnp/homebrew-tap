@@ -11,6 +11,8 @@ concurrency:
 
 jobs:
   build:
+    permissions:
+      contents: write
     uses: ./.github/workflows/reusable-build-appimage.yml
     with:
       app_cask: codex-desktop
