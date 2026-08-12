@@ -1,0 +1,21 @@
+name: Build and publish Codex Desktop AppImage
+
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: codex-desktop-build
+  cancel-in-progress: false
+
+jobs:
+  build:
+    uses: ./.github/workflows/reusable-build-appimage.yml
+    with:
+      app_cask: codex-desktop
+      app_name: Codex Desktop
+      asset_prefix: codex-desktop
+      tag_prefix: codex-desktop-v
+      source_owner: edgarcnp
+      upstream_repo: ilysenko/codex-desktop-linux
