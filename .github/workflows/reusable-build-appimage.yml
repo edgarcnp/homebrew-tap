@@ -116,8 +116,10 @@ jobs:
           sudo apt-get install -y dpkg-dev gnupg rpm
       - name: Install appimagetool
         run: |
-          curl -fL -o /tmp/appimagetool \
+          curl -fL --retry 5 --retry-all-errors --retry-delay 5 \
+            -o /tmp/appimagetool \
             "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-${{ matrix.appimage_arch }}.AppImage"
+          test -s /tmp/appimagetool
           chmod +x /tmp/appimagetool
           (cd /tmp && ./appimagetool --appimage-extract >/dev/null)
           sudo mv /tmp/squashfs-root /opt/appimagetool
