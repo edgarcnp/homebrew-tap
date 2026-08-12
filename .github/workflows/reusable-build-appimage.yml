@@ -4,30 +4,28 @@ on:
   workflow_call:
     inputs:
       app_cask:
-        description: Cask filename stem (e.g. codex-desktop)
+        description: Cask filename stem this pipeline updates (e.g. my-app)
         required: true
         type: string
       app_name:
-        description: Human-readable app name (e.g. Codex Desktop)
+        description: Human-readable app name used in the release title (e.g. My App)
         required: true
         type: string
       asset_prefix:
-        description: Release asset filename prefix (e.g. codex-desktop)
+        description: Release asset filename prefix (e.g. my-app)
         required: true
         type: string
       tag_prefix:
-        description: Release tag prefix, including trailing dash (e.g. codex-desktop-v)
+        description: Release tag prefix, including trailing dash (e.g. my-app-v)
         required: true
         type: string
       source_owner:
-        description: Owner of the fork to build from; falls back to upstream_repo
-        required: false
-        default: edgarcnp
+        description: Owner of the fork to build from; falls back to upstream_repo (e.g. myorg)
+        required: true
         type: string
       upstream_repo:
-        description: Upstream packaging repository (owner/repo)
-        required: false
-        default: ilysenko/codex-desktop-linux
+        description: Upstream packaging repository (owner/repo) (e.g. myorg/my-app-linux)
+        required: true
         type: string
 
 defaults:

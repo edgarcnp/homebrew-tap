@@ -1,5 +1,6 @@
 cask "codex-desktop" do
   arch arm: "aarch64", intel: "x86_64"
+
   version "26.803.81509"
   sha256 arm64_linux:  "b20cdc77978f9f67e65622e5c15c71e27e3fb8ea3ed909451cb24299053ee5e9",
          x86_64_linux: "3a3ad6bfaedf48c7f4f9458ef43b05cfc51110df561caebdfcb381693157ab96"
@@ -11,7 +12,7 @@ cask "codex-desktop" do
   url "https://github.com/edgarcnp/homebrew-tap/releases/download/codex-desktop-v#{version}/codex-desktop-#{version}-#{arch}.AppImage",
       verified: "github.com/edgarcnp/homebrew-tap/"
   name "Codex Desktop"
-  desc "OpenAI Codex Desktop for Linux, repackaged from the signed official package"
+  desc "OpenAI Codex Desktop for Linux"
   homepage "https://openai.com/codex/"
 
   livecheck do
@@ -42,7 +43,7 @@ cask "codex-desktop" do
     File.write(staged_path/"codex-desktop.desktop", <<~EOS)
       [Desktop Entry]
       Name=Codex Desktop
-      Comment=OpenAI Codex Desktop for Linux, repackaged from the signed official package
+      Comment=OpenAI Codex Desktop for Linux
       Exec=#{HOMEBREW_PREFIX}/bin/codex-desktop %U
       Icon=codex-desktop
       Terminal=false
