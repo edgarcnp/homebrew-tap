@@ -1,21 +1,38 @@
-name: Build and publish Codex Desktop AppImage
+name: Reusable AppImage build
 
 on:
-  schedule:
-    - cron: '0 * * * *'
-  workflow_dispatch:
+  workflow_call:
+    inputs:
+      app_cask:
+        description: Cask filename stem (e.g. codex-desktop)
+        required: true
+        type: string
+      app_name:
+        description: Human-readable app name (e.g. Codex Desktop)
+        required: true
+        type: string
+      asset_prefix:
+        description: Release asset filename prefix (e.g. codex-desktop)
+        required: true
+        type: string
+      tag_prefix:
+        description: Release tag prefix, including trailing dash (e.g. codex-desktop-v)
+        required: true
+        type: string
+      source_owner:
+        description: Owner of the fork to build from; falls back to upstream_repo
+        required: false
+        default: edgarcnp
+        type: string
+      upstream_repo:
+        description: Upstream packaging repository (owner/repo)
+        required: false
+        default: ilysenko/codex-desktop-linux
+        type: string
 
 defaults:
   run:
     shell: bash -xeuo pipefail {0}
-
-concurrency:
-  group: codex-desktop-appimage
-  cancel-in-progress: false
-
-env:
-  SOURCE_REPO_OWNER: edgarcnp
-  UPSTREAM_REPO: ilysenko/codex-desktop-linux
 
 jobs:
   detect:
@@ -30,16 +47,21 @@ jobs:
     steps:
       - name: Select source repository
         id: source
+        env:
+          SOURCE_REPO_OWNER: ${{ inputs.source_owner }}
+          UPSTREAM_REPO: ${{ inputs.upstream_repo }}
         run: |
-          if git ls-remote --exit-code "https://github.com/${SOURCE_REPO_OWNER}/codex-desktop-linux.git" HEAD >/dev/null 2>&1; then
-            echo "repo=${SOURCE_REPO_OWNER}/codex-desktop-linux" >> "$GITHUB_OUTPUT"
+          UPSTREAM_REPO_NAME="${UPSTREAM_REPO#*/}"
+          if git ls-remote --exit-code "https://github.com/${SOURCE_REPO_OWNER}/${UPSTREAM_REPO_NAME}.git" HEAD >/dev/null 2>&1; then
+            echo "repo=${SOURCE_REPO_OWNER}/${UPSTREAM_REPO_NAME}" >> "$GITHUB_OUTPUT"
           else
             echo "repo=${UPSTREAM_REPO}" >> "$GITHUB_OUTPUT"
           fi
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           repository: ${{ steps.source.outputs.repo }}
           path: source
+          persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 24
@@ -61,7 +83,7 @@ jobs:
       - name: Skip when version already released
         id: gate
         run: |
-          if gh release view "v${{ steps.resolve.outputs.version }}" >/dev/null 2>&1; then
+          if gh release view "${{ inputs.tag_prefix }}${{ steps.resolve.outputs.version }}" >/dev/null 2>&1; then
             echo "skipped=true" >> "$GITHUB_OUTPUT"
           else
             echo "skipped=false" >> "$GITHUB_OUTPUT"
@@ -85,13 +107,11 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           repository: ${{ needs.detect.outputs.source }}
           path: source
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version: 24
+          persist-credentials: false
       - name: Install build dependencies
         run: |
           sudo apt-get update
@@ -99,7 +119,7 @@ jobs:
       - name: Install appimagetool
         run: |
           curl -fL -o /tmp/appimagetool \
-            "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-${{ matrix.appimage_arch }}.AppImage"
+            "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-${{ matrix.appimage_arch }}.AppImage"
           chmod +x /tmp/appimagetool
           (cd /tmp && ./appimagetool --appimage-extract >/dev/null)
           sudo mv /tmp/squashfs-root /opt/appimagetool
@@ -115,8 +135,8 @@ jobs:
           ./scripts/build-appimage.sh
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: codex-desktop-${{ matrix.appimage_arch }}
-          path: source/dist/codex-desktop-${{ needs.detect.outputs.version }}-${{ matrix.appimage_arch }}.AppImage
+          name: ${{ inputs.asset_prefix }}-${{ matrix.appimage_arch }}
+          path: source/dist/${{ inputs.asset_prefix }}-${{ needs.detect.outputs.version }}-${{ matrix.appimage_arch }}.AppImage
           if-no-files-found: error
           retention-days: 7
 
@@ -128,16 +148,16 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
-          pattern: codex-desktop-*
+          pattern: ${{ inputs.asset_prefix }}-*
           merge-multiple: true
           path: assets
-      - uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
-          tag_name: v${{ needs.detect.outputs.version }}
-          name: Codex Desktop ${{ needs.detect.outputs.version }}
-          files: assets/codex-desktop-*.AppImage
+          tag_name: ${{ inputs.tag_prefix }}${{ needs.detect.outputs.version }}
+          name: ${{ inputs.app_name }} ${{ needs.detect.outputs.version }}
+          files: assets/${{ inputs.asset_prefix }}-*.AppImage
           fail_on_unmatched_files: true
 
   update-cask:
@@ -148,32 +168,36 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
-          pattern: codex-desktop-*
+          pattern: ${{ inputs.asset_prefix }}-*
           merge-multiple: true
           path: assets
       - name: Update cask version and checksums
         env:
           PACKAGE_VERSION: ${{ needs.detect.outputs.version }}
         run: |
-          x86_64_sha="$(sha256sum assets/codex-desktop-*-x86_64.AppImage | awk '{print $1}')"
-          arm64_sha="$(sha256sum assets/codex-desktop-*-aarch64.AppImage | awk '{print $1}')"
+          x86_64_sha="$(sha256sum assets/${{ inputs.asset_prefix }}-*-x86_64.AppImage | awk '{print $1}')"
+          arm64_sha="$(sha256sum assets/${{ inputs.asset_prefix }}-*-aarch64.AppImage | awk '{print $1}')"
           python3 - "$PACKAGE_VERSION" "$x86_64_sha" "$arm64_sha" <<'PY'
           import re
           import sys
 
           version, x64, arm = sys.argv[1], sys.argv[2], sys.argv[3]
-          path = "Casks/codex-desktop.rb"
+          path = "Casks/${{ inputs.app_cask }}.rb"
           text = open(path, encoding="utf-8").read()
           text = re.sub(r'^\s*version "[^"]*"', f'  version "{version}"', text, count=1, flags=re.M)
           text = re.sub(r'(x86_64_linux:\s*")[0-9a-f]{64}(")', rf"\g<1>{x64}\g<2>", text, count=1)
           text = re.sub(r'(arm64_linux:\s*")[0-9a-f]{64}(")', rf"\g<1>{arm}\g<2>", text, count=1)
           open(path, "w", encoding="utf-8").write(text)
           PY
+          if git diff --quiet -- "Casks/${{ inputs.app_cask }}.rb"; then
+            echo "Cask already up to date; nothing to commit"
+            exit 0
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Casks/codex-desktop.rb
-          git commit -m "chore(cask): update codex-desktop to $PACKAGE_VERSION"
+          git add "Casks/${{ inputs.app_cask }}.rb"
+          git commit -m "chore(cask): update ${{ inputs.app_cask }} to $PACKAGE_VERSION"
           git push
