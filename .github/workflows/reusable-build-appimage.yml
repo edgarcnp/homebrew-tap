@@ -20,11 +20,11 @@ on:
         required: true
         type: string
       source_owner:
-        description: Owner of the fork to build from; falls back to upstream_repo (e.g. myorg)
+        description: Owner of the fallback fork, used only when upstream_repo is unreachable (e.g. myorg)
         required: true
         type: string
       upstream_repo:
-        description: Upstream packaging repository (owner/repo) (e.g. myorg/my-app-linux)
+        description: Upstream packaging repository (owner/repo) to build from when available (e.g. myorg/my-app-linux)
         required: true
         type: string
 
@@ -50,10 +50,10 @@ jobs:
           UPSTREAM_REPO: ${{ inputs.upstream_repo }}
         run: |
           UPSTREAM_REPO_NAME="${UPSTREAM_REPO#*/}"
-          if git ls-remote --exit-code "https://github.com/${SOURCE_REPO_OWNER}/${UPSTREAM_REPO_NAME}.git" HEAD >/dev/null 2>&1; then
-            echo "repo=${SOURCE_REPO_OWNER}/${UPSTREAM_REPO_NAME}" >> "$GITHUB_OUTPUT"
-          else
+          if git ls-remote --exit-code "https://github.com/${UPSTREAM_REPO}.git" HEAD >/dev/null 2>&1; then
             echo "repo=${UPSTREAM_REPO}" >> "$GITHUB_OUTPUT"
+          else
+            echo "repo=${SOURCE_REPO_OWNER}/${UPSTREAM_REPO_NAME}" >> "$GITHUB_OUTPUT"
           fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
