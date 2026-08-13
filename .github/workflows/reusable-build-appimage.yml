@@ -42,6 +42,10 @@ jobs:
       version: ${{ steps.resolve.outputs.version }}
       skipped: ${{ steps.gate.outputs.skipped }}
       source: ${{ steps.source.outputs.repo }}
+      upstream_sha256_amd64: ${{ steps.resolve.outputs.upstream_sha256_amd64 }}
+      upstream_sha256_arm64: ${{ steps.resolve.outputs.upstream_sha256_arm64 }}
+      upstream_url_amd64: ${{ steps.resolve.outputs.upstream_url_amd64 }}
+      upstream_url_arm64: ${{ steps.resolve.outputs.upstream_url_arm64 }}
     steps:
       - name: Select source repository
         id: source
@@ -75,7 +79,21 @@ jobs:
             --metadata upstream/metadata.json \
             --key-base64 assets/openai-codex-linux-repository-key.gpg.base64 \
             --arch amd64
-          version="$(node -p 'JSON.parse(require("fs").readFileSync("upstream/metadata.json", "utf8")).version')"
+          node scripts/lib/upstream-linux-package.js \
+            --metadata-only \
+            --output-dir upstream \
+            --metadata upstream/metadata-arm64.json \
+            --key-base64 assets/openai-codex-linux-repository-key.gpg.base64 \
+            --arch arm64
+          amd64_metadata="upstream/metadata.json"
+          arm64_metadata="upstream/metadata-arm64.json"
+          version="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).version' "$amd64_metadata")"
+          arm64_version="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).version' "$arm64_metadata")"
+          [ "$version" = "$arm64_version" ] || { echo "amd64/arm64 upstream version mismatch" >&2; exit 1; }
+          echo "upstream_sha256_amd64=$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).sha256' "$amd64_metadata")" >> "$GITHUB_OUTPUT"
+          echo "upstream_sha256_arm64=$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).sha256' "$arm64_metadata")" >> "$GITHUB_OUTPUT"
+          echo "upstream_url_amd64=$(node -p 'const m = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); m.repository + "/" + m.repositoryPath' "$amd64_metadata")" >> "$GITHUB_OUTPUT"
+          echo "upstream_url_arm64=$(node -p 'const m = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); m.repository + "/" + m.repositoryPath' "$arm64_metadata")" >> "$GITHUB_OUTPUT"
           version="${version//[^0-9A-Za-z._-]/_}"
           echo "version=${version}" >> "$GITHUB_OUTPUT"
       - name: Skip when version already released
@@ -153,10 +171,38 @@ jobs:
           pattern: ${{ inputs.asset_prefix }}-*
           merge-multiple: true
           path: assets
+      - name: Generate release notes
+        id: notes
+        env:
+          UPSTREAM_SHA_AMD64: ${{ needs.detect.outputs.upstream_sha256_amd64 }}
+          UPSTREAM_SHA_ARM64: ${{ needs.detect.outputs.upstream_sha256_arm64 }}
+          UPSTREAM_URL_AMD64: ${{ needs.detect.outputs.upstream_url_amd64 }}
+          UPSTREAM_URL_ARM64: ${{ needs.detect.outputs.upstream_url_arm64 }}
+        run: |
+          {
+            printf '%s\n\n' '## Artifact checksums'
+            printf '%s\n' 'Upstream `.deb` hashes come from the signed APT index; the AppImage hashes are enforced by the `${{ inputs.app_cask }}` cask at install.'
+            printf '\n'
+            printf '%s\n' '| Artifact | SHA-256 |'
+            printf '%s\n' '| --- | --- |'
+            printf '| Upstream `.deb` (amd64) | `%s` |\n' "$UPSTREAM_SHA_AMD64"
+            printf '| Upstream `.deb` (arm64) | `%s` |\n' "$UPSTREAM_SHA_ARM64"
+            for file in assets/${{ inputs.asset_prefix }}-*.AppImage; do
+              [ -e "$file" ] || continue
+              arch="${file##*-}"
+              arch="${arch%.AppImage}"
+              printf '| AppImage (%s) | `%s` |\n' "$arch" "$(sha256sum "$file" | awk '{print $1}')"
+            done
+            printf '\n'
+            printf '%s\n' '### Sources'
+            printf -- '- Upstream `.deb` (amd64): %s\n' "$UPSTREAM_URL_AMD64"
+            printf -- '- Upstream `.deb` (arm64): %s\n' "$UPSTREAM_URL_ARM64"
+          } > release-notes.md
       - uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
         with:
           tag_name: ${{ inputs.tag_prefix }}${{ needs.detect.outputs.version }}
           name: ${{ inputs.app_name }} ${{ needs.detect.outputs.version }}
+          body_path: release-notes.md
           files: assets/${{ inputs.asset_prefix }}-*.AppImage
           fail_on_unmatched_files: true
 
