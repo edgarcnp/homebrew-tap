@@ -1,0 +1,20 @@
+[Desktop Entry]
+Name=__PACKAGE_DISPLAY_NAME__
+Comment=__PACKAGE_COMMENT__
+GenericName=Text Editor
+Exec=AppRun %F
+Icon=__PACKAGE_NAME__
+Terminal=false
+Type=Application
+StartupNotify=true
+StartupWMClass=Code
+Categories=Development;
+MimeType=application/x-code-workspace;
+Keywords=vscode;
+X-AppImage-Version=__VERSION__
+Actions=new-empty-window;
+
+[Desktop Action new-empty-window]
+Name=New Empty Window
+Exec=AppRun --new-window %F
+Icon=__PACKAGE_NAME__

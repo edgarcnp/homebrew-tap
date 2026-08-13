@@ -27,6 +27,33 @@ on:
         description: Upstream packaging repository (owner/repo) to build from when available (e.g. myorg/my-app-linux)
         required: true
         type: string
+      repository_url:
+        description: Signed apt repository URL the app's .deb packages come from (e.g. https://packages.microsoft.com/repos/code)
+        required: true
+        type: string
+      key_path:
+        description: Path to the pinned repository signing key (base64-encoded keyring) within the source checkout (e.g. assets/my-app-repository-key.gpg.base64)
+        required: true
+        type: string
+      resolve_script:
+        description: Path (relative to the source checkout root) of the upstream-linux-package.js resolver the detect job runs
+        required: false
+        type: string
+        default: scripts/lib/upstream-linux-package.js
+      resolve_args:
+        description: Extra flags passed to the resolver (e.g. --package code --fingerprint <40 hex>); empty when the resolver hardcodes its package
+        required: false
+        type: string
+        default: ""
+      source_dir:
+        description: Subdirectory of the source checkout holding the packaging scripts and assets; empty for the checkout root
+        required: false
+        type: string
+        default: ""
+      build_command:
+        description: Shell command run in the source dir to produce dist/<asset_prefix>-<version>-<appimage_arch>.AppImage; env TARGET_ARCH (amd64|arm64) and PACKAGE_VERSION are set
+        required: true
+        type: string
 
 defaults:
   run:
@@ -75,17 +102,21 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y gnupg
           cd source
-          node scripts/lib/upstream-linux-package.js \
+          node "${{ inputs.resolve_script }}" \
             --metadata-only \
             --output-dir upstream \
             --metadata upstream/metadata.json \
-            --key-base64 assets/openai-codex-linux-repository-key.gpg.base64 \
+            --key-base64 "${{ inputs.key_path }}" \
+            --repository "${{ inputs.repository_url }}" \
+            ${{ inputs.resolve_args }} \
             --arch amd64
-          node scripts/lib/upstream-linux-package.js \
+          node "${{ inputs.resolve_script }}" \
             --metadata-only \
             --output-dir upstream \
             --metadata upstream/metadata-arm64.json \
-            --key-base64 assets/openai-codex-linux-repository-key.gpg.base64 \
+            --key-base64 "${{ inputs.key_path }}" \
+            --repository "${{ inputs.repository_url }}" \
+            ${{ inputs.resolve_args }} \
             --arch arm64
           amd64_metadata="upstream/metadata.json"
           arm64_metadata="upstream/metadata-arm64.json"
@@ -188,13 +219,12 @@ jobs:
           sudo ln -sf /opt/appimagetool/AppRun /usr/local/bin/appimagetool
       - name: Build AppImage
         env:
-          CODEX_TARGET_ARCH: ${{ matrix.architecture }}
-          PACKAGE_WITH_UPDATER: "0"
+          TARGET_ARCH: ${{ matrix.architecture }}
           PACKAGE_VERSION: ${{ needs.detect.outputs.version }}
         run: |
           cd source
-          ./install.sh
-          ./scripts/build-appimage.sh
+          [ -z "${{ inputs.source_dir }}" ] || cd "${{ inputs.source_dir }}"
+          ${{ inputs.build_command }}
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ inputs.asset_prefix }}-${{ matrix.appimage_arch }}

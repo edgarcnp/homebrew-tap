@@ -16,9 +16,13 @@ cask "codex-desktop" do
   homepage "https://openai.com/codex/"
 
   livecheck do
-    url "https://api.github.com/repos/edgarcnp/homebrew-tap/releases/latest"
+    url "https://api.github.com/repos/edgarcnp/homebrew-tap/releases?per_page=100"
     strategy :json do |json|
-      json["tag_name"]&.delete_prefix("codex-desktop-v")
+      versions = json.filter_map do |release|
+        tag = release["tag_name"]
+        tag.delete_prefix("codex-desktop-v") if tag&.start_with?("codex-desktop-v")
+      end
+      versions.max_by { |tag| Gem::Version.new(tag) }
     end
   end
 

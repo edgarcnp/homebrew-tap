@@ -21,3 +21,8 @@ jobs:
       tag_prefix: codex-desktop-v
       source_owner: edgarcnp
       upstream_repo: ilysenko/codex-desktop-linux
+      repository_url: https://persistent.oaistatic.com/codex-app-prod/linux/deb
+      key_path: assets/openai-codex-linux-repository-key.gpg.base64
+      resolve_args: ""
+      source_dir: ""
+      build_command: 'export CODEX_TARGET_ARCH="$TARGET_ARCH" PACKAGE_WITH_UPDATER=0; ./install.sh && ./scripts/build-appimage.sh'
