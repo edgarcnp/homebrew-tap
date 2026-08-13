@@ -17,10 +17,12 @@ jobs:
   test-bot:
     strategy:
       matrix:
-        os: [ macos-26 ]
+        os: [ ubuntu-latest ]
+        # macOS: all casks are Linux-only (depends_on :linux); the Ubuntu
+        # container leg below covers tap syntax and install checks.
+        # os: [ macos-26 ]
         include:
-          - os: ubuntu-latest
-            container:
+          - container:
               image: ghcr.io/homebrew/brew:main
               options: --privileged
     runs-on: ${{ matrix.os }}
