@@ -75,6 +75,16 @@ brew install --cask edgarcnp/tap/codex-desktop
 
 The app shares the upstream Codex profile (`~/.codex`) and single-instance lock with OpenAI's official app; do not run both at the same time.
 
+### visual-studio-code
+
+Official [Visual Studio Code](https://code.visualstudio.com/) stable build, repackaged as an AppImage from Microsoft's signed APT repository (`packages.microsoft.com/repos/code`, pinned key fingerprint `BC528686B50D79E339D3721CEB3E94ADBE1229CF`).
+
+```sh
+brew install --cask edgarcnp/tap/visual-studio-code
+```
+
+The build script and pinned key live in `packaging/vscode/` in this repository. The daily build workflow tracks the stable channel; the cask version is the upstream version (e.g. `1.133.0`), not the `.deb` build-epoch suffix.
+
 ## Documentation
 
 `brew help`, `man brew` or check [Homebrew's documentation](https://docs.brew.sh).

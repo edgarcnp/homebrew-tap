@@ -1,0 +1,29 @@
+name: Build and publish Visual Studio Code AppImage
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: vscode-build
+  cancel-in-progress: false
+
+jobs:
+  build:
+    permissions:
+      contents: write
+    uses: ./.github/workflows/build-appimage.yml
+    with:
+      app_cask: visual-studio-code
+      app_name: Visual Studio Code
+      asset_prefix: vscode
+      tag_prefix: vscode-v
+      source_owner: edgarcnp
+      upstream_repo: edgarcnp/homebrew-tap
+      repository_url: https://packages.microsoft.com/repos/code
+      key_path: packaging/vscode/assets/microsoft-vscode-repository-key.gpg.base64
+      resolve_script: packaging/lib/upstream-linux-package.js
+      resolve_args: --package code --fingerprint BC528686B50D79E339D3721CEB3E94ADBE1229CF
+      source_dir: packaging/vscode
+      build_command: ./scripts/build-appimage.sh
