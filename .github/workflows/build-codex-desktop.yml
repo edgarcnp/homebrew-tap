@@ -13,7 +13,7 @@ jobs:
   build:
     permissions:
       contents: write
-    uses: ./.github/workflows/reusable-build-appimage.yml
+    uses: ./.github/workflows/build-appimage.yml
     with:
       app_cask: codex-desktop
       app_name: Codex Desktop

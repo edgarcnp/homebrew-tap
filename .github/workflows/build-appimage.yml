@@ -1,4 +1,4 @@
-name: Reusable AppImage build
+name: AppImage build
 
 on:
   workflow_call:
