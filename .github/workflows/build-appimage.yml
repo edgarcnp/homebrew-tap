@@ -92,12 +92,14 @@ jobs:
           version="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).version' "$amd64_metadata")"
           arm64_version="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).version' "$arm64_metadata")"
           [ "$version" = "$arm64_version" ] || { echo "amd64/arm64 upstream version mismatch" >&2; exit 1; }
-          echo "upstream_sha256_amd64=$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).sha256' "$amd64_metadata")" >> "$GITHUB_OUTPUT"
-          echo "upstream_sha256_arm64=$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).sha256' "$arm64_metadata")" >> "$GITHUB_OUTPUT"
-          echo "upstream_url_amd64=$(node -p 'const m = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); m.repository + "/" + m.repositoryPath' "$amd64_metadata")" >> "$GITHUB_OUTPUT"
-          echo "upstream_url_arm64=$(node -p 'const m = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); m.repository + "/" + m.repositoryPath' "$arm64_metadata")" >> "$GITHUB_OUTPUT"
           version="${version//[^0-9A-Za-z._-]/_}"
-          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          {
+            echo "upstream_sha256_amd64=$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).sha256' "$amd64_metadata")"
+            echo "upstream_sha256_arm64=$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).sha256' "$arm64_metadata")"
+            echo "upstream_url_amd64=$(node -p 'const m = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); m.repository + "/" + m.repositoryPath' "$amd64_metadata")"
+            echo "upstream_url_arm64=$(node -p 'const m = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); m.repository + "/" + m.repositoryPath' "$arm64_metadata")"
+            echo "version=${version}"
+          } >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           path: tap
@@ -139,11 +141,13 @@ jobs:
               echo "Cask ${cask_version} references a version with no release; (re)building"
             fi
           fi
-          echo "cask_version=${cask_version}" >> "$GITHUB_OUTPUT"
-          echo "newer=${newer}" >> "$GITHUB_OUTPUT"
-          echo "release_exists=${release_exists}" >> "$GITHUB_OUTPUT"
-          echo "repair_cask=${repair}" >> "$GITHUB_OUTPUT"
-          echo "skipped=${skipped}" >> "$GITHUB_OUTPUT"
+          {
+            echo "cask_version=${cask_version}"
+            echo "newer=${newer}"
+            echo "release_exists=${release_exists}"
+            echo "repair_cask=${repair}"
+            echo "skipped=${skipped}"
+          } >> "$GITHUB_OUTPUT"
 
   build:
     needs: detect
@@ -219,6 +223,7 @@ jobs:
           UPSTREAM_URL_AMD64: ${{ needs.detect.outputs.upstream_url_amd64 }}
           UPSTREAM_URL_ARM64: ${{ needs.detect.outputs.upstream_url_arm64 }}
         run: |
+          # shellcheck disable=SC2016 # printf format strings and GitHub Actions templates are intentional
           {
             printf '%s\n\n' '## Artifact checksums'
             printf '%s\n' 'Upstream `.deb` hashes come from the signed APT index; the AppImage hashes are enforced by the `${{ inputs.app_cask }}` cask at install.'
