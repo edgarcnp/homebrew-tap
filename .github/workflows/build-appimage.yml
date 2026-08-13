@@ -46,6 +46,8 @@ jobs:
       upstream_sha256_arm64: ${{ steps.resolve.outputs.upstream_sha256_arm64 }}
       upstream_url_amd64: ${{ steps.resolve.outputs.upstream_url_amd64 }}
       upstream_url_arm64: ${{ steps.resolve.outputs.upstream_url_arm64 }}
+      cask_version: ${{ steps.gate.outputs.cask_version }}
+      repair_cask: ${{ steps.gate.outputs.repair_cask }}
     steps:
       - name: Select source repository
         id: source
@@ -96,18 +98,56 @@ jobs:
           echo "upstream_url_arm64=$(node -p 'const m = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); m.repository + "/" + m.repositoryPath' "$arm64_metadata")" >> "$GITHUB_OUTPUT"
           version="${version//[^0-9A-Za-z._-]/_}"
           echo "version=${version}" >> "$GITHUB_OUTPUT"
-      - name: Skip when version already released
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          path: tap
+          persist-credentials: false
+      - name: Gate on upstream version vs cask version
         id: gate
         run: |
-          if gh release view "${{ inputs.tag_prefix }}${{ steps.resolve.outputs.version }}" >/dev/null 2>&1; then
-            echo "skipped=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "skipped=false" >> "$GITHUB_OUTPUT"
+          cask_version="$(sed -n 's/^[[:space:]]*version "\([^"]*\)".*/\1/p' "tap/Casks/${{ inputs.app_cask }}.rb" | head -n1)"
+          version="${{ steps.resolve.outputs.version }}"
+          newer="false"
+          case "$cask_version" in
+            ''|[!0-9]*)
+              newer="true" ;;
+            *)
+              if printf '%s\n%s\n' "$cask_version" "$version" | sort -V -C; then
+                if [ "$cask_version" != "$version" ]; then
+                  newer="true"
+                fi
+              fi ;;
+          esac
+          release_exists="false"
+          if gh release view "${{ inputs.tag_prefix }}${version}" >/dev/null 2>&1; then
+            release_exists="true"
           fi
+          skipped="false"
+          repair="false"
+          if [ "$newer" = "true" ]; then
+            if [ "$release_exists" = "true" ]; then
+              echo "Upstream ${version} is newer than cask ${cask_version}; release already published, catching cask up"
+              repair="true"
+            else
+              echo "Upstream ${version} is newer than cask ${cask_version}; building"
+            fi
+          else
+            if [ "$release_exists" = "true" ]; then
+              echo "Cask ${cask_version} already at or above upstream ${version}; skipping"
+              skipped="true"
+            else
+              echo "Cask ${cask_version} references a version with no release; (re)building"
+            fi
+          fi
+          echo "cask_version=${cask_version}" >> "$GITHUB_OUTPUT"
+          echo "newer=${newer}" >> "$GITHUB_OUTPUT"
+          echo "release_exists=${release_exists}" >> "$GITHUB_OUTPUT"
+          echo "repair_cask=${repair}" >> "$GITHUB_OUTPUT"
+          echo "skipped=${skipped}" >> "$GITHUB_OUTPUT"
 
   build:
     needs: detect
-    if: needs.detect.outputs.skipped == 'false'
+    if: needs.detect.outputs.skipped == 'false' && needs.detect.outputs.repair_cask == 'false'
     strategy:
       fail-fast: false
       matrix:
@@ -160,7 +200,7 @@ jobs:
 
   publish:
     needs: [detect, build]
-    if: needs.detect.outputs.skipped == 'false'
+    if: needs.detect.outputs.skipped == 'false' && needs.detect.outputs.repair_cask == 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -208,7 +248,7 @@ jobs:
 
   update-cask:
     needs: [detect, publish]
-    if: needs.detect.outputs.skipped == 'false'
+    if: needs.detect.outputs.skipped == 'false' && needs.detect.outputs.repair_cask == 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -246,4 +286,51 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add "Casks/${{ inputs.app_cask }}.rb"
           git commit -m "chore(cask): update ${{ inputs.app_cask }} to $PACKAGE_VERSION"
-          git push
+      - name: Push cask update
+        uses: Homebrew/actions/git-try-push@b35a29a0f83ee8b8ca07b219fc8db3d7bb88ab49 # 2026.08.10.2
+        with:
+          branch: main
+
+  repair-cask:
+    needs: detect
+    if: needs.detect.outputs.skipped == 'false' && needs.detect.outputs.repair_cask == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Catch cask up to existing release
+        env:
+          PACKAGE_VERSION: ${{ needs.detect.outputs.version }}
+        run: |
+          gh release download "${{ inputs.tag_prefix }}$PACKAGE_VERSION" \
+            --pattern "${{ inputs.asset_prefix }}-*-x86_64.AppImage" \
+            --pattern "${{ inputs.asset_prefix }}-*-aarch64.AppImage" \
+            --dir assets --clobber
+          x86_64_sha="$(sha256sum assets/${{ inputs.asset_prefix }}-*-x86_64.AppImage | awk '{print $1}')"
+          arm64_sha="$(sha256sum assets/${{ inputs.asset_prefix }}-*-aarch64.AppImage | awk '{print $1}')"
+          python3 - "$PACKAGE_VERSION" "$x86_64_sha" "$arm64_sha" <<'PY'
+          import re
+          import sys
+
+          version, x64, arm = sys.argv[1], sys.argv[2], sys.argv[3]
+          path = "Casks/${{ inputs.app_cask }}.rb"
+          text = open(path, encoding="utf-8").read()
+          text = re.sub(r'^\s*version "[^"]*"', f'  version "{version}"', text, count=1, flags=re.M)
+          text = re.sub(r'(x86_64_linux:\s*")[0-9a-f]{64}(")', rf"\g<1>{x64}\g<2>", text, count=1)
+          text = re.sub(r'(arm64_linux:\s*")[0-9a-f]{64}(")', rf"\g<1>{arm}\g<2>", text, count=1)
+          open(path, "w", encoding="utf-8").write(text)
+          PY
+          if git diff --quiet -- "Casks/${{ inputs.app_cask }}.rb"; then
+            echo "Cask already up to date; nothing to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "Casks/${{ inputs.app_cask }}.rb"
+          git commit -m "chore(cask): update ${{ inputs.app_cask }} to $PACKAGE_VERSION"
+      - name: Push cask update
+        uses: Homebrew/actions/git-try-push@b35a29a0f83ee8b8ca07b219fc8db3d7bb88ab49 # 2026.08.10.2
+        with:
+          branch: main
