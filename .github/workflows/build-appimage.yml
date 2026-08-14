@@ -336,14 +336,14 @@ jobs:
           text = re.sub(r'(arm64_linux:\s*")[0-9a-f]{64}(")', rf"\g<1>{arm}\g<2>", text, count=1)
           open(path, "w", encoding="utf-8").write(text)
           PY
-          if git diff --quiet -- "Casks/${{ inputs.app_cask }}.rb"; then
-            echo "Cask already up to date; nothing to commit"
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add "Casks/${{ inputs.app_cask }}.rb"
-          git commit -m "chore(cask): update ${{ inputs.app_cask }} to $PACKAGE_VERSION"
+      - name: Commit cask update
+        uses: EndBug/add-and-commit@645ecc0dd0a57f4d86d26c0aa5fc42c0a856fbca # v11.0.0
+        with:
+          add: Casks/${{ inputs.app_cask }}.rb
+          push: false
+          author_name: github-actions[bot]
+          author_email: 41898282+github-actions[bot]@users.noreply.github.com
+          message: "chore(cask): update ${{ inputs.app_cask }} to ${{ needs.detect.outputs.version }}"
       - name: Push cask update
         uses: Homebrew/actions/git-try-push@b35a29a0f83ee8b8ca07b219fc8db3d7bb88ab49 # 2026.08.10.2
         with:
@@ -380,14 +380,14 @@ jobs:
           text = re.sub(r'(arm64_linux:\s*")[0-9a-f]{64}(")', rf"\g<1>{arm}\g<2>", text, count=1)
           open(path, "w", encoding="utf-8").write(text)
           PY
-          if git diff --quiet -- "Casks/${{ inputs.app_cask }}.rb"; then
-            echo "Cask already up to date; nothing to commit"
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add "Casks/${{ inputs.app_cask }}.rb"
-          git commit -m "chore(cask): update ${{ inputs.app_cask }} to $PACKAGE_VERSION"
+      - name: Commit cask update
+        uses: EndBug/add-and-commit@645ecc0dd0a57f4d86d26c0aa5fc42c0a856fbca # v11.0.0
+        with:
+          add: Casks/${{ inputs.app_cask }}.rb
+          push: false
+          author_name: github-actions[bot]
+          author_email: 41898282+github-actions[bot]@users.noreply.github.com
+          message: "chore(cask): update ${{ inputs.app_cask }} to ${{ needs.detect.outputs.version }}"
       - name: Push cask update
         uses: Homebrew/actions/git-try-push@b35a29a0f83ee8b8ca07b219fc8db3d7bb88ab49 # 2026.08.10.2
         with:

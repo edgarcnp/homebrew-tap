@@ -64,8 +64,20 @@ jobs:
 
       - name: Actionlint workflow lint
         run: |
-          curl -fsSL -o /tmp/actionlint.tar.gz \
-            "https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz"
+          # latest release, verified against the sha256 checksums file
+          # shipped alongside the binaries in the same release
+          version="$(curl -fsSL -o /dev/null -w '%{url_effective}' https://github.com/rhysd/actionlint/releases/latest | sed 's#.*/v##')"
+          curl -fL --retry 5 --retry-all-errors --retry-delay 5 \
+            -o /tmp/actionlint.tar.gz \
+            "https://github.com/rhysd/actionlint/releases/download/v${version}/actionlint_${version}_linux_amd64.tar.gz"
+          curl -fL --retry 5 --retry-all-errors --retry-delay 5 \
+            -o /tmp/actionlint-checksums.txt \
+            "https://github.com/rhysd/actionlint/releases/download/v${version}/actionlint_${version}_checksums.txt"
+          test -s /tmp/actionlint.tar.gz
+          test -s /tmp/actionlint-checksums.txt
+          expected="$(grep -F "actionlint_${version}_linux_amd64.tar.gz" /tmp/actionlint-checksums.txt | awk '{print $1}')"
+          got="$(sha256sum /tmp/actionlint.tar.gz | awk '{print $1}')"
+          [ "$expected" = "$got" ] || { echo "actionlint checksum mismatch: got $got, expected $expected" >&2; exit 1; }
           tar -C /tmp -xzf /tmp/actionlint.tar.gz actionlint
           /tmp/actionlint -color .github/workflows/build-appimage.yml .github/workflows/build-codex-desktop.yml .github/workflows/build-vscode.yml .github/workflows/tests.yml
 
