@@ -332,7 +332,7 @@ jobs:
           version, x64, arm = sys.argv[1], sys.argv[2], sys.argv[3]
           path = "Casks/${{ inputs.app_cask }}.rb"
           text = open(path, encoding="utf-8").read()
-          text = re.sub(r'^\s*version "[^"]*"', f'  version "{version}"', text, count=1, flags=re.M)
+          text = re.sub(r'^(\s*)version "[^"]*"', rf'\1version "{version}"', text, count=1, flags=re.M)
           text = re.sub(r'(x86_64_linux:\s*")[0-9a-f]{64}(")', rf"\g<1>{x64}\g<2>", text, count=1)
           text = re.sub(r'(arm64_linux:\s*")[0-9a-f]{64}(")', rf"\g<1>{arm}\g<2>", text, count=1)
           open(path, "w", encoding="utf-8").write(text)
@@ -376,7 +376,7 @@ jobs:
           version, x64, arm = sys.argv[1], sys.argv[2], sys.argv[3]
           path = "Casks/${{ inputs.app_cask }}.rb"
           text = open(path, encoding="utf-8").read()
-          text = re.sub(r'^\s*version "[^"]*"', f'  version "{version}"', text, count=1, flags=re.M)
+          text = re.sub(r'^(\s*)version "[^"]*"', rf'\1version "{version}"', text, count=1, flags=re.M)
           text = re.sub(r'(x86_64_linux:\s*")[0-9a-f]{64}(")', rf"\g<1>{x64}\g<2>", text, count=1)
           text = re.sub(r'(arm64_linux:\s*")[0-9a-f]{64}(")', rf"\g<1>{arm}\g<2>", text, count=1)
           open(path, "w", encoding="utf-8").write(text)

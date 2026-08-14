@@ -88,7 +88,8 @@ jobs:
       - name: Style and audit casks
         run: |
           # the tap is already checked out by setup-homebrew
-          brew style --fix edgarcnp/tap
+          # no --fix: corrections in the sandbox are discarded, so they would
+          # mask style regressions instead of failing the run
           brew style edgarcnp/tap
           brew audit --cask edgarcnp/tap/visual-studio-code edgarcnp/tap/codex-desktop
 
