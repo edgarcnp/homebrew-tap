@@ -14,7 +14,9 @@ on code.visualstudio.com, so the full verification chain applies:
    picks the newest `code` entry per architecture, and finally downloads
    the `.deb` and checks its SHA-256/size from the verified index.
 3. `scripts/build-appimage.sh` — extracts the `.deb`, stages an AppDir
-   (AppRun, desktop entry, icon) and builds the AppImage with `appimagetool`.
+   (AppRun, desktop entry, icon) and builds the AppImage with the FUSE3-native
+   uruntime `appimagetool` (pkgforge fork; the `../scripts/appimagetool-uruntime.sh`
+   shim keeps the upstream `appimagetool` invocation working).
 
 The cask version uses the upstream version (e.g. `1.133.0`), not the
 `.deb` build epoch suffix (e.g. `1.133.0-1786487972`), which differs between
@@ -26,5 +28,5 @@ amd64 and arm64 for the same release.
 TARGET_ARCH=amd64 PACKAGE_VERSION=1.133.0 ./scripts/build-appimage.sh
 ```
 
-Requires `node`, `gpgv`, `dpkg-deb` and `appimagetool` (or `APPIMAGETOOL`).
+Requires `node`, `gpgv`, `dpkg-deb` and the uruntime `appimagetool` (or `APPIMAGETOOL`).
 Output lands in `<tap>/dist/`.

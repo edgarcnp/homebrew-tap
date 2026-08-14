@@ -51,6 +51,12 @@ brew uninstall --cask --zap <cask>
 
 AppImage builds never add `--no-sandbox`. If your distribution disables unprivileged user namespaces, use the official `.deb`/`.rpm` packages instead.
 
+### AppImage runtime
+
+AppImages are built with the FUSE3-native **uruntime** (dwarfs filesystem) via the [pkgforge `appimagetool` fork](https://github.com/pkgforge-dev/appimagetool), wrapped by the CLI compatibility shim in `packaging/scripts/appimagetool-uruntime.sh` (both build scripts keep using the upstream `appimagetool` invocation). The dwarfs mount stays up for the app's lifetime; the older type2-runtime/squashfuse mount dropped after ~1.5 s on FUSE3-only systems, which turned cold page faults into SIGBUS crashes (error code 135) on NVIDIA GPUs under Wayland — see upstream reports like [microsoft/vscode#326174](https://github.com/microsoft/vscode/issues/326174).
+
+Casks install and run the AppImage directly through the FUSE3 mount: the AppImage lands in the AppImage directory (`~/Applications` by default) and the launcher on your PATH executes it, so the runtime mount is exercised on every launch. At install time the AppImage is also verified (pinned-key chain, SHA-256) and briefly extracted only to stage the icon and desktop entry.
+
 ### Where the AppImages come from
 
 Each app is built from its upstream's signed package (verification chain: pinned repository key -> `InRelease` -> `Packages` SHA-256 -> package SHA-256) and published as an AppImage on this repository.
