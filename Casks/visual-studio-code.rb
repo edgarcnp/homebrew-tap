@@ -1,5 +1,6 @@
 cask "visual-studio-code" do
   arch arm: "aarch64", intel: "x86_64"
+
   version "1.133.0"
   sha256 arm64_linux:  "9bcf5417b2f3c82e40485015792bd3b81284f91735949459b87f137b3d9f32c7",
          x86_64_linux: "826cdc2012753e6ce2bb2efd2baab3983d467ced7a58176db62ab93b97010019"
