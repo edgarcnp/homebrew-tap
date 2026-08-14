@@ -20,6 +20,7 @@ reusable workflow (`build-appimage.yml`) runs the resolver from the source
 checkout root (`resolve_script` input) and the build command from
 `source_dir`.
 
-Note: apps whose packaging lives in an external repo (e.g. codex-desktop in
-`ilysenko/codex-desktop-linux`) cannot use this library; it only serves
-in-tap packagings.
+Codex-desktop's packaging lives in an external repo (`ilysenko/codex-desktop-linux`),
+but its build pipeline uses this library and the vendored key under
+`packaging/codex/assets/` from this tap (the workflow's `resolve_script` and
+`key_path` inputs point at `../tap/...`, resolved from the source checkout).

@@ -46,6 +46,36 @@ jobs:
           key: ${{ matrix.os }}-rubygems-${{ steps.set-up-homebrew.outputs.gems-hash }}
           restore-keys: ${{ matrix.os }}-rubygems-
 
+      - name: Shellcheck packaging scripts
+        run: |
+          if command -v sudo >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y shellcheck
+          else
+            apt-get update
+            apt-get install -y shellcheck
+          fi
+          shellcheck packaging/scripts/*.sh packaging/lib/*.sh packaging/vscode/scripts/*.sh
+          if grep -q '^#!' packaging/vscode/templates/AppRun; then
+            shellcheck packaging/vscode/templates/AppRun
+          else
+            echo "AppRun has no shebang; skipping shellcheck" >&2
+          fi
+
+      - name: Actionlint workflow lint
+        run: |
+          curl -fsSL -o /tmp/actionlint.tar.gz \
+            "https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz"
+          tar -C /tmp -xzf /tmp/actionlint.tar.gz actionlint
+          /tmp/actionlint -color .github/workflows/build-appimage.yml .github/workflows/build-codex-desktop.yml .github/workflows/build-vscode.yml .github/workflows/tests.yml
+
+      - name: Style and audit casks
+        run: |
+          brew tap edgarcnp/homebrew-tap .
+          brew style --fix edgarcnp/tap
+          brew style edgarcnp/tap
+          brew audit --cask edgarcnp/tap/visual-studio-code edgarcnp/tap/codex-desktop
+
       - run: brew test-bot --only-cleanup-before
 
       - run: brew test-bot --only-setup
@@ -60,3 +90,29 @@ jobs:
         with:
           name: bottles_${{ matrix.os }}
           path: '*.bottle.*'
+
+  cask-smoke:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/homebrew/brew:main # zizmor: ignore[unpinned-images]
+      options: --privileged
+    permissions:
+      actions: read
+      checks: read
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Homebrew
+        uses: Homebrew/actions/setup-homebrew@b35a29a0f83ee8b8ca07b219fc8db3d7bb88ab49 # 2026.08.10.2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install casks (AppImage preflight + install)
+        run: |
+          brew install --cask ./Casks/visual-studio-code.rb ./Casks/codex-desktop.rb
+          test -x "$(brew --prefix)/bin/code"
+          test -x "$(brew --prefix)/bin/codex-desktop"
