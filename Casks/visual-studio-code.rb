@@ -12,7 +12,7 @@ cask "visual-studio-code" do
   url "https://github.com/edgarcnp/homebrew-tap/releases/download/vscode-v#{version}/vscode-#{version}-#{arch}.AppImage",
       verified: "github.com/edgarcnp/homebrew-tap/"
   name "Visual Studio Code"
-  desc "Code editing. Redefined. Official stable build, repackaged as an AppImage"
+  desc "Repackage of Visual Studio Code as an AppImage"
   homepage "https://code.visualstudio.com/"
 
   livecheck do

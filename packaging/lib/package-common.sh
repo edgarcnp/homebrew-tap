@@ -1,8 +1,7 @@
 #!/bin/bash
 
-# Shared bash helpers for the in-tap packaging scripts. Sourced by the
-# per-app build scripts, which provide PACKAGE_NAME, PACKAGE_DISPLAY_NAME,
-# PACKAGE_COMMENT and PACKAGE_VERSION before calling render_template.
+# Shared bash helpers for the in-tap packaging scripts; sourced by per-app
+# build scripts, which set the PACKAGE_* vars before calling render_template.
 # shellcheck disable=SC2154,SC2153 # globals are provided by the sourcing script
 
 info() {

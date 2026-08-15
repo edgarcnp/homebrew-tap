@@ -1,0 +1,39 @@
+#!/bin/bash
+set -euo pipefail
+
+resolve_appdir() {
+    local source="${BASH_SOURCE[0]}"
+    local dir
+
+    while [ -L "$source" ]; do
+        dir="$(cd -P "$(dirname "$source")" && pwd)"
+        source="$(readlink "$source")"
+        case "$source" in
+            /*) ;;
+            *) source="$dir/$source" ;;
+        esac
+    done
+
+    cd -P "$(dirname "$source")" && pwd
+}
+
+APPDIR="${APPDIR:-$(resolve_appdir)}"
+export APPDIR
+
+# Bundled webkit runtime libs live under usr/lib/<triplet>, which differs per architecture.
+TRIPLET_DIR=""
+for dir in "${APPDIR}"/usr/lib/*-linux-gnu; do
+  [[ -d "${dir}" ]] || continue
+  TRIPLET_DIR="${dir}"
+  break
+done
+[[ -n "${TRIPLET_DIR}" ]] || { echo "No bundled runtime libs under ${APPDIR}/usr/lib/*-linux-gnu" >&2; exit 1; }
+
+export LD_LIBRARY_PATH="${TRIPLET_DIR}:${LD_LIBRARY_PATH:-}"
+export GST_PLUGIN_SYSTEM_PATH="${TRIPLET_DIR}/gstreamer-1.0"
+export GSETTINGS_SCHEMA_DIR="${APPDIR}/usr/share/glib-2.0/schemas"
+export GIO_EXTRA_MODULES="${TRIPLET_DIR}/gio/modules"
+
+# gitbutler-tauri picks CLI vs GUI from its argv[0] basename; the runtime
+# re-execs AppRun with argv[0] changed, so restore the original via ARGV0.
+exec -a "${ARGV0:-$0}" "$APPDIR/opt/gitbutler/bin/gitbutler-tauri" "$@"

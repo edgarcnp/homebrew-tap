@@ -1,12 +1,9 @@
 #!/bin/bash
 set -Eeuo pipefail
 
-# Build the visual-studio-code AppImage from Microsoft's signed APT repository.
-# The unattended source of trust is the signed stable APT index
-# (packages.microsoft.com/repos/code), pinned to key fingerprint
-# BC528686B50D79E339D3721CEB3E94ADBE1229CF. Runs inside the tap checkout on
-# the CI runner; dist output lands in <tap>/dist so the reusable AppImage
-# workflow can upload it.
+# Build the visual-studio-code AppImage from Microsoft's signed APT
+# repository, pinned to fingerprint BC528686B50D79E339D3721CEB3E94ADBE1229CF.
+# Dist output lands in <tap>/dist for the CI workflow.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PACKAGING_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -37,7 +34,7 @@ map_arch() {
     arm64 | aarch64)
       echo "arm64 aarch64"
       ;;
-    *) error "Unsupported AppImage architecture: ${TARGET_ARCH} (official packages support amd64 and arm64 only)" ;;
+    *) error "Unsupported AppImage architecture: ${TARGET_ARCH} (upstream packages support amd64 and arm64 only)" ;;
   esac
 }
 
@@ -59,8 +56,8 @@ prepare_appdir() {
   local code_dir="${payload_dir}/usr/share/code"
   local icon="${payload_dir}/usr/share/pixmaps/vscode.png"
 
-  ensure_file_exists "${code_dir}/code" "official code runtime"
-  ensure_file_exists "${icon}" "official vscode icon"
+  ensure_file_exists "${code_dir}/code" "code runtime"
+  ensure_file_exists "${icon}" "vscode icon"
 
   info "Preparing AppDir at ${APPDIR}"
   rm -rf "${APPDIR}"
@@ -97,7 +94,7 @@ main() {
   appimage_arch="${arch_line#* }"
 
   local deb_path
-  info "Resolving official code package for ${deb_arch}"
+  info "Resolving code package for ${deb_arch}"
   deb_path="$(node "${LIB_DIR}/upstream-linux-package.js" \
     --output-dir "${WORK_DIR}" \
     --metadata "${WORK_DIR}/metadata.json" \
@@ -109,7 +106,7 @@ main() {
 
   local payload_dir="${WORK_DIR}/deb-payload"
   mkdir -p "${payload_dir}"
-  info "Extracting official package: ${deb_path}"
+  info "Extracting package: ${deb_path}"
   dpkg-deb -x "${deb_path}" "${payload_dir}"
 
   prepare_appdir "${payload_dir}"
