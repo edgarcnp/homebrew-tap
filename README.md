@@ -69,7 +69,7 @@ The app shares the upstream Codex profile (`~/.codex`) and single-instance lock 
 
 ### visual-studio-code
 
-Official [Visual Studio Code](https://code.visualstudio.com/) stable build, repackaged as an AppImage from Microsoft's signed APT repository (`packages.microsoft.com/repos/code`, pinned key fingerprint `BC528686B50D79E339D3721CEB3E94ADBE1229CF`).
+Official [Visual Studio Code](https://code.visualstudio.com/) stable build, repackaged as an AppImage from Microsoft's signed APT repository.
 
 ```sh
 brew install --cask edgarcnp/tap/visual-studio-code
