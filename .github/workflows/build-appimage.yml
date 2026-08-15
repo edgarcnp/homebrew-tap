@@ -137,6 +137,8 @@ jobs:
           } >> "$GITHUB_OUTPUT"
       - name: Gate on upstream version vs cask version
         id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           cask_version="$(sed -n 's/^[[:space:]]*version "\([^"]*\)".*/\1/p' "tap/Casks/${{ inputs.app_cask }}.rb" | head -n1)"
           version="${{ steps.resolve.outputs.version }}"
@@ -152,7 +154,7 @@ jobs:
               fi ;;
           esac
           release_exists="false"
-          if gh release view "${{ inputs.tag_prefix }}${version}" >/dev/null 2>&1; then
+          if gh release view "${{ inputs.tag_prefix }}${version}" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             release_exists="true"
           fi
           skipped="false"
@@ -316,10 +318,12 @@ jobs:
       - name: Update cask version and checksums
         env:
           PACKAGE_VERSION: ${{ needs.detect.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           # hash the released assets, not the run artifacts, so the cask
           # always matches what the release actually hosts
           gh release download "${{ inputs.tag_prefix }}$PACKAGE_VERSION" \
+            --repo "$GITHUB_REPOSITORY" \
             --pattern "${{ inputs.asset_prefix }}-*-x86_64.AppImage" \
             --pattern "${{ inputs.asset_prefix }}-*-aarch64.AppImage" \
             --dir assets --clobber
@@ -362,8 +366,10 @@ jobs:
       - name: Catch cask up to existing release
         env:
           PACKAGE_VERSION: ${{ needs.detect.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           gh release download "${{ inputs.tag_prefix }}$PACKAGE_VERSION" \
+            --repo "$GITHUB_REPOSITORY" \
             --pattern "${{ inputs.asset_prefix }}-*-x86_64.AppImage" \
             --pattern "${{ inputs.asset_prefix }}-*-aarch64.AppImage" \
             --dir assets --clobber
