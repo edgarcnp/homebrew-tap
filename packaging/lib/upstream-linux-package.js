@@ -2,10 +2,8 @@
 "use strict";
 
 // Shared resolver for signed apt repositories: pinned key -> InRelease ->
-// Packages SHA-256 -> package SHA-256/size. Picks the newest entry for
-// --package across the architecture's Packages index and exposes the
-// upstream version separately from the .deb version when the package uses
-// a build-epoch suffix (e.g. code 1.133.0-1786487972 -> 1.133.0).
+// Packages SHA-256 -> package SHA-256/size; picks the newest --package entry
+// and strips the build-epoch suffix from the exposed upstream version.
 
 const childProcess = require("node:child_process");
 const crypto = require("node:crypto");
@@ -17,7 +15,7 @@ function mapMachineArch(machine = os.arch()) {
   const normalized = String(machine).trim().toLowerCase();
   if (["x64", "x86_64", "amd64"].includes(normalized)) return "amd64";
   if (["arm64", "aarch64"].includes(normalized)) return "arm64";
-  throw new Error(`Unsupported architecture '${machine}'; official packages support amd64 and arm64 only`);
+  throw new Error(`Unsupported architecture '${machine}'; upstream packages support amd64 and arm64 only`);
 }
 
 function sha256File(filePath) {
@@ -75,16 +73,28 @@ function parseDeb822(source) {
 }
 
 function compareDebVersions(a, b) {
-  const tokens = (version) => String(version)
-    .split(/(\d+|\D+)/)
-    .filter(Boolean)
-    .map((token) => (/^\d+$/.test(token) ? { numeric: true, value: Number(token) } : { numeric: false, value: token }));
-  const ta = tokens(a);
-  const tb = tokens(b);
-  const length = Math.max(ta.length, tb.length);
+  const parse = (version) => {
+    const epoch = String(version).match(/^(\d+):/);
+    return {
+      epoch: epoch ? Number(epoch[1]) : 0,
+      tokens: String(version)
+        .slice(epoch ? epoch[0].length : 0)
+        .split(/(\d+|~|[^0-9~]+)/)
+        .filter(Boolean)
+        .map((token) => (/^\d+$/.test(token) ? { numeric: true, value: Number(token) } : { numeric: false, value: token })),
+    };
+  };
+  const pa = parse(a);
+  const pb = parse(b);
+  if (pa.epoch !== pb.epoch) return pa.epoch < pb.epoch ? -1 : 1;
+  const length = Math.max(pa.tokens.length, pb.tokens.length);
   for (let i = 0; i < length; i += 1) {
-    const x = ta[i] ?? { numeric: false, value: "" };
-    const y = tb[i] ?? { numeric: false, value: "" };
+    const x = pa.tokens[i] ?? { numeric: false, value: "" };
+    const y = pb.tokens[i] ?? { numeric: false, value: "" };
+    if (x.value === "~" || y.value === "~") {
+      if (x.value !== y.value) return x.value === "~" ? -1 : 1;
+      continue;
+    }
     if (x.numeric && y.numeric) {
       if (x.value !== y.value) return x.value < y.value ? -1 : 1;
     } else if (!x.numeric && !y.numeric) {
@@ -98,10 +108,8 @@ function compareDebVersions(a, b) {
 }
 
 function normalizeUpstreamVersion(version) {
-  // Debian versions can embed a build epoch (<upstream>-<epoch>); expose the
-  // upstream portion alone so casks/tags stay stable across per-architecture
-  // rebuilds of the same release. Versions without a numeric suffix are kept
-  // verbatim.
+  // Strip a trailing build-epoch suffix so cask/tag versions stay stable
+  // across per-architecture rebuilds; versions without one are kept verbatim.
   if (/^[0-9][0-9A-Za-z.+~]*-[0-9]+$/.test(version)) {
     return version.slice(0, version.indexOf("-"));
   }
@@ -117,7 +125,9 @@ function selectLatestPackage(source, packageName, architecture) {
   }
   for (const entry of entries) {
     if (!/^\d[0-9A-Za-z.+:~-]*$/.test(entry.Version ?? "")) throw new Error(`Invalid ${packageName} version in Packages`);
-    if (!/^pool\/[A-Za-z0-9._+\/-]+\.deb$/.test(entry.Filename ?? "")) throw new Error(`Unsafe ${packageName} Filename in Packages`);
+    const filename = entry.Filename ?? "";
+    if (!/^pool\/[A-Za-z0-9._+\/-]+\.deb$/.test(filename)) throw new Error(`Unsafe ${packageName} Filename in Packages`);
+    if (filename.includes("..") || filename.startsWith("/")) throw new Error(`Unsafe ${packageName} Filename in Packages`);
     if (!/^[0-9a-f]{64}$/i.test(entry.SHA256 ?? "")) throw new Error(`Invalid ${packageName} SHA256 in Packages`);
     if (!/^\d+$/.test(entry.Size ?? "")) throw new Error(`Invalid ${packageName} Size in Packages`);
   }
@@ -141,15 +151,21 @@ function verifyIndexedFile(filePath, expected, label) {
   if (stat.size !== expected.size) {
     throw new Error(`${label} size mismatch: expected ${expected.size}, got ${stat.size}`);
   }
-  const actual = sha256File(filePath);
-  if (actual !== expected.sha256) {
-    throw new Error(`${label} SHA256 mismatch: expected ${expected.sha256}, got ${actual}`);
+  const actual = crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest();
+  const expectedDigest = Buffer.from(expected.sha256, "hex");
+  if (actual.length !== expectedDigest.length) {
+    throw new Error(`${label} SHA256 mismatch: expected ${expected.sha256}, got ${actual.toString("hex")}`);
+  }
+  if (!crypto.timingSafeEqual(actual, expectedDigest)) {
+    throw new Error(`${label} SHA256 mismatch: expected ${expected.sha256}, got ${actual.toString("hex")}`);
   }
 }
 
 async function download(url, destination) {
   const response = await fetch(url, { redirect: "follow" });
   if (!response.ok) throw new Error(`Download failed (${response.status}) for ${url}`);
+  const finalUrl = new URL(response.url);
+  if (finalUrl.protocol !== "https:") throw new Error(`Download redirected to non-HTTPS URL (${finalUrl.protocol}) for ${url}`);
   const bytes = Buffer.from(await response.arrayBuffer());
   fs.writeFileSync(destination, bytes, { mode: 0o600 });
 }
@@ -170,6 +186,7 @@ function verifySigningKey(keyPath, expectedFingerprint) {
 
 function verifyInRelease(inReleasePath, keyPath, expectedFingerprint) {
   verifySigningKey(keyPath, expectedFingerprint);
+  // gpgv does not enforce pinned-key expiry/revocation; key rotation must be tracked in-repo.
   const result = childProcess.spawnSync(
     "gpgv", ["--keyring", keyPath, inReleasePath],
     { encoding: "utf8" },
@@ -178,7 +195,7 @@ function verifyInRelease(inReleasePath, keyPath, expectedFingerprint) {
   return extractClearSignedPayload(fs.readFileSync(inReleasePath, "utf8"));
 }
 
-async function resolveOfficialPackage(options) {
+async function resolveUpstreamPackage(options) {
   if (!/^[a-z0-9][a-z0-9.+_-]*$/.test(options.packageName)) {
     throw new Error(`Unsafe package name: ${options.packageName}`);
   }
@@ -244,7 +261,7 @@ async function main() {
   if (!["amd64", "arm64"].includes(values["--arch"])) {
     throw new Error("--arch must be amd64 or arm64");
   }
-  const result = await resolveOfficialPackage({
+  const result = await resolveUpstreamPackage({
     outputDir: values["--output-dir"],
     metadataPath: values["--metadata"],
     keyBase64Path: values["--key-base64"],
@@ -271,7 +288,7 @@ module.exports = {
   normalizeUpstreamVersion,
   parseDeb822,
   parseReleaseSha256,
-  resolveOfficialPackage,
+  resolveUpstreamPackage,
   selectLatestPackage,
   sha256File,
   verifyIndexedFile,

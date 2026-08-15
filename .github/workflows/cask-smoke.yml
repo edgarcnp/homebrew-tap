@@ -1,0 +1,67 @@
+name: cask smoke test
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  schedule:
+    # After the daily AppImage build workflows (00:00 UTC) have published
+    # and caught the casks up.
+    - cron: '0 1 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  actions: read
+  checks: read
+  contents: read
+  pull-requests: read
+
+defaults:
+  run:
+    shell: bash -xeuo pipefail {0}
+
+jobs:
+  cask-smoke:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/homebrew/brew:main # zizmor: ignore[unpinned-images]
+      options: --privileged
+    steps:
+      - name: Set up Homebrew
+        uses: Homebrew/actions/setup-homebrew@b35a29a0f83ee8b8ca07b219fc8db3d7bb88ab49 # 2026.08.10.2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install visual-studio-code (AppImage preflight + install)
+        run: |
+          tap_dir="$(brew --repository "${{ github.repository }}")"
+          brew install --cask "$tap_dir/Casks/visual-studio-code.rb"
+          test -x "$(brew --prefix)/bin/code"
+
+      - name: Install codex-desktop (AppImage preflight + install)
+        run: |
+          tap_dir="$(brew --repository "${{ github.repository }}")"
+          brew install --cask "$tap_dir/Casks/codex-desktop.rb"
+          test -x "$(brew --prefix)/bin/codex-desktop"
+
+      - name: Install gitbutler (AppImage preflight + install)
+        run: |
+          tap_dir="$(brew --repository "${{ github.repository }}")"
+          version="$(sed -n 's/^  version "\(.*\)"$/\1/p' "$tap_dir/Casks/gitbutler.rb")"
+          case "$(uname -m)" in
+            aarch64|arm64) arch="aarch64" ;;
+            *) arch="x86_64" ;;
+          esac
+          url="https://github.com/edgarcnp/homebrew-tap/releases/download/gitbutler-v${version}/gitbutler-${version}-${arch}.AppImage"
+          if ! curl -fsSL -o /dev/null -I -L "$url"; then
+            echo "gitbutler release asset ${url} not found; skipping cask install (placeholder sha256 until first publish)" >&2
+            exit 0
+          fi
+          brew install --cask "$tap_dir/Casks/gitbutler.rb"
+          test -x "$(brew --prefix)/bin/gitbutler-tauri"
+          test -x "$(brew --prefix)/bin/but"

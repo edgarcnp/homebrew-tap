@@ -1,18 +1,7 @@
 #!/bin/bash
-# Compatibility shim for the pkgforge uruntime appimagetool.
-#
-# Build scripts in this tap call appimagetool with the upstream CLI:
-#   appimagetool --no-appstream <APPDIR> <OUTPUT.AppImage>
-# The pkgforge fork (https://github.com/pkgforge-dev/appimagetool) embeds the
-# uruntime (FUSE3-native runtime mounting a dwarfs filesystem) instead of the
-# type2-runtime, but uses a different CLI (-o <OUTDIR> -n <OUTNAME>, no
-# --no-appstream) and writes the output without the .AppImage suffix. This
-# shim translates the upstream CLI to the pkgforge one and renames the output
-# to the requested name, so downstream contracts (chmod target, artifact
-# upload glob, release assets, cask URL) stay unchanged.
-#
-# Requires PF_APPIMAGETOOL (default /opt/appimagetool-uruntime) to point at
-# the pkgforge appimagetool binary for the target architecture.
+# Compatibility shim: translates the upstream appimagetool CLI to the
+# pkgforge uruntime fork's (-o/-n, no --no-appstream) and restores the
+# output name, keeping downstream contracts unchanged. Needs PF_APPIMAGETOOL.
 set -euo pipefail
 
 PF_APPIMAGETOOL="${PF_APPIMAGETOOL:-/opt/appimagetool-uruntime}"
@@ -74,11 +63,6 @@ set -- "$@" "${appdir}"
 
 echo "appimagetool-uruntime shim: exec $*" >&2
 "$@"
-rc=$?
-if [[ "${rc}" -ne 0 ]]
-then
-  exit "${rc}"
-fi
 
 if [[ -n "${outname}" ]] && [[ -n "${output_file}" ]]
 then

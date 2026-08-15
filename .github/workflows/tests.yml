@@ -58,12 +58,14 @@ jobs:
           # in the brew container the tap checkout lives in the tap
           # directory, not under GITHUB_WORKSPACE
           cd "$(brew --repository "${{ github.repository }}")"
-          shellcheck packaging/scripts/*.sh packaging/lib/*.sh packaging/vscode/scripts/*.sh
-          if grep -q '^#!' packaging/vscode/templates/AppRun; then
-            shellcheck packaging/vscode/templates/AppRun
-          else
-            echo "AppRun has no shebang; skipping shellcheck" >&2
-          fi
+          shellcheck packaging/scripts/*.sh packaging/lib/*.sh packaging/vscode/scripts/*.sh packaging/gitbutler/scripts/*.sh
+          for apprun in packaging/vscode/templates/AppRun packaging/gitbutler/templates/AppRun; do
+            if grep -q '^#!' "$apprun"; then
+              shellcheck "$apprun"
+            else
+              echo "$apprun has no shebang; skipping shellcheck" >&2
+            fi
+          done
 
       - name: Actionlint workflow lint
         run: |
@@ -83,7 +85,7 @@ jobs:
           [ "$expected" = "$got" ] || { echo "actionlint checksum mismatch: got $got, expected $expected" >&2; exit 1; }
           tar -C /tmp -xzf /tmp/actionlint.tar.gz actionlint
           cd "$(brew --repository "${{ github.repository }}")"
-          /tmp/actionlint -color .github/workflows/build-appimage.yml .github/workflows/build-codex-desktop.yml .github/workflows/build-vscode.yml .github/workflows/tests.yml
+          /tmp/actionlint -color .github/workflows/build-appimage.yml .github/workflows/build-codex-desktop.yml .github/workflows/build-gitbutler.yml .github/workflows/build-vscode.yml .github/workflows/cask-smoke.yml .github/workflows/tests.yml .github/workflows/autobump.yml .github/workflows/publish.yml
 
       - name: Style and audit casks
         run: |
@@ -91,7 +93,7 @@ jobs:
           # no --fix: corrections in the sandbox are discarded, so they would
           # mask style regressions instead of failing the run
           brew style edgarcnp/tap
-          brew audit --cask edgarcnp/tap/visual-studio-code edgarcnp/tap/codex-desktop
+          brew audit --cask edgarcnp/tap/visual-studio-code edgarcnp/tap/codex-desktop edgarcnp/tap/gitbutler
 
       - run: brew test-bot --only-cleanup-before
 
@@ -107,26 +109,3 @@ jobs:
         with:
           name: bottles_${{ matrix.os }}
           path: '*.bottle.*'
-
-  cask-smoke:
-    runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/homebrew/brew:main # zizmor: ignore[unpinned-images]
-      options: --privileged
-    permissions:
-      actions: read
-      checks: read
-      contents: read
-      pull-requests: read
-    steps:
-      - name: Set up Homebrew
-        uses: Homebrew/actions/setup-homebrew@b35a29a0f83ee8b8ca07b219fc8db3d7bb88ab49 # 2026.08.10.2
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Install casks (AppImage preflight + install)
-        run: |
-          tap_dir="$(brew --repository "${{ github.repository }}")"
-          brew install --cask "$tap_dir/Casks/visual-studio-code.rb" "$tap_dir/Casks/codex-desktop.rb"
-          test -x "$(brew --prefix)/bin/code"
-          test -x "$(brew --prefix)/bin/codex-desktop"

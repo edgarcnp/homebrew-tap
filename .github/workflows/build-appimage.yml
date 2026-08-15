@@ -33,8 +33,9 @@ on:
         type: string
       key_path:
         description: Path to the pinned repository signing key (base64-encoded keyring) within the source checkout (e.g. assets/my-app-repository-key.gpg.base64)
-        required: true
+        required: false
         type: string
+        default: ""
       resolve_script:
         description: Path (relative to the source checkout root) of the upstream-linux-package.js resolver the detect job runs
         required: false
@@ -106,11 +107,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y gnupg
           cd source
+          key_args=()
+          if [[ -n "${{ inputs.key_path }}" ]]; then
+            key_args+=(--key-base64 "${{ inputs.key_path }}")
+          fi
           node "${{ inputs.resolve_script }}" \
             --metadata-only \
             --output-dir upstream \
             --metadata upstream/metadata.json \
-            --key-base64 "${{ inputs.key_path }}" \
+            "${key_args[@]}" \
             --repository "${{ inputs.repository_url }}" \
             ${{ inputs.resolve_args }} \
             --arch amd64
@@ -118,7 +123,7 @@ jobs:
             --metadata-only \
             --output-dir upstream \
             --metadata upstream/metadata-arm64.json \
-            --key-base64 "${{ inputs.key_path }}" \
+            "${key_args[@]}" \
             --repository "${{ inputs.repository_url }}" \
             ${{ inputs.resolve_args }} \
             --arch arm64
@@ -215,14 +220,14 @@ jobs:
           sudo apt-get install -y dpkg-dev gnupg rpm
       - name: Install appimagetool
         run: |
-          # latest release, verified against its own BLAKE3 checksum;
+          # pinned to 0.3.3 on 2026-08-15; verified via curl -sIL
           # verifier: pinned blake3 PyPI package (cp312 wheels, both arches)
           curl -fL --retry 5 --retry-all-errors --retry-delay 5 \
             -o /tmp/appimagetool-uruntime \
-            "https://github.com/pkgforge-dev/appimagetool/releases/latest/download/appimagetool-${{ matrix.appimage_arch }}-linux"
+            "https://github.com/pkgforge-dev/appimagetool/releases/download/0.3.3/appimagetool-${{ matrix.appimage_arch }}-linux"
           curl -fL --retry 5 --retry-all-errors --retry-delay 5 \
             -o /tmp/appimagetool-uruntime.b3sum \
-            "https://github.com/pkgforge-dev/appimagetool/releases/latest/download/appimagetool-${{ matrix.appimage_arch }}-linux.b3sum"
+            "https://github.com/pkgforge-dev/appimagetool/releases/download/0.3.3/appimagetool-${{ matrix.appimage_arch }}-linux.b3sum"
           test -s /tmp/appimagetool-uruntime
           test -s /tmp/appimagetool-uruntime.b3sum
           python3 -m pip --version >/dev/null 2>&1 || sudo apt-get install -y python3-pip
@@ -281,12 +286,12 @@ jobs:
           # shellcheck disable=SC2016 # printf format strings and GitHub Actions templates are intentional
           {
             printf '%s\n\n' '## Artifact checksums'
-            printf '%s\n' 'Upstream `.deb` hashes come from the signed APT index; the AppImage hashes are enforced by the `${{ inputs.app_cask }}` cask at install.'
+            printf '%s\n' 'Upstream `.deb` integrity is verified against the release source (signed APT index or download-time SHA-256) before packaging; the AppImage hashes are enforced by the `${{ inputs.app_cask }}` cask at install.'
             printf '\n'
             printf '%s\n' '| Artifact | SHA-256 |'
             printf '%s\n' '| --- | --- |'
-            printf '| Upstream `.deb` (amd64) | `%s` |\n' "$UPSTREAM_SHA_AMD64"
-            printf '| Upstream `.deb` (arm64) | `%s` |\n' "$UPSTREAM_SHA_ARM64"
+            printf '| Upstream `.deb` (amd64) | %s |\n' "${UPSTREAM_SHA_AMD64:-n/a}"
+            printf '| Upstream `.deb` (arm64) | %s |\n' "${UPSTREAM_SHA_ARM64:-n/a}"
             for file in assets/${{ inputs.asset_prefix }}-*.AppImage; do
               [ -e "$file" ] || continue
               arch="${file##*-}"

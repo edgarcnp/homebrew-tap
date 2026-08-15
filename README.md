@@ -49,32 +49,46 @@ brew uninstall --cask --zap <cask>
 
 ### Sandboxing
 
-AppImage builds never add `--no-sandbox`. If your distribution disables unprivileged user namespaces, use the official `.deb`/`.rpm` packages instead.
+AppImage builds never add `--no-sandbox`. If your distribution disables unprivileged user namespaces, use the `.deb`/`.rpm` packages instead.
 
 ### Where the AppImages come from
 
-Each app is built from its upstream's official signed package and published as an AppImage on this repository.
+Each app is built from its upstream's release artifacts — Visual Studio Code from Microsoft's signed APT repository, GitButler from checksum-pinned release packages — and published as an AppImage on this repository.
 
 ## Casks
 
 ### codex-desktop
 
-Unofficial repackage of [OpenAI Codex Desktop for Linux](https://openai.com/codex/) as an AppImage.
+Repackage of [OpenAI Codex Desktop for Linux](https://openai.com/codex/) as an AppImage.
 
 ```sh
 brew install --cask edgarcnp/tap/codex-desktop
 ```
 
-The app shares the upstream Codex profile (`~/.codex`) and single-instance lock with OpenAI's official app; do not run both at the same time.
+The app shares the upstream Codex profile (`~/.codex`) and single-instance lock with OpenAI's app; do not run both at the same time.
 
 ### visual-studio-code
 
-Official [Visual Studio Code](https://code.visualstudio.com/) stable build, repackaged as an AppImage from Microsoft's signed APT repository.
+Repackage of [Visual Studio Code](https://code.visualstudio.com/) as an AppImage, built from Microsoft's signed APT repository.
 
 ```sh
 brew install --cask edgarcnp/tap/visual-studio-code
 ```
 
+### gitbutler
+
+Repackage of [GitButler](https://gitbutler.com/) as an AppImage. GitButler is a Tauri app; its AppImage bundles the webkit runtime (`libwebkit2gtk-4.1`) and GTK3 dependencies, so no webkit libraries are required on the host. The cask installs the GUI as `gitbutler-tauri` and the `but` CLI (same binary, dispatched by name), matching upstream.
+
+```sh
+brew install --cask edgarcnp/tap/gitbutler
+```
+
+Shares the standard GitButler profile and the `but://` URL scheme with the app.
+
 ## Documentation
 
 `brew help`, `man brew` or check [Homebrew's documentation](https://docs.brew.sh).
+
+## License
+
+Apache-2.0. See [LICENSE](LICENSE).
