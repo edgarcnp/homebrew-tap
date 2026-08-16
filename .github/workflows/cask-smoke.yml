@@ -2,9 +2,9 @@ name: cask smoke test
 
 on:
   schedule:
-    # After the daily AppImage build workflows (00:00 UTC) have published
-    # and caught the casks up.
-    - cron: '0 1 * * *'
+    # Every Monday, after the daily AppImage build workflows (00:00 UTC) have
+    # published and caught the casks up.
+    - cron: '0 1 * * 1'
   workflow_dispatch:
 
 concurrency:
