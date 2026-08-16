@@ -143,7 +143,7 @@ main() {
 
   local resolved_version
   resolved_version="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).version' "${metadata_path}")"
-  if [[ -n "${PACKAGE_VERSION}" ]]
+  if [[ -n "${PACKAGE_VERSION:-}" ]]
   then
     [[ "${resolved_version}" = "${PACKAGE_VERSION}" ]] || error "Resolved upstream version ${resolved_version} does not match PACKAGE_VERSION ${PACKAGE_VERSION}"
   else

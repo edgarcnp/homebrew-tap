@@ -103,10 +103,17 @@ jobs:
           node-version: 24
       - name: Resolve upstream version from signed repository
         id: resolve
+        env:
+          # resolve_args passes via env so input metacharacters can never be
+          # interpolated into the script; every current caller uses
+          # space-separated tokens (--package <name> --fingerprint <40 hex>),
+          # which read -ra preserves exactly
+          RESOLVE_ARGS: ${{ inputs.resolve_args }}
         run: |
           sudo apt-get update
           sudo apt-get install -y gnupg
           cd source
+          read -ra resolve_args <<<"$RESOLVE_ARGS"
           key_args=()
           if [[ -n "${{ inputs.key_path }}" ]]; then
             key_args+=(--key-base64 "${{ inputs.key_path }}")
@@ -117,7 +124,7 @@ jobs:
             --metadata upstream/metadata.json \
             "${key_args[@]}" \
             --repository "${{ inputs.repository_url }}" \
-            ${{ inputs.resolve_args }} \
+            "${resolve_args[@]}" \
             --arch amd64
           node "${{ inputs.resolve_script }}" \
             --metadata-only \
@@ -125,7 +132,7 @@ jobs:
             --metadata upstream/metadata-arm64.json \
             "${key_args[@]}" \
             --repository "${{ inputs.repository_url }}" \
-            ${{ inputs.resolve_args }} \
+            "${resolve_args[@]}" \
             --arch arm64
           amd64_metadata="upstream/metadata.json"
           arm64_metadata="upstream/metadata-arm64.json"
@@ -220,18 +227,18 @@ jobs:
           sudo apt-get install -y dpkg-dev gnupg rpm
       - name: Install appimagetool
         run: |
-          # pinned to 0.3.3 on 2026-08-15; verified via curl -sIL
-          # verifier: pinned blake3 PyPI package (cp312 wheels, both arches)
+          # latest release, verified against its own BLAKE3 checksum;
+          # verifier: blake3 PyPI package
           curl -fL --retry 5 --retry-all-errors --retry-delay 5 \
             -o /tmp/appimagetool-uruntime \
-            "https://github.com/pkgforge-dev/appimagetool/releases/download/0.3.3/appimagetool-${{ matrix.appimage_arch }}-linux"
+            "https://github.com/pkgforge-dev/appimagetool/releases/latest/download/appimagetool-${{ matrix.appimage_arch }}-linux"
           curl -fL --retry 5 --retry-all-errors --retry-delay 5 \
             -o /tmp/appimagetool-uruntime.b3sum \
-            "https://github.com/pkgforge-dev/appimagetool/releases/download/0.3.3/appimagetool-${{ matrix.appimage_arch }}-linux.b3sum"
+            "https://github.com/pkgforge-dev/appimagetool/releases/latest/download/appimagetool-${{ matrix.appimage_arch }}-linux.b3sum"
           test -s /tmp/appimagetool-uruntime
           test -s /tmp/appimagetool-uruntime.b3sum
           python3 -m pip --version >/dev/null 2>&1 || sudo apt-get install -y python3-pip
-          python3 -m pip install --quiet --user blake3==1.0.9
+          python3 -m pip install --quiet --user blake3
           python3 - <<'PYEOF'
           import blake3, pathlib, sys
 
@@ -270,7 +277,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           pattern: ${{ inputs.asset_prefix }}-*
           merge-multiple: true
@@ -341,9 +348,18 @@ jobs:
           version, x64, arm = sys.argv[1], sys.argv[2], sys.argv[3]
           path = "Casks/${{ inputs.app_cask }}.rb"
           text = open(path, encoding="utf-8").read()
-          text = re.sub(r'^(\s*)version "[^"]*"', rf'\1version "{version}"', text, count=1, flags=re.M)
-          text = re.sub(r'(x86_64_linux:\s*")[0-9a-f]{64}(")', rf"\g<1>{x64}\g<2>", text, count=1)
-          text = re.sub(r'(arm64_linux:\s*")[0-9a-f]{64}(")', rf"\g<1>{arm}\g<2>", text, count=1)
+          text, n = re.subn(r'^(\s*)version "[^"]*"', rf'\1version "{version}"', text, count=1, flags=re.M)
+          if n != 1:
+              print(f"no cask version pattern found in {path}", file=sys.stderr)
+              sys.exit(1)
+          text, n = re.subn(r'(x86_64_linux:\s*")[0-9a-f]{64}(")', rf"\g<1>{x64}\g<2>", text, count=1)
+          if n != 1:
+              print(f"no x86_64_linux sha256 pattern found in {path}", file=sys.stderr)
+              sys.exit(1)
+          text, n = re.subn(r'(arm64_linux:\s*")[0-9a-f]{64}(")', rf"\g<1>{arm}\g<2>", text, count=1)
+          if n != 1:
+              print(f"no arm64_linux sha256 pattern found in {path}", file=sys.stderr)
+              sys.exit(1)
           open(path, "w", encoding="utf-8").write(text)
           PY
       - name: Commit cask update
@@ -387,9 +403,18 @@ jobs:
           version, x64, arm = sys.argv[1], sys.argv[2], sys.argv[3]
           path = "Casks/${{ inputs.app_cask }}.rb"
           text = open(path, encoding="utf-8").read()
-          text = re.sub(r'^(\s*)version "[^"]*"', rf'\1version "{version}"', text, count=1, flags=re.M)
-          text = re.sub(r'(x86_64_linux:\s*")[0-9a-f]{64}(")', rf"\g<1>{x64}\g<2>", text, count=1)
-          text = re.sub(r'(arm64_linux:\s*")[0-9a-f]{64}(")', rf"\g<1>{arm}\g<2>", text, count=1)
+          text, n = re.subn(r'^(\s*)version "[^"]*"', rf'\1version "{version}"', text, count=1, flags=re.M)
+          if n != 1:
+              print(f"no cask version pattern found in {path}", file=sys.stderr)
+              sys.exit(1)
+          text, n = re.subn(r'(x86_64_linux:\s*")[0-9a-f]{64}(")', rf"\g<1>{x64}\g<2>", text, count=1)
+          if n != 1:
+              print(f"no x86_64_linux sha256 pattern found in {path}", file=sys.stderr)
+              sys.exit(1)
+          text, n = re.subn(r'(arm64_linux:\s*")[0-9a-f]{64}(")', rf"\g<1>{arm}\g<2>", text, count=1)
+          if n != 1:
+              print(f"no arm64_linux sha256 pattern found in {path}", file=sys.stderr)
+              sys.exit(1)
           open(path, "w", encoding="utf-8").write(text)
           PY
       - name: Commit cask update

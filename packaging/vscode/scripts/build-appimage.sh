@@ -23,7 +23,7 @@ APPDIR="${APPIMAGE_APPDIR_OVERRIDE:-${DIST_DIR}/appimage.AppDir}"
 PACKAGE_NAME="${PACKAGE_NAME:-vscode}"
 PACKAGE_DISPLAY_NAME="${PACKAGE_DISPLAY_NAME:-Visual Studio Code}"
 PACKAGE_COMMENT="${PACKAGE_COMMENT:-Code Editing. Redefined.}"
-PACKAGE_VERSION="${PACKAGE_VERSION:-$(date -u +%Y.%m.%d)}"
+PACKAGE_VERSION="${PACKAGE_VERSION:-}"
 TARGET_ARCH="${TARGET_ARCH:-$(uname -m)}"
 
 map_arch() {
@@ -80,7 +80,7 @@ prepare_appdir() {
   cp "${icon}" "${APPDIR}/usr/share/icons/hicolor/256x256/apps/${PACKAGE_NAME}.png"
 
   normalize_package_payload_permissions "${APPDIR}"
-  chmod 0755 "${APPDIR}/opt/vscode/code"
+  chmod 0755 "${APPDIR}/opt/vscode/bin/code"
 }
 
 main() {
@@ -93,16 +93,31 @@ main() {
   deb_arch="${arch_line% *}"
   appimage_arch="${arch_line#* }"
 
-  local deb_path
+  local deb_path metadata_path
   info "Resolving code package for ${deb_arch}"
+  metadata_path="${WORK_DIR}/metadata.json"
   deb_path="$(node "${LIB_DIR}/upstream-linux-package.js" \
     --output-dir "${WORK_DIR}" \
-    --metadata "${WORK_DIR}/metadata.json" \
+    --metadata "${metadata_path}" \
     --key-base64 "${KEY_FILE}" \
     --package code \
     --fingerprint BC528686B50D79E339D3721CEB3E94ADBE1229CF \
     --repository https://packages.microsoft.com/repos/code \
     --arch "${deb_arch}")"
+
+  local resolved_version
+  resolved_version="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).version' "${metadata_path}")"
+  if [[ -n "${PACKAGE_VERSION}" ]]
+  then
+    [[ "${resolved_version}" = "${PACKAGE_VERSION}" ]] || error "Resolved upstream version ${resolved_version} does not match PACKAGE_VERSION ${PACKAGE_VERSION}"
+  else
+    PACKAGE_VERSION="${resolved_version}"
+    info "Derived PACKAGE_VERSION ${PACKAGE_VERSION} from upstream metadata"
+  fi
+
+  local deb_arch_actual
+  deb_arch_actual="$(dpkg-deb -f "${deb_path}" Architecture)"
+  [[ "${deb_arch_actual}" = "${deb_arch}" ]] || error "Downloaded package architecture ${deb_arch_actual} does not match requested ${deb_arch}"
 
   local payload_dir="${WORK_DIR}/deb-payload"
   mkdir -p "${payload_dir}"
