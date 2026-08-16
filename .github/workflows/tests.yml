@@ -7,6 +7,10 @@ on:
       - main
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions: {}
 
 defaults:
@@ -19,7 +23,8 @@ jobs:
       matrix:
         os: [ ubuntu-latest ]
         # macOS: all casks are Linux-only (depends_on :linux); the Ubuntu
-        # container leg below covers tap syntax and install checks.
+        # container leg below runs shellcheck, actionlint, brew style/audit
+        # and the test-bot tap-syntax check.
         # os: [ macos-26 ]
         include:
           - container:
@@ -100,12 +105,3 @@ jobs:
       - run: brew test-bot --only-setup
 
       - run: brew test-bot --only-tap-syntax
-      - run: brew test-bot --only-formulae
-        if: github.event_name == 'pull_request'
-
-      - name: Upload bottles as artifact
-        if: always() && github.event_name == 'pull_request'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: bottles_${{ matrix.os }}
-          path: '*.bottle.*'

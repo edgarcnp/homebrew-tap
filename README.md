@@ -21,7 +21,7 @@ Or in a `brew bundle` `Brewfile`:
 
 ```ruby
 tap "edgarcnp/tap"
-brew "<cask>"
+cask "<cask>"
 ```
 
 ## Supported platforms
