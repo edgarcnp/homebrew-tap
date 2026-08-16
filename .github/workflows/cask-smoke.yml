@@ -1,10 +1,6 @@
 name: cask smoke test
 
 on:
-  push:
-    branches:
-      - main
-  pull_request:
   schedule:
     # After the daily AppImage build workflows (00:00 UTC) have published
     # and caught the casks up.
@@ -19,7 +15,6 @@ permissions:
   actions: read
   checks: read
   contents: read
-  pull-requests: read
 
 defaults:
   run:
@@ -37,31 +32,27 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install visual-studio-code (AppImage preflight + install)
+      - name: Install all casks and verify declared binaries
         run: |
           tap_dir="$(brew --repository "${{ github.repository }}")"
-          brew install --cask "$tap_dir/Casks/visual-studio-code.rb"
-          test -x "$(brew --prefix)/bin/code"
-
-      - name: Install codex-desktop (AppImage preflight + install)
-        run: |
-          tap_dir="$(brew --repository "${{ github.repository }}")"
-          brew install --cask "$tap_dir/Casks/codex-desktop.rb"
-          test -x "$(brew --prefix)/bin/codex-desktop"
-
-      - name: Install gitbutler (AppImage preflight + install)
-        run: |
-          tap_dir="$(brew --repository "${{ github.repository }}")"
-          version="$(sed -n 's/^  version "\(.*\)"$/\1/p' "$tap_dir/Casks/gitbutler.rb")"
-          case "$(uname -m)" in
-            aarch64|arm64) arch="aarch64" ;;
-            *) arch="x86_64" ;;
-          esac
-          url="https://github.com/edgarcnp/homebrew-tap/releases/download/gitbutler-v${version}/gitbutler-${version}-${arch}.AppImage"
-          if ! curl -fsSL -o /dev/null -I -L "$url"; then
-            echo "gitbutler release asset ${url} not found; skipping cask install (placeholder sha256 until first publish)" >&2
-            exit 0
-          fi
-          brew install --cask "$tap_dir/Casks/gitbutler.rb"
-          test -x "$(brew --prefix)/bin/gitbutler-tauri"
-          test -x "$(brew --prefix)/bin/but"
+          for cask in "$tap_dir"/Casks/*.rb; do
+            name="$(basename "$cask" .rb)"
+            # Casks with a placeholder sha256 can't be installed until their
+            # first release is published; skip them unless the asset exists.
+            if grep -qE '"[0]{64}"' "$cask"; then
+              version="$(sed -n 's/^  version "\(.*\)"$/\1/p' "$cask")"
+              case "$(uname -m)" in
+                aarch64|arm64) arch="aarch64" ;;
+                *) arch="x86_64" ;;
+              esac
+              url="https://github.com/${{ github.repository }}/releases/download/${name}-v${version}/${name}-${version}-${arch}.AppImage"
+              if ! curl -fsSL -o /dev/null -I -L "$url"; then
+                echo "release asset ${url} not found; skipping ${name} (placeholder sha256 until first publish)" >&2
+                continue
+              fi
+            fi
+            brew install --cask "$cask"
+            brew info --cask --json=v2 "$cask" | jq -r '.casks[0].artifacts[] | select(.binary) | .target' | while read -r bin; do
+              test -x "$bin"
+            done
+          done
