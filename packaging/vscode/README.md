@@ -1,6 +1,6 @@
-# visual-studio-code packaging
+# vscode packaging
 
-Build scripts for the `visual-studio-code` cask in this tap. The AppImage is
+Build scripts for the `vscode` cask in this tap. The AppImage is
 built from Microsoft's signed APT repository rather than the unsigned tar.gz
 on code.visualstudio.com, so the full verification chain applies:
 

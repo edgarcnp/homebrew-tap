@@ -1,7 +1,7 @@
 #!/bin/bash
 set -Eeuo pipefail
 
-# Build the visual-studio-code AppImage from Microsoft's signed APT
+# Build the vscode AppImage from Microsoft's signed APT
 # repository, pinned to fingerprint BC528686B50D79E339D3721CEB3E94ADBE1229CF.
 # Dist output lands in <tap>/dist for the CI workflow.
 

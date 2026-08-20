@@ -1,4 +1,4 @@
-cask "visual-studio-code" do
+cask "vscode" do
   arch arm: "aarch64", intel: "x86_64"
 
   version "1.134.0"
