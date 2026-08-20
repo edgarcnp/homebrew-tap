@@ -1,9 +1,9 @@
 cask "visual-studio-code" do
   arch arm: "aarch64", intel: "x86_64"
 
-  version "1.133.0"
-  sha256 arm64_linux:  "433321820b563889a781b36e7211379c9bb405e6cff8042f6607aae9e3b92b63",
-         x86_64_linux: "99a65a64968117081dee990ff5963d349975e563082011ffce8e2df7859da043"
+  version "1.134.0"
+  sha256 arm64_linux:  "361677a5aa83d2a387da2651981e2f2a90e8f0e071aba278960f98188cb8d027",
+         x86_64_linux: "6d472451d043e8d59f3ac6560337b51f9e44769e2acb1dd99d1348d93853989c"
 
   on_linux do
     app_image "vscode-#{version}-#{arch}.AppImage"
