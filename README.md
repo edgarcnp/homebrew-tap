@@ -63,12 +63,12 @@ brew install --cask edgarcnp/tap/codex-desktop
 
 The app shares the upstream Codex profile (`~/.codex`) and single-instance lock with OpenAI's app; do not run both at the same time.
 
-### visual-studio-code
+### vscode
 
 Repackage of [Visual Studio Code](https://code.visualstudio.com/) as an AppImage, built from Microsoft's signed APT repository.
 
 ```sh
-brew install --cask edgarcnp/tap/visual-studio-code
+brew install --cask edgarcnp/tap/vscode
 ```
 
 ## Documentation

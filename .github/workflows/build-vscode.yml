@@ -15,7 +15,7 @@ jobs:
       contents: write
     uses: ./.github/workflows/build-appimage.yml
     with:
-      app_cask: visual-studio-code
+      app_cask: vscode
       app_name: Visual Studio Code
       asset_prefix: vscode
       tag_prefix: vscode-v
