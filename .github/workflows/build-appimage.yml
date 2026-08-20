@@ -318,6 +318,26 @@ jobs:
           files: assets/${{ inputs.asset_prefix }}-*.AppImage
           fail_on_unmatched_files: true
 
+      - name: Retain only the 3 newest releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_PREFIX: ${{ inputs.tag_prefix }}
+        run: |
+          matches="$(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName --jq '.[].tagName' | grep "^${TAG_PREFIX}" | sort -V || true)"
+          if [[ -z "$matches" ]]; then
+            exit 0
+          fi
+          mapfile -t tags <<< "$matches"
+          if [ "${#tags[@]}" -le 3 ]; then
+            exit 0
+          fi
+          stale=("${tags[@]:0:$((${#tags[@]} - 3))}")
+          printf 'retaining %s release(s); deleting %s stale release(s)\n' "${#tags[@]}" "${#stale[@]}"
+          for tag in "${stale[@]}"; do
+            echo "deleting release ${tag}"
+            gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag
+          done
+
   update-cask:
     needs: [detect, publish]
     if: needs.detect.outputs.skipped == 'false' && needs.detect.outputs.repair_cask == 'false'
