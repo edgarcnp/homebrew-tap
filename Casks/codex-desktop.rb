@@ -1,9 +1,9 @@
 cask "codex-desktop" do
   arch arm: "aarch64", intel: "x86_64"
 
-  version "26.818.41509"
-  sha256 arm64_linux:  "ecfab12e59c8bd84d3de2d4c0d889a6252631aa3238cc1d88da101b36b6a5c5a",
-         x86_64_linux: "a24a7074f174669273026ef924bb73fad77fd43c2f4ca68e521a7d3f5727bb5b"
+  version "26.818.41705"
+  sha256 arm64_linux:  "4f275e14c9e85eff2dc4fe388e15073546ed16bcdef40f44b43c98c9f21f8e79",
+         x86_64_linux: "8e80d9c932a8971d7d1a0b5b8ef6c297572c4a5133d1f49676451a968148a9b7"
 
   on_linux do
     app_image "codex-desktop-#{version}-#{arch}.AppImage"
