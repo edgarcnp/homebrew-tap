@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=__PACKAGE_DISPLAY_NAME__
+Comment=__PACKAGE_COMMENT__
+Exec=AppRun %U
+Icon=__PACKAGE_NAME__
+Terminal=false
+Type=Application
+StartupNotify=true
+StartupWMClass=ai.opencode.desktop
+Categories=Development;
+MimeType=x-scheme-handler/opencode;
+X-AppImage-Version=__VERSION__

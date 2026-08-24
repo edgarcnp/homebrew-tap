@@ -28,9 +28,20 @@ on:
         required: true
         type: string
       repository_url:
-        description: Signed apt repository URL the app's .deb packages come from (e.g. https://packages.microsoft.com/repos/code)
+        description: >-
+          Signed apt repository URL the app's .deb packages come from
+          (e.g. https://packages.microsoft.com/repos/code); for resolve_kind
+          github, the GitHub API repository base
+          (e.g. https://api.github.com/repos/myorg/my-app)
         required: true
         type: string
+      resolve_kind:
+        description: >-
+          Resolver backend; apt for signed apt repositories, github for
+          GitHub release assets with sha256 asset digests
+        required: false
+        type: string
+        default: apt
       key_path:
         description: Path to the pinned repository signing key (base64-encoded keyring) within the source checkout (e.g. assets/my-app-repository-key.gpg.base64)
         required: false
@@ -101,17 +112,21 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 24
-      - name: Resolve upstream version from signed repository
+      - name: Resolve upstream version
         id: resolve
         env:
           # resolve_args passes via env so input metacharacters can never be
-          # interpolated into the script; every current caller uses
-          # space-separated tokens (--package <name> --fingerprint <40 hex>),
-          # which read -ra preserves exactly
+          # interpolated into the script; apt callers use
+          # --package <name> --fingerprint <40 hex>, github callers use
+          # --asset-prefix <prefix>, each tokenized by read -ra
           RESOLVE_ARGS: ${{ inputs.resolve_args }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           sudo apt-get update
-          sudo apt-get install -y gnupg
+          if [[ "${{ inputs.resolve_kind }}" == "apt" ]]; then
+            # only the apt resolver needs gnupg for InRelease verification
+            sudo apt-get install -y gnupg
+          fi
           cd source
           read -ra resolve_args <<<"$RESOLVE_ARGS"
           key_args=()

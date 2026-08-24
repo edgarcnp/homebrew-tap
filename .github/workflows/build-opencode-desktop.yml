@@ -1,0 +1,29 @@
+name: Build and publish OpenCode Desktop AppImage
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: opencode-desktop-build
+  cancel-in-progress: false
+
+jobs:
+  build:
+    permissions:
+      contents: write
+    uses: ./.github/workflows/build-appimage.yml
+    with:
+      app_cask: opencode-desktop
+      app_name: OpenCode Desktop
+      asset_prefix: opencode-desktop
+      tag_prefix: opencode-desktop-v
+      source_owner: edgarcnp
+      upstream_repo: edgarcnp/homebrew-tap
+      repository_url: https://api.github.com/repos/anomalyco/opencode
+      resolve_kind: github
+      resolve_script: packaging/lib/upstream-github-release.js
+      resolve_args: --asset-prefix opencode-desktop-linux
+      source_dir: packaging/opencode
+      build_command: ./scripts/build-appimage.sh

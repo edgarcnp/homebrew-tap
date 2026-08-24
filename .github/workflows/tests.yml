@@ -63,8 +63,8 @@ jobs:
           # in the brew container the tap checkout lives in the tap
           # directory, not under GITHUB_WORKSPACE
           cd "$(brew --repository "${{ github.repository }}")"
-          shellcheck packaging/scripts/*.sh packaging/lib/*.sh packaging/vscode/scripts/*.sh
-          for apprun in packaging/vscode/templates/AppRun; do
+          shellcheck packaging/scripts/*.sh packaging/lib/*.sh packaging/vscode/scripts/*.sh packaging/opencode/scripts/*.sh
+          for apprun in packaging/vscode/templates/AppRun packaging/opencode/templates/AppRun; do
             if grep -q '^#!' "$apprun"; then
               shellcheck "$apprun"
             else
@@ -90,7 +90,7 @@ jobs:
           [ "$expected" = "$got" ] || { echo "actionlint checksum mismatch: got $got, expected $expected" >&2; exit 1; }
           tar -C /tmp -xzf /tmp/actionlint.tar.gz actionlint
           cd "$(brew --repository "${{ github.repository }}")"
-          /tmp/actionlint -color .github/workflows/build-appimage.yml .github/workflows/build-codex-desktop.yml .github/workflows/build-vscode.yml .github/workflows/cask-smoke.yml .github/workflows/tests.yml .github/workflows/autobump.yml .github/workflows/publish.yml
+          /tmp/actionlint -color .github/workflows/build-appimage.yml .github/workflows/build-codex-desktop.yml .github/workflows/build-vscode.yml .github/workflows/build-opencode-desktop.yml .github/workflows/cask-smoke.yml .github/workflows/tests.yml .github/workflows/autobump.yml .github/workflows/publish.yml
 
       - name: Style and audit casks
         run: |
@@ -98,7 +98,7 @@ jobs:
           # no --fix: corrections in the sandbox are discarded, so they would
           # mask style regressions instead of failing the run
           brew style edgarcnp/tap
-          brew audit --cask edgarcnp/tap/vscode edgarcnp/tap/codex-desktop
+          brew audit --cask edgarcnp/tap/vscode edgarcnp/tap/codex-desktop edgarcnp/tap/opencode-desktop
 
       - run: brew test-bot --only-cleanup-before
 
