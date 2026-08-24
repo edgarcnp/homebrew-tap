@@ -26,6 +26,9 @@ cask "<cask>"
 
 ## Supported platforms
 
+> [!Warning]
+> All casks in this tap are **Wayland-only**. Their desktop entries force the Wayland platform (`--ozone-platform=wayland`), so the apps will not start on a pure X11 session or if Wayland is unavailable.
+
 Casks should work on any Linux distro with Homebrew, but this tap is mainly supported on Fedora Linux, including the Atomic flavor. All casks ship AppImages and rely on unprivileged user namespaces (enabled by default on Fedora) for the Chromium sandbox.
 
 ## General notes (applies to all casks)
@@ -62,6 +65,14 @@ brew install --cask edgarcnp/tap/codex-desktop
 ```
 
 The app shares the upstream Codex profile (`~/.codex`) and single-instance lock with OpenAI's app; do not run both at the same time.
+
+### opencode-desktop
+
+Repackage of [OpenCode Desktop](https://opencode.ai/) as an AppImage, built from the `.deb` published on the [anomalyco/opencode](https://github.com/anomalyco/opencode) GitHub releases and verified against the release's SHA-256 asset digests.
+
+```sh
+brew install --cask edgarcnp/tap/opencode-desktop
+```
 
 ### vscode
 
