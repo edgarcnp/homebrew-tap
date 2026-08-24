@@ -26,6 +26,9 @@ cask "<cask>"
 
 ## Supported platforms
 
+> [!Warning]
+> All casks in this tap are **Wayland-only**. Their desktop entries force the Wayland platform (`--ozone-platform=wayland`), so the apps will not start on a pure X11 session or if Wayland is unavailable.
+
 Casks should work on any Linux distro with Homebrew, but this tap is mainly supported on Fedora Linux, including the Atomic flavor. All casks ship AppImages and rely on unprivileged user namespaces (enabled by default on Fedora) for the Chromium sandbox.
 
 ## General notes (applies to all casks)
