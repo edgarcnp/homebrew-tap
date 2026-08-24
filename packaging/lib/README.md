@@ -20,7 +20,3 @@ reusable workflow (`build-appimage.yml`) runs the resolver from the source
 checkout root (`resolve_script` input) and the build command from
 `source_dir`.
 
-Codex-desktop's packaging lives in an external repo (`ilysenko/codex-desktop-linux`),
-but its build pipeline uses this library and the vendored key under
-`packaging/codex/assets/` from this tap (the workflow's `resolve_script` and
-`key_path` inputs point at `../tap/...`, resolved from the source checkout).
