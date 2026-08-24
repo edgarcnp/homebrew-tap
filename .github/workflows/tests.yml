@@ -98,7 +98,8 @@ jobs:
           # no --fix: corrections in the sandbox are discarded, so they would
           # mask style regressions instead of failing the run
           brew style edgarcnp/tap
-          brew audit --cask edgarcnp/tap/vscode edgarcnp/tap/opencode-desktop
+          tap_dir="$(brew --repository "${{ github.repository }}")"
+          brew audit --cask "$tap_dir"/Casks/*.rb
 
       - run: brew test-bot --only-cleanup-before
 
