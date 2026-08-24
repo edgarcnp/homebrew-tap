@@ -48,7 +48,7 @@ cask "opencode-desktop" do
       [Desktop Entry]
       Name=OpenCode
       Comment=Open source AI coding agent
-      Exec=#{HOMEBREW_PREFIX}/bin/opencode-desktop %U
+      Exec=env ELECTRON_OZONE_PLATFORM_HINT=wayland #{HOMEBREW_PREFIX}/bin/opencode-desktop --ozone-platform=wayland %U
       Icon=opencode-desktop
       Terminal=false
       Type=Application
