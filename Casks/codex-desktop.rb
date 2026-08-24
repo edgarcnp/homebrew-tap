@@ -48,7 +48,7 @@ cask "codex-desktop" do
       [Desktop Entry]
       Name=Codex Desktop
       Comment=OpenAI Codex Desktop for Linux
-      Exec=#{HOMEBREW_PREFIX}/bin/codex-desktop %U
+      Exec=env ELECTRON_OZONE_PLATFORM_HINT=wayland #{HOMEBREW_PREFIX}/bin/codex-desktop --ozone-platform=wayland %U
       Icon=codex-desktop
       Terminal=false
       Type=Application
