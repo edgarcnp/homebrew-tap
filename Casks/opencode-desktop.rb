@@ -2,8 +2,8 @@ cask "opencode-desktop" do
   arch arm: "aarch64", intel: "x86_64"
 
   version "1.18.21"
-  sha256 arm64_linux:  "0000000000000000000000000000000000000000000000000000000000000000",
-         x86_64_linux: "0000000000000000000000000000000000000000000000000000000000000000"
+  sha256 arm64_linux:  "e02a17f8fe6706757d87e6649f8e3a935b1347fcd32c79d1590e379bff8d8fb4",
+         x86_64_linux: "b3c864c71a7d07616634d9f4d47bba0860b0a086c9caaa2b32e6e147678273ec"
 
   on_linux do
     app_image "opencode-desktop-#{version}-#{arch}.AppImage"
