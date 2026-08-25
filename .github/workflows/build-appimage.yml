@@ -404,11 +404,14 @@ jobs:
           push: false
           author_name: github-actions[bot]
           author_email: 41898282+github-actions[bot]@users.noreply.github.com
+          committer_name: github-actions[bot]
+          committer_email: 41898282+github-actions[bot]@users.noreply.github.com
           message: "chore(cask): update ${{ inputs.app_cask }} to ${{ needs.detect.outputs.version }}"
       - name: Push cask update
         uses: Homebrew/actions/git-try-push@a657b8b0cd35d0f65cce41fce9b24cf054b49869 # 2026.08.24.1
         with:
           branch: main
+          token: ${{ secrets.GITHUB_TOKEN }}
 
   repair-cask:
     needs: detect
@@ -459,8 +462,11 @@ jobs:
           push: false
           author_name: github-actions[bot]
           author_email: 41898282+github-actions[bot]@users.noreply.github.com
+          committer_name: github-actions[bot]
+          committer_email: 41898282+github-actions[bot]@users.noreply.github.com
           message: "chore(cask): update ${{ inputs.app_cask }} to ${{ needs.detect.outputs.version }}"
       - name: Push cask update
         uses: Homebrew/actions/git-try-push@a657b8b0cd35d0f65cce41fce9b24cf054b49869 # 2026.08.24.1
         with:
           branch: main
+          token: ${{ secrets.GITHUB_TOKEN }}
