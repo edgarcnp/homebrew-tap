@@ -2,8 +2,8 @@ cask "opencode-desktop" do
   arch arm: "aarch64", intel: "x86_64"
 
   version "1.18.23"
-  sha256 arm64_linux:  "123cde696353bdb7e66ad58c7121606bebbc27d60a5d6ec583fe27460eaeefad",
-         x86_64_linux: "fc7b845b0ecdf616f7eb235901061d64d7c3e4f86b57e1609653ff959dabb590"
+  sha256 arm64_linux:  "6aff43493e3d4ce8cdef583f6f72db48279f1a7468dfdecc5980db185e5313d4",
+         x86_64_linux: "40f49b1205d9cadede250f3a1b650dbb27972ec3d1813539540eb55db38e3e4f"
 
   on_linux do
     app_image "opencode-desktop-#{version}-#{arch}.AppImage"
