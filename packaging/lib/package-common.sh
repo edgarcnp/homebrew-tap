@@ -39,8 +39,7 @@ render_template() {
   local comment
   local version
 
-  for name in PACKAGE_NAME PACKAGE_DISPLAY_NAME PACKAGE_COMMENT PACKAGE_VERSION
-  do
+  for name in PACKAGE_NAME PACKAGE_DISPLAY_NAME PACKAGE_COMMENT PACKAGE_VERSION; do
     [[ -n "${!name:-}" ]] || error "render_template: ${name} is unset or empty"
   done
 
@@ -64,4 +63,30 @@ normalize_package_payload_permissions() {
   find "${root}" -type d -exec chmod 0755 {} +
   find "${root}" -type f \( -perm /u=x -o -perm /g=x -o -perm /o=x \) -exec chmod 0755 {} +
   find "${root}" -type f ! \( -perm /u=x -o -perm /g=x -o -perm /o=x \) -exec chmod 0644 {} +
+}
+
+# Runs the built AppImage briefly, headless, and fails on dynamic-loader
+# errors (missing shared libraries, unresolved symbols). Mirrors pkgforge's
+# quick-sharun --simple-test release gate. Uses xvfb-run when available.
+# Override the kill timeout with SMOKE_TIMEOUT (default 20s).
+smoke_test_appimage() {
+  local appimage="$1"
+  local output
+
+  [[ -f "${appimage}" ]] || error "Smoke test: missing AppImage: ${appimage}"
+  [[ -x "${appimage}" ]] || error "Smoke test: AppImage is not executable: ${appimage}"
+
+  SMOKE_TIMEOUT="${SMOKE_TIMEOUT:-20}"
+
+  info "Smoke testing: ${appimage}"
+  if command -v xvfb-run >/dev/null 2>&1; then
+    output="$(xvfb-run -a timeout "${SMOKE_TIMEOUT}" "${appimage}" --no-sandbox 2>&1 || true)"
+  else
+    output="$(timeout "${SMOKE_TIMEOUT}" "${appimage}" --no-sandbox 2>&1 || true)"
+  fi
+
+  if grep -Eq 'symbol lookup error|undefined symbol|error while loading shared libraries|cannot open shared object' <<<"${output}"; then
+    error "$(printf 'Smoke test failed: loader errors in %s\n%s' "${appimage}" "${output}")"
+  fi
+  info "Smoke test passed: ${appimage}"
 }

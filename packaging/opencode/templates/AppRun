@@ -20,4 +20,8 @@ resolve_appdir() {
 APPDIR="${APPDIR:-$(resolve_appdir)}"
 export APPDIR
 
+# The desktop app ships an electron-updater (app-update.yml); brew owns
+# updates for this AppImage, so block the app's own update channel.
+export OPENCODE_DISABLE_AUTOUPDATE=1
+
 exec "$APPDIR/opt/opencode-desktop/ai.opencode.desktop" "$@"
