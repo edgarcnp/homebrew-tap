@@ -68,7 +68,9 @@ normalize_package_payload_permissions() {
 # Runs the built AppImage briefly, headless, and fails on dynamic-loader
 # errors (missing shared libraries, unresolved symbols). Mirrors pkgforge's
 # quick-sharun --simple-test release gate. Uses xvfb-run when available.
-# Override the kill timeout with SMOKE_TIMEOUT (default 20s).
+# APPIMAGE_EXTRACT_AND_RUN=1 forces extraction so the gate never depends on
+# FUSE availability in CI. Override the kill timeout with SMOKE_TIMEOUT
+# (default 20s).
 smoke_test_appimage() {
   local appimage="$1"
   local output
@@ -80,12 +82,12 @@ smoke_test_appimage() {
 
   info "Smoke testing: ${appimage}"
   if command -v xvfb-run >/dev/null 2>&1; then
-    output="$(xvfb-run -a timeout "${SMOKE_TIMEOUT}" "${appimage}" --no-sandbox 2>&1 || true)"
+    output="$(APPIMAGE_EXTRACT_AND_RUN=1 xvfb-run -a timeout "${SMOKE_TIMEOUT}" "${appimage}" --no-sandbox 2>&1 || true)"
   else
-    output="$(timeout "${SMOKE_TIMEOUT}" "${appimage}" --no-sandbox 2>&1 || true)"
+    output="$(APPIMAGE_EXTRACT_AND_RUN=1 timeout "${SMOKE_TIMEOUT}" "${appimage}" --no-sandbox 2>&1 || true)"
   fi
 
-  if grep -Eq 'symbol lookup error|undefined symbol|error while loading shared libraries|cannot open shared object' <<<"${output}"; then
+  if grep -Eq 'symbol lookup error|undefined symbol|error while loading shared libraries|cannot open shared object|Cannot mount AppImage|AppRun not found|Failed to execute dwarfsextract' <<<"${output}"; then
     error "$(printf 'Smoke test failed: loader errors in %s\n%s' "${appimage}" "${output}")"
   fi
   info "Smoke test passed: ${appimage}"
