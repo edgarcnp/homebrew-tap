@@ -39,7 +39,8 @@ render_template() {
   local comment
   local version
 
-  for name in PACKAGE_NAME PACKAGE_DISPLAY_NAME PACKAGE_COMMENT PACKAGE_VERSION; do
+  for name in PACKAGE_NAME PACKAGE_DISPLAY_NAME PACKAGE_COMMENT PACKAGE_VERSION
+  do
     [[ -n "${!name:-}" ]] || error "render_template: ${name} is unset or empty"
   done
 
@@ -81,13 +82,15 @@ smoke_test_appimage() {
   SMOKE_TIMEOUT="${SMOKE_TIMEOUT:-20}"
 
   info "Smoke testing: ${appimage}"
-  if command -v xvfb-run >/dev/null 2>&1; then
+  if command -v xvfb-run >/dev/null 2>&1
+  then
     output="$(APPIMAGE_EXTRACT_AND_RUN=1 xvfb-run -a timeout "${SMOKE_TIMEOUT}" "${appimage}" --no-sandbox 2>&1 || true)"
   else
     output="$(APPIMAGE_EXTRACT_AND_RUN=1 timeout "${SMOKE_TIMEOUT}" "${appimage}" --no-sandbox 2>&1 || true)"
   fi
 
-  if grep -Eq 'symbol lookup error|undefined symbol|error while loading shared libraries|cannot open shared object|Cannot mount AppImage|AppRun not found|Failed to execute dwarfsextract' <<<"${output}"; then
+  if grep -Eq 'symbol lookup error|undefined symbol|error while loading shared libraries|cannot open shared object|Cannot mount AppImage|AppRun not found|Failed to execute dwarfsextract' <<<"${output}"
+  then
     error "$(printf 'Smoke test failed: loader errors in %s\n%s' "${appimage}" "${output}")"
   fi
   info "Smoke test passed: ${appimage}"
