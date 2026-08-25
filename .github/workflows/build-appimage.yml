@@ -397,18 +397,35 @@ jobs:
               sys.exit(1)
           open(path, "w", encoding="utf-8").write(text)
           PY
-      - name: Commit cask update
-        uses: EndBug/add-and-commit@cc9c08ba6c8df3b93a8f2db63e89b98368ae2ae8 # v11.1.1
-        with:
-          add: Casks/${{ inputs.app_cask }}.rb
-          push: false
-          author_name: github-actions[bot]
-          author_email: 41898282+github-actions[bot]@users.noreply.github.com
-          message: "chore(cask): update ${{ inputs.app_cask }} to ${{ needs.detect.outputs.version }}"
-      - name: Push cask update
-        uses: Homebrew/actions/git-try-push@a657b8b0cd35d0f65cce41fce9b24cf054b49869 # 2026.08.24.1
-        with:
-          branch: main
+      - name: Commit and push cask update
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # no author/committer fields: the token identity (github-actions[bot])
+          # becomes author/committer and GitHub auto-signs the commit
+          base="$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq .commit.sha)"
+          for _ in 1 2 3 4 5; do
+            blob="$(gh api --method POST "repos/$GITHUB_REPOSITORY/git/blobs" \
+              -f encoding=utf-8 -f content=@"Casks/${{ inputs.app_cask }}.rb" --jq .sha)"
+            tree="$(gh api --method POST "repos/$GITHUB_REPOSITORY/git/trees" \
+              -f base_tree="$base" \
+              -f tree="[{\"path\":\"Casks/${{ inputs.app_cask }}.rb\",\"mode\":\"100644\",\"type\":\"blob\",\"sha\":\"$blob\"}]" \
+              --jq .sha)"
+            commit="$(gh api --method POST "repos/$GITHUB_REPOSITORY/git/commits" \
+              -f message="chore(cask): update ${{ inputs.app_cask }} to ${{ needs.detect.outputs.version }}" \
+              -f tree="$tree" -f parents="[\"$base\"]" --jq .sha)"
+            if gh api --method PATCH "repos/$GITHUB_REPOSITORY/git/refs/heads/main" \
+              -f sha="$commit" --silent; then
+              echo "pushed cask update ${commit}"
+              exit 0
+            fi
+            # concurrent runs may advance the branch between read and write;
+            # rebase onto the new head and retry (422 fast-forward rejection)
+            sleep 10
+            base="$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq .commit.sha)"
+          done
+          echo "could not push cask update after 5 attempts" >&2
+          exit 1
 
   repair-cask:
     needs: detect
@@ -452,15 +469,32 @@ jobs:
               sys.exit(1)
           open(path, "w", encoding="utf-8").write(text)
           PY
-      - name: Commit cask update
-        uses: EndBug/add-and-commit@cc9c08ba6c8df3b93a8f2db63e89b98368ae2ae8 # v11.1.1
-        with:
-          add: Casks/${{ inputs.app_cask }}.rb
-          push: false
-          author_name: github-actions[bot]
-          author_email: 41898282+github-actions[bot]@users.noreply.github.com
-          message: "chore(cask): update ${{ inputs.app_cask }} to ${{ needs.detect.outputs.version }}"
-      - name: Push cask update
-        uses: Homebrew/actions/git-try-push@a657b8b0cd35d0f65cce41fce9b24cf054b49869 # 2026.08.24.1
-        with:
-          branch: main
+      - name: Commit and push cask update
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # no author/committer fields: the token identity (github-actions[bot])
+          # becomes author/committer and GitHub auto-signs the commit
+          base="$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq .commit.sha)"
+          for _ in 1 2 3 4 5; do
+            blob="$(gh api --method POST "repos/$GITHUB_REPOSITORY/git/blobs" \
+              -f encoding=utf-8 -f content=@"Casks/${{ inputs.app_cask }}.rb" --jq .sha)"
+            tree="$(gh api --method POST "repos/$GITHUB_REPOSITORY/git/trees" \
+              -f base_tree="$base" \
+              -f tree="[{\"path\":\"Casks/${{ inputs.app_cask }}.rb\",\"mode\":\"100644\",\"type\":\"blob\",\"sha\":\"$blob\"}]" \
+              --jq .sha)"
+            commit="$(gh api --method POST "repos/$GITHUB_REPOSITORY/git/commits" \
+              -f message="chore(cask): update ${{ inputs.app_cask }} to ${{ needs.detect.outputs.version }}" \
+              -f tree="$tree" -f parents="[\"$base\"]" --jq .sha)"
+            if gh api --method PATCH "repos/$GITHUB_REPOSITORY/git/refs/heads/main" \
+              -f sha="$commit" --silent; then
+              echo "pushed cask update ${commit}"
+              exit 0
+            fi
+            # concurrent runs may advance the branch between read and write;
+            # rebase onto the new head and retry (422 fast-forward rejection)
+            sleep 10
+            base="$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq .commit.sha)"
+          done
+          echo "could not push cask update after 5 attempts" >&2
+          exit 1
