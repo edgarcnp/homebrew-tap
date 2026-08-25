@@ -1,0 +1,63 @@
+{
+    "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+    "extends": [
+        "config:recommended",
+        "helpers:pinGitHubActionDigests",
+        ":disableDependencyDashboard"
+    ],
+    "abandonmentThreshold": "1 year",
+    "addLabels": [
+        "renovate",
+        "dependencies"
+    ],
+    "assignAutomerge": true,
+    "automerge": false,
+    "keepUpdatedLabel": "renovate-keep-updated",
+    "osvVulnerabilityAlerts": true,
+    "pruneBranchAfterAutomerge": true,
+    "reviewers": [
+        "edgarcnp"
+    ],
+    "rollbackPrs": true,
+    "schedule": [
+        "* * * * *"
+    ],
+    "vulnerabilityAlerts": {
+        "groupName": null,
+        "schedule": [],
+        "dependencyDashboardApproval": false,
+        "minimumReleaseAge": null,
+        "rangeStrategy": "bump",
+        "commitMessageSuffix": "[SECURITY]",
+        "branchTopic": "{{{datasource}}}-{{{depNameSanitized}}}-vulnerability",
+        "prCreation": "immediate",
+        "vulnerabilityFixStrategy": "lowest"
+    },
+    "packageRules": [
+        {
+            "matchManagers": [
+                "github-actions"
+            ],
+            "groupName": "GitHub Actions"
+        },
+        {
+            "matchManagers": [
+                "custom.regex"
+            ],
+            "groupName": "AppImage tooling"
+        }
+    ],
+    "customManagers": [
+        {
+            "customType": "regex",
+            "managerFilePatterns": [
+                ".github/workflows/.+\\.ya?ml$"
+            ],
+            "matchStrings": [
+                "https://github\\.com/pkgforge-dev/appimagetool/releases/download/(?<currentValue>[^/]+)/appimagetool-"
+            ],
+            "datasourceTemplate": "github-releases",
+            "depNameTemplate": "pkgforge-dev/appimagetool"
+        }
+    ]
+}
