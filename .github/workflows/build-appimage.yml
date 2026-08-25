@@ -242,14 +242,14 @@ jobs:
           sudo apt-get install -y dpkg-dev gnupg rpm
       - name: Install appimagetool
         run: |
-          # latest release, verified against its own BLAKE3 checksum;
-          # verifier: blake3 PyPI package
+          # pinned release, verified against its own BLAKE3 checksum;
+          # verifier: blake3 PyPI package; renovate bumps the version
           curl -fL --retry 5 --retry-all-errors --retry-delay 5 \
             -o /tmp/appimagetool-uruntime \
-            "https://github.com/pkgforge-dev/appimagetool/releases/latest/download/appimagetool-${{ matrix.appimage_arch }}-linux"
+            "https://github.com/pkgforge-dev/appimagetool/releases/download/0.3.3/appimagetool-${{ matrix.appimage_arch }}-linux"
           curl -fL --retry 5 --retry-all-errors --retry-delay 5 \
             -o /tmp/appimagetool-uruntime.b3sum \
-            "https://github.com/pkgforge-dev/appimagetool/releases/latest/download/appimagetool-${{ matrix.appimage_arch }}-linux.b3sum"
+            "https://github.com/pkgforge-dev/appimagetool/releases/download/0.3.3/appimagetool-${{ matrix.appimage_arch }}-linux.b3sum"
           test -s /tmp/appimagetool-uruntime
           test -s /tmp/appimagetool-uruntime.b3sum
           python3 -m pip --version >/dev/null 2>&1 || sudo apt-get install -y python3-pip
