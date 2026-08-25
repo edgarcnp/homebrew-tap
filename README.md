@@ -56,6 +56,16 @@ AppImage builds never add `--no-sandbox`. If your distribution disables unprivil
 
 ## Casks
 
+### gitbutler
+
+Repackage of [GitButler](https://gitbutler.com/) as an AppImage, built from the checksum-pinned `.deb` published through GitButler's download CDN. GitButler is a Tauri app; the AppImage bundles the webkit runtime (`libwebkit2gtk-4.1`) and GTK3 dependencies, so no webkit libraries are required on the host. The cask installs the GUI as `gitbutler-tauri` and the `but` CLI (same binary, dispatched by name), matching upstream.
+
+```sh
+brew install --cask edgarcnp/tap/gitbutler
+```
+
+Shares the standard GitButler profile and the `but://` URL scheme with the app.
+
 ### opencode-desktop
 
 Repackage of [OpenCode Desktop](https://opencode.ai/) as an AppImage, built from the `.deb` published on the [anomalyco/opencode](https://github.com/anomalyco/opencode) GitHub releases and verified against the release's SHA-256 asset digests.
