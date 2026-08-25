@@ -406,7 +406,7 @@ jobs:
           author_email: 41898282+github-actions[bot]@users.noreply.github.com
           message: "chore(cask): update ${{ inputs.app_cask }} to ${{ needs.detect.outputs.version }}"
       - name: Push cask update
-        uses: Homebrew/actions/git-try-push@8f3d1ec8a696b3b9d9a6c3696b6c73033cab69e4 # 2026.08.14.1
+        uses: Homebrew/actions/git-try-push@a657b8b0cd35d0f65cce41fce9b24cf054b49869 # 2026.08.24.1
         with:
           branch: main
 
@@ -461,6 +461,6 @@ jobs:
           author_email: 41898282+github-actions[bot]@users.noreply.github.com
           message: "chore(cask): update ${{ inputs.app_cask }} to ${{ needs.detect.outputs.version }}"
       - name: Push cask update
-        uses: Homebrew/actions/git-try-push@8f3d1ec8a696b3b9d9a6c3696b6c73033cab69e4 # 2026.08.14.1
+        uses: Homebrew/actions/git-try-push@a657b8b0cd35d0f65cce41fce9b24cf054b49869 # 2026.08.24.1
         with:
           branch: main
