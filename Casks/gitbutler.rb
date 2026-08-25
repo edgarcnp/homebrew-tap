@@ -1,9 +1,9 @@
 cask "gitbutler" do
   arch arm: "aarch64", intel: "x86_64"
 
-  version "0.22.0"
-  sha256 arm64_linux:  "0000000000000000000000000000000000000000000000000000000000000000",
-         x86_64_linux: "0000000000000000000000000000000000000000000000000000000000000000"
+  version "0.22.1"
+  sha256 arm64_linux:  "3ed9200a5a98d57734c16f17855a3b377396a0d5afc6964e45827ee225e51e7e",
+         x86_64_linux: "45dd8990347f40458d84e7359dba3b2c1a494369a79c5a0df5daf21ad80bdd49"
 
   on_linux do
     app_image "gitbutler-#{version}-#{arch}.AppImage"
