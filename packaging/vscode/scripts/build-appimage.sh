@@ -28,19 +28,18 @@ TARGET_ARCH="${TARGET_ARCH:-$(uname -m)}"
 
 map_arch() {
   case "${TARGET_ARCH}" in
-    amd64 | x86_64)
-      echo "amd64 x86_64"
-      ;;
-    arm64 | aarch64)
-      echo "arm64 aarch64"
-      ;;
-    *) error "Unsupported AppImage architecture: ${TARGET_ARCH} (upstream packages support amd64 and arm64 only)" ;;
+  amd64 | x86_64)
+    echo "amd64 x86_64"
+    ;;
+  arm64 | aarch64)
+    echo "arm64 aarch64"
+    ;;
+  *) error "Unsupported AppImage architecture: ${TARGET_ARCH} (upstream packages support amd64 and arm64 only)" ;;
   esac
 }
 
 resolve_appimagetool() {
-  if [[ -n "${APPIMAGETOOL:-}" ]]
-  then
+  if [[ -n "${APPIMAGETOOL:-}" ]]; then
     [[ -x "${APPIMAGETOOL}" ]] || error "APPIMAGETOOL is not executable: ${APPIMAGETOOL}"
     printf '%s\n' "${APPIMAGETOOL}"
     return 0
@@ -107,8 +106,7 @@ main() {
 
   local resolved_version
   resolved_version="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).version' "${metadata_path}")"
-  if [[ -n "${PACKAGE_VERSION}" ]]
-  then
+  if [[ -n "${PACKAGE_VERSION}" ]]; then
     [[ "${resolved_version}" = "${PACKAGE_VERSION}" ]] || error "Resolved upstream version ${resolved_version} does not match PACKAGE_VERSION ${PACKAGE_VERSION}"
   else
     PACKAGE_VERSION="${resolved_version}"
@@ -135,6 +133,7 @@ main() {
   ARCH="${appimage_arch}" VERSION="${PACKAGE_VERSION}" \
     "${appimagetool}" --no-appstream "${APPDIR}" "${output_file}" >&2
   chmod 0755 "${output_file}"
+  smoke_test_appimage "${output_file}"
   info "Built AppImage: ${output_file}"
 }
 
