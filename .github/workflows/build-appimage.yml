@@ -406,14 +406,18 @@ jobs:
           base="$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq .commit.sha)"
           for _ in 1 2 3 4 5; do
             blob="$(gh api --method POST "repos/$GITHUB_REPOSITORY/git/blobs" \
-              -f encoding=utf-8 -f content=@"Casks/${{ inputs.app_cask }}.rb" --jq .sha)"
+              -F encoding=utf-8 -F content=@"Casks/${{ inputs.app_cask }}.rb" --jq .sha)"
+            base_tree="$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$base" --jq .tree.sha)"
             tree="$(gh api --method POST "repos/$GITHUB_REPOSITORY/git/trees" \
-              -f base_tree="$base" \
-              -f tree="[{\"path\":\"Casks/${{ inputs.app_cask }}.rb\",\"mode\":\"100644\",\"type\":\"blob\",\"sha\":\"$blob\"}]" \
+              -f base_tree="$base_tree" \
+              -f "tree[][path]=Casks/${{ inputs.app_cask }}.rb" \
+              -f "tree[][mode]=100644" \
+              -f "tree[][type]=blob" \
+              -f "tree[][sha]=$blob" \
               --jq .sha)"
             commit="$(gh api --method POST "repos/$GITHUB_REPOSITORY/git/commits" \
               -f message="chore(cask): update ${{ inputs.app_cask }} to ${{ needs.detect.outputs.version }}" \
-              -f tree="$tree" -f parents="[\"$base\"]" --jq .sha)"
+              -f tree="$tree" -f "parents[]=$base" --jq .sha)"
             if gh api --method PATCH "repos/$GITHUB_REPOSITORY/git/refs/heads/main" \
               -f sha="$commit" --silent; then
               echo "pushed cask update ${commit}"
@@ -478,14 +482,18 @@ jobs:
           base="$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq .commit.sha)"
           for _ in 1 2 3 4 5; do
             blob="$(gh api --method POST "repos/$GITHUB_REPOSITORY/git/blobs" \
-              -f encoding=utf-8 -f content=@"Casks/${{ inputs.app_cask }}.rb" --jq .sha)"
+              -F encoding=utf-8 -F content=@"Casks/${{ inputs.app_cask }}.rb" --jq .sha)"
+            base_tree="$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$base" --jq .tree.sha)"
             tree="$(gh api --method POST "repos/$GITHUB_REPOSITORY/git/trees" \
-              -f base_tree="$base" \
-              -f tree="[{\"path\":\"Casks/${{ inputs.app_cask }}.rb\",\"mode\":\"100644\",\"type\":\"blob\",\"sha\":\"$blob\"}]" \
+              -f base_tree="$base_tree" \
+              -f "tree[][path]=Casks/${{ inputs.app_cask }}.rb" \
+              -f "tree[][mode]=100644" \
+              -f "tree[][type]=blob" \
+              -f "tree[][sha]=$blob" \
               --jq .sha)"
             commit="$(gh api --method POST "repos/$GITHUB_REPOSITORY/git/commits" \
               -f message="chore(cask): update ${{ inputs.app_cask }} to ${{ needs.detect.outputs.version }}" \
-              -f tree="$tree" -f parents="[\"$base\"]" --jq .sha)"
+              -f tree="$tree" -f "parents[]=$base" --jq .sha)"
             if gh api --method PATCH "repos/$GITHUB_REPOSITORY/git/refs/heads/main" \
               -f sha="$commit" --silent; then
               echo "pushed cask update ${commit}"
