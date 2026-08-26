@@ -120,9 +120,9 @@ smoke_test_appimage() {
   info "Smoke testing: ${appimage}"
   if command -v xvfb-run >/dev/null 2>&1
   then
-    output="$(APPIMAGE_EXTRACT_AND_RUN=1 xvfb-run -a timeout "${SMOKE_TIMEOUT}" "${appimage}" --no-sandbox 2>&1 || true)"
+    output="$(APPIMAGE_EXTRACT_AND_RUN=1 xvfb-run -a timeout -k 5 "${SMOKE_TIMEOUT}" "${appimage}" --no-sandbox 2>&1 || true)"
   else
-    output="$(APPIMAGE_EXTRACT_AND_RUN=1 timeout "${SMOKE_TIMEOUT}" "${appimage}" --no-sandbox 2>&1 || true)"
+    output="$(APPIMAGE_EXTRACT_AND_RUN=1 timeout -k 5 "${SMOKE_TIMEOUT}" "${appimage}" --no-sandbox 2>&1 || true)"
   fi
 
   if grep -Eq 'symbol lookup error|undefined symbol|error while loading shared libraries|cannot open shared object|Cannot mount AppImage|AppRun not found|Failed to execute dwarfsextract' <<<"${output}"
