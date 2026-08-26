@@ -82,6 +82,16 @@ brew uninstall --cask --zap <cask>
 
 AppImage builds never add `--no-sandbox`. If your distribution disables unprivileged user namespaces, use the `.deb`/`.rpm` packages instead.
 
+## How these AppImages differ from the official ones
+
+The upstream projects ship their own AppImages (built with their own toolchains, e.g. Tauri's bundler). The AppImages in this tap are **rebuilt from scratch** in this repository's CI with a different pipeline (`linuxdeploy` + the uruntime `appimagetool`, a custom `AppRun`, and per-app packaging scripts), which is why they behave slightly differently:
+
+- **Self-contained webkit runtime (gitbutler):** the `libwebkit2gtk-4.1` closure is bundled and helper paths are binary-patched relative to the AppImage, so it runs on hosts without webkit2gtk installed.
+- **Checksums pinned at install:** the cask verifies the AppImage's SHA-256, so what you install is exactly what CI built.
+- **Updates via Homebrew:** the app's built-in auto-update is disabled; `brew upgrade` is the update path.
+
+The binaries themselves are the official upstream releases — only the packaging is different.
+
 ## Documentation
 
 `brew help`, `man brew` or check [Homebrew's documentation](https://docs.brew.sh).
