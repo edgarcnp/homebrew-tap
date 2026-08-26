@@ -153,10 +153,25 @@ bundle_webkit_helpers() {
   local hardcoded
   hardcoded="$(strings "${webkit_lib}" | grep -m1 '/webkit2gtk-4.1$' || true)"
   [[ -n "${hardcoded}" ]] || error "No hardcoded webkit2gtk helper path found in ${webkit_lib}; cannot patch helper locations"
+  [[ "${hardcoded}" == /usr/* ]] || error "hardcoded webkit helper path does not start with /usr: ${hardcoded}"
 
   local relative="././${hardcoded#/usr}"
+  [ "${#hardcoded}" -eq "${#relative}" ] || error "patched path length mismatch: ${#hardcoded} vs ${#relative} (${hardcoded} -> ${relative}); refusing to corrupt ELF"
   info "Patching webkit helper path: ${hardcoded} -> ${relative}"
-  LC_ALL=C sed -i "s|${hardcoded}|${relative}|g" "${webkit_lib}"
+
+  local escaped_hardcoded escaped_relative
+  escaped_hardcoded="$(sed_escape_replacement "${hardcoded}")"
+  escaped_hardcoded="${escaped_hardcoded//|/\\|}"
+  escaped_relative="$(sed_escape_replacement "${relative}")"
+  escaped_relative="${escaped_relative//|/\\|}"
+
+  local tmp_lib
+  tmp_lib="$(mktemp "${webkit_lib}.tmp.XXXXXX")"
+  cp -- "${webkit_lib}" "${tmp_lib}" || { rm -f -- "${tmp_lib}"; error "failed to copy ${webkit_lib} to temp file"; }
+  LC_ALL=C sed -i "s|${escaped_hardcoded}|${escaped_relative}|g" "${tmp_lib}" || { rm -f -- "${tmp_lib}"; error "failed to patch webkit helper path"; }
+  mv -- "${tmp_lib}" "${webkit_lib}" || { rm -f -- "${tmp_lib}"; error "failed to move patched lib into place"; }
+
+  strings "${webkit_lib}" | grep -F -q -- "${relative}" || error "patch verification failed: ${relative} not found in ${webkit_lib}"
 
   local helpers_dir="${APPDIR}${hardcoded#/usr}"
   mkdir -p "${helpers_dir}"

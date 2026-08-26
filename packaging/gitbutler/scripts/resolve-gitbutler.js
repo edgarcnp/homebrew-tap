@@ -17,6 +17,9 @@ const {
 // redirect serving a huge body must fail instead of exhausting memory.
 const MAX_PAYLOAD_BYTES = 512 * 1024 * 1024;
 
+// Pin to releases.gitbutler.com to prevent open redirect to attacker-controlled host
+const ALLOWED_HOSTS = new Set(["releases.gitbutler.com"]);
+
 function sha256Buffer(bytes) {
   return crypto.createHash("sha256").update(bytes).digest("hex");
 }
@@ -27,6 +30,8 @@ function sha256Buffer(bytes) {
 // parseFinalUrl validates exactly that shape, so an upstream layout change
 // fails loudly instead of producing a wrong download.
 async function fetchFollowRedirects(url) {
+  const initial = new URL(url);
+  if (initial.protocol !== "https:") throw new Error(`Initial URL must be https (got ${initial.protocol}) for ${url}`);
   const response = await fetch(url, { redirect: "follow" });
   if (!response.ok) throw new Error(`Download failed (${response.status}) for ${url}`);
   const declaredLength = Number(response.headers.get("content-length") ?? 0);
@@ -63,6 +68,8 @@ async function readPayload(response) {
 function parseFinalUrl(finalUrl) {
   const url = new URL(finalUrl);
   if (url.protocol !== "https:") throw new Error(`Redirected to non-HTTPS URL (${url.protocol}) for ${finalUrl}`);
+  // Pin to releases.gitbutler.com to prevent open redirect to attacker-controlled host
+  if (!ALLOWED_HOSTS.has(url.hostname)) throw new Error(`Unexpected redirect host (${url.hostname}) for ${finalUrl}`);
   const segments = url.pathname.split("/").filter(Boolean);
   const fileName = segments[segments.length - 1] ?? "";
   const archPath = segments[segments.length - 2] ?? "";
@@ -101,6 +108,23 @@ async function resolveGitButlerPackage(options) {
   }
 
   const repository = String(options.repository).replace(/\/+$/, "");
+  try {
+    const u = new URL(repository);
+    if (u.protocol !== "https:") throw new Error(`Repository must be https (got ${u.protocol}) for ${repository}`);
+  } catch (e) {
+    if (e.message.includes("Repository must be https")) throw e;
+    throw new Error(`Invalid repository URL (${repository}): ${e.message}`);
+  }
+  // Validate RESOLVE_BASE_URL if present - must be https to prevent downgrade via env override
+  if (process.env.RESOLVE_BASE_URL) {
+    try {
+      const base = new URL(process.env.RESOLVE_BASE_URL);
+      if (base.protocol !== "https:") throw new Error(`RESOLVE_BASE_URL must be https (got ${base.protocol}) for ${process.env.RESOLVE_BASE_URL}`);
+    } catch (e) {
+      if (e.message.includes("RESOLVE_BASE_URL must be https")) throw e;
+      throw new Error(`Invalid RESOLVE_BASE_URL (${process.env.RESOLVE_BASE_URL}): ${e.message}`);
+    }
+  }
   const outputDir = path.resolve(options.outputDir);
   fs.mkdirSync(outputDir, { recursive: true });
 
