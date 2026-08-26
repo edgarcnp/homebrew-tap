@@ -9,6 +9,8 @@ concurrency:
   group: vscode-build
   cancel-in-progress: false
 
+permissions: {}
+
 jobs:
   build:
     permissions:

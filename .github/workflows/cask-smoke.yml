@@ -23,6 +23,7 @@ defaults:
 jobs:
   cask-smoke:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     container:
       image: ghcr.io/homebrew/brew:main # zizmor: ignore[unpinned-images]
       options: --privileged
@@ -33,8 +34,10 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install all casks and verify declared binaries
+        env:
+          TAP_REPO: ${{ github.repository }}
         run: |
-          tap_dir="$(brew --repository "${{ github.repository }}")"
+          tap_dir="$(brew --repository "$TAP_REPO")"
           for cask in "$tap_dir"/Casks/*.rb; do
             name="$(basename "$cask" .rb)"
             # Casks with a placeholder sha256 can't be installed until their
@@ -45,8 +48,8 @@ jobs:
                 aarch64|arm64) arch="aarch64" ;;
                 *) arch="x86_64" ;;
               esac
-              url="https://github.com/${{ github.repository }}/releases/download/${name}-v${version}/${name}-${version}-${arch}.AppImage"
-              if ! curl -fsSL -o /dev/null -I -L "$url"; then
+              url="https://github.com/$TAP_REPO/releases/download/${name}-v${version}/${name}-${version}-${arch}.AppImage"
+              if ! curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 -o /dev/null -I -L "$url"; then
                 echo "release asset ${url} not found; skipping ${name} (placeholder sha256 until first publish)" >&2
                 continue
               fi

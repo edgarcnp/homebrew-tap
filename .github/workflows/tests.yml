@@ -31,6 +31,7 @@ jobs:
               image: ghcr.io/homebrew/brew:main
               options: --privileged
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
     container: ${{ fromJSON(toJSON(matrix.container)) }} # zizmor: ignore[unpinned-images]
     permissions:
       actions: read
@@ -52,6 +53,8 @@ jobs:
           restore-keys: ${{ matrix.os }}-rubygems-
 
       - name: Shellcheck packaging scripts
+        env:
+          TAP_REPO: ${{ github.repository }}
         run: |
           if command -v sudo >/dev/null 2>&1; then
             sudo apt-get update
@@ -62,7 +65,7 @@ jobs:
           fi
           # in the brew container the tap checkout lives in the tap
           # directory, not under GITHUB_WORKSPACE
-          cd "$(brew --repository "${{ github.repository }}")"
+          cd "$(brew --repository "$TAP_REPO")"
           shellcheck packaging/scripts/*.sh packaging/lib/*.sh packaging/vscode/scripts/*.sh packaging/opencode/scripts/*.sh packaging/gitbutler/scripts/*.sh
           for apprun in packaging/vscode/templates/AppRun packaging/opencode/templates/AppRun packaging/gitbutler/templates/AppRun; do
             if grep -q '^#!' "$apprun"; then
@@ -73,6 +76,8 @@ jobs:
           done
 
       - name: Actionlint workflow lint
+        env:
+          TAP_REPO: ${{ github.repository }}
         run: |
           # latest release, verified against the sha256 checksums file
           # shipped alongside the binaries in the same release
@@ -89,16 +94,18 @@ jobs:
           got="$(sha256sum /tmp/actionlint.tar.gz | awk '{print $1}')"
           [ "$expected" = "$got" ] || { echo "actionlint checksum mismatch: got $got, expected $expected" >&2; exit 1; }
           tar -C /tmp -xzf /tmp/actionlint.tar.gz actionlint
-          cd "$(brew --repository "${{ github.repository }}")"
+          cd "$(brew --repository "$TAP_REPO")"
           /tmp/actionlint -color .github/workflows/build-appimage.yml .github/workflows/build-vscode.yml .github/workflows/build-gitbutler.yml .github/workflows/build-opencode-desktop.yml .github/workflows/cask-smoke.yml .github/workflows/tests.yml .github/workflows/autobump.yml .github/workflows/publish.yml
 
       - name: Style and audit casks
+        env:
+          TAP_REPO: ${{ github.repository }}
         run: |
           # the tap is already checked out by setup-homebrew
           # no --fix: corrections in the sandbox are discarded, so they would
           # mask style regressions instead of failing the run
           brew style edgarcnp/tap
-          tap_dir="$(brew --repository "${{ github.repository }}")"
+          tap_dir="$(brew --repository "$TAP_REPO")"
           for cask in "$tap_dir"/Casks/*.rb; do
             brew audit --cask "edgarcnp/tap/$(basename "$cask" .rb)"
           done

@@ -9,6 +9,8 @@ concurrency:
   group: gitbutler-build
   cancel-in-progress: false
 
+permissions: {}
+
 jobs:
   build:
     permissions:
