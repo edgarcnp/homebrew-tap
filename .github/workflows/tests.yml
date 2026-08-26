@@ -5,7 +5,19 @@ on:
   push:
     branches:
       - main
+    paths:
+      - "Casks/**"
+      - "Formula/**"
+      - ".github/workflows/**"
+      - "packaging/**"
+      - "renovate.json"
   pull_request:
+    paths:
+      - "Casks/**"
+      - "Formula/**"
+      - ".github/workflows/**"
+      - "packaging/**"
+      - "renovate.json"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
