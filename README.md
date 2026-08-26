@@ -2,6 +2,13 @@
 
 Homebrew tap with Linux desktop apps, repackaged as AppImages and built automatically by this repository's CI.
 
+## Supported platforms
+
+> [!Warning]
+> All casks in this tap are **Wayland-only**. Their desktop entries force the Wayland platform (`--ozone-platform=wayland`), so the apps will not start on a pure X11 session or if Wayland is unavailable.
+
+Casks should work on any Linux distro with Homebrew, but this tap is mainly supported on Fedora Linux, including the Atomic flavor. All casks ship AppImages and rely on unprivileged user namespaces (enabled by default on Fedora) for the Chromium sandbox.
+
 ## Installation
 
 Install any cask directly:
@@ -23,36 +30,6 @@ Or in a `brew bundle` `Brewfile`:
 tap "edgarcnp/tap"
 cask "<cask>"
 ```
-
-## Supported platforms
-
-> [!Warning]
-> All casks in this tap are **Wayland-only**. Their desktop entries force the Wayland platform (`--ozone-platform=wayland`), so the apps will not start on a pure X11 session or if Wayland is unavailable.
-
-Casks should work on any Linux distro with Homebrew, but this tap is mainly supported on Fedora Linux, including the Atomic flavor. All casks ship AppImages and rely on unprivileged user namespaces (enabled by default on Fedora) for the Chromium sandbox.
-
-## General notes (applies to all casks)
-
-### What a cask installs
-
-- The AppImage, copied into the configured AppImage directory (default `~/Applications`; override with `brew install --cask --appimagedir=<dir>`).
-- A launcher binary on your PATH and a desktop entry in `~/.local/share/applications/`, with its icon in `~/.local/share/icons/`.
-
-Uninstall with:
-
-```sh
-brew uninstall --cask <cask>
-```
-
-Add `--zap` to also remove the desktop entry and icon:
-
-```sh
-brew uninstall --cask --zap <cask>
-```
-
-### Sandboxing
-
-AppImage builds never add `--no-sandbox`. If your distribution disables unprivileged user namespaces, use the `.deb`/`.rpm` packages instead.
 
 ## Casks
 
@@ -81,6 +58,29 @@ Repackage of [Visual Studio Code](https://code.visualstudio.com/) as an AppImage
 ```sh
 brew install --cask edgarcnp/tap/vscode
 ```
+
+## General notes (applies to all casks)
+
+### What a cask installs
+
+- The AppImage, copied into the configured AppImage directory (default `~/Applications`; override with `brew install --cask --appimagedir=<dir>`).
+- A launcher binary on your PATH and a desktop entry in `~/.local/share/applications/`, with its icon in `~/.local/share/icons/`.
+
+Uninstall with:
+
+```sh
+brew uninstall --cask <cask>
+```
+
+Add `--zap` to also remove the desktop entry and icon:
+
+```sh
+brew uninstall --cask --zap <cask>
+```
+
+### Sandboxing
+
+AppImage builds never add `--no-sandbox`. If your distribution disables unprivileged user namespaces, use the `.deb`/`.rpm` packages instead.
 
 ## Documentation
 
