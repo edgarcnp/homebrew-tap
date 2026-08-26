@@ -21,8 +21,9 @@ GET https://app.gitbutler.com/downloads/release/linux/<x86_64|aarch64>/deb   (30
    build suffix from the redirect URL (e.g. `0.22.1-3215`), downloads the
    `.deb` and hashes it. Version normalization is shared with the other
    resolvers (`../lib/upstream-linux-package.js`). In `--metadata-only` mode
-   (used by the workflow's detect job) the URL and version are resolved
-   without downloading the `.deb` payload.
+   (used by the workflow's detect job) the payload is downloaded to compute
+   the SHA-256 — the CDN publishes no checksums — but discarded instead of
+   written to disk.
 
 2. `scripts/build-appimage.sh` — extracts the `.deb`, stages an AppDir
    (desktop entry, icon, and both `gitbutler-tauri` + `gitbutler-git-askpass`
