@@ -185,13 +185,16 @@ jobs:
             local tmp_dir
             tmp_dir="$(mktemp -d)"
 
+            local nullglob_state
+            nullglob_state="$(shopt -p nullglob)"
+
             local ok="false"
             local cask_x86_64 cask_arm64
             cask_x86_64="$(sed -n 's/^.*x86_64_linux:[[:space:]]*"\([0-9a-f]\{64\}\)".*$/\1/p' "tap/Casks/${APP_CASK}.rb" | head -n1)"
             cask_arm64="$(sed -n 's/^.*arm64_linux:[[:space:]]*"\([0-9a-f]\{64\}\)".*$/\1/p' "tap/Casks/${APP_CASK}.rb" | head -n1)"
             if [[ -z "${cask_x86_64}" || -z "${cask_arm64}" ]]; then
               echo "could not parse pinned checksums from tap/Casks/${APP_CASK}.rb" >&2
-            elif gh release download "${TAG_PREFIX}${version}" \
+            elif timeout 60 gh release download "${TAG_PREFIX}${version}" \
               --repo "$GITHUB_REPOSITORY" \
               --pattern "${{ inputs.asset_prefix }}-*-x86_64.AppImage" \
               --pattern "${{ inputs.asset_prefix }}-*-aarch64.AppImage" \
@@ -221,6 +224,7 @@ jobs:
             fi
 
             rm -rf -- "${tmp_dir}"
+            eval "${nullglob_state}"
             if [[ "${ok}" = "true" ]]; then
               return 0
             fi
@@ -254,12 +258,17 @@ jobs:
             fi
           else
             if [ "$release_exists" = "true" ]; then
-              if verify_release_assets "$version"; then
-                echo "Cask ${cask_version} already at or above upstream ${version}; skipping"
-                skipped="true"
+              if [ "$cask_version" = "$version" ]; then
+                if verify_release_assets "$version"; then
+                  echo "Cask ${cask_version} already at upstream ${version}; skipping"
+                  skipped="true"
+                else
+                  echo "Cask ${cask_version} at upstream version but release assets differ; catching cask up"
+                  repair="true"
+                fi
               else
-                echo "Cask ${cask_version} at upstream version but release assets differ; catching cask up"
-                repair="true"
+                echo "Cask ${cask_version} is ahead of upstream ${version}; skipping"
+                skipped="true"
               fi
             else
               echo "Cask ${cask_version} references a version with no release; (re)building"
