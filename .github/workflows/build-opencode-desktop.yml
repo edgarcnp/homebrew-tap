@@ -9,6 +9,8 @@ concurrency:
   group: opencode-desktop-build
   cancel-in-progress: false
 
+permissions: {}
+
 jobs:
   build:
     permissions:

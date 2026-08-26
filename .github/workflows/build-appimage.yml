@@ -71,6 +71,8 @@ defaults:
   run:
     shell: bash -xeuo pipefail {0}
 
+permissions: {}
+
 jobs:
   detect:
     runs-on: ubuntu-latest
@@ -121,32 +123,36 @@ jobs:
           # --asset-prefix <prefix>, each tokenized by read -ra
           RESOLVE_ARGS: ${{ inputs.resolve_args }}
           GH_TOKEN: ${{ github.token }}
+          RESOLVE_KIND: ${{ inputs.resolve_kind }}
+          KEY_PATH: ${{ inputs.key_path }}
+          RESOLVE_SCRIPT: ${{ inputs.resolve_script }}
+          REPOSITORY_URL: ${{ inputs.repository_url }}
         run: |
           sudo apt-get update
-          if [[ "${{ inputs.resolve_kind }}" == "apt" ]]; then
+          if [[ "${RESOLVE_KIND}" == "apt" ]]; then
             # only the apt resolver needs gnupg for InRelease verification
             sudo apt-get install -y gnupg
           fi
           cd source
           read -ra resolve_args <<<"$RESOLVE_ARGS"
           key_args=()
-          if [[ -n "${{ inputs.key_path }}" ]]; then
-            key_args+=(--key-base64 "${{ inputs.key_path }}")
+          if [[ -n "${KEY_PATH}" ]]; then
+            key_args+=(--key-base64 "${KEY_PATH}")
           fi
-          node "${{ inputs.resolve_script }}" \
+          node "${RESOLVE_SCRIPT}" \
             --metadata-only \
             --output-dir upstream \
             --metadata upstream/metadata.json \
             "${key_args[@]}" \
-            --repository "${{ inputs.repository_url }}" \
+            --repository "${REPOSITORY_URL}" \
             "${resolve_args[@]}" \
             --arch amd64
-          node "${{ inputs.resolve_script }}" \
+          node "${RESOLVE_SCRIPT}" \
             --metadata-only \
             --output-dir upstream \
             --metadata upstream/metadata-arm64.json \
             "${key_args[@]}" \
-            --repository "${{ inputs.repository_url }}" \
+            --repository "${REPOSITORY_URL}" \
             "${resolve_args[@]}" \
             --arch arm64
           amd64_metadata="upstream/metadata.json"
@@ -166,8 +172,10 @@ jobs:
         id: gate
         env:
           GH_TOKEN: ${{ github.token }}
+          APP_CASK: ${{ inputs.app_cask }}
+          TAG_PREFIX: ${{ inputs.tag_prefix }}
         run: |
-          cask_version="$(sed -n 's/^[[:space:]]*version "\([^"]*\)".*/\1/p' "tap/Casks/${{ inputs.app_cask }}.rb" | head -n1)"
+          cask_version="$(sed -n 's/^[[:space:]]*version "\([^"]*\)".*/\1/p' "tap/Casks/${APP_CASK}.rb" | head -n1)"
           version="${{ steps.resolve.outputs.version }}"
           newer="false"
           case "$cask_version" in
@@ -181,7 +189,7 @@ jobs:
               fi ;;
           esac
           release_exists="false"
-          if gh release view "${{ inputs.tag_prefix }}${version}" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+          if gh release view "${TAG_PREFIX}${version}" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             release_exists="true"
           fi
           skipped="false"
@@ -299,10 +307,12 @@ jobs:
         env:
           TARGET_ARCH: ${{ matrix.architecture }}
           PACKAGE_VERSION: ${{ needs.detect.outputs.version }}
+          SOURCE_DIR: ${{ inputs.source_dir }}
+          BUILD_COMMAND: ${{ inputs.build_command }}
         run: |
           cd source
-          [ -z "${{ inputs.source_dir }}" ] || cd "${{ inputs.source_dir }}"
-          ${{ inputs.build_command }}
+          [ -z "${SOURCE_DIR}" ] || cd "${SOURCE_DIR}"
+          bash -c "$BUILD_COMMAND"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ inputs.asset_prefix }}-${{ matrix.appimage_arch }}
@@ -386,6 +396,9 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: write
+    concurrency:
+      group: push-casks
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Update cask version and checksums
@@ -464,6 +477,9 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: write
+    concurrency:
+      group: push-casks
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Catch cask up to existing release
