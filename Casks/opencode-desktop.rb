@@ -29,7 +29,6 @@ cask "opencode-desktop" do
     end
   end
 
-  conflicts_with cask: "opencode-desktop"
   depends_on :linux
 
   app_image "opencode-desktop-#{version}-#{arch}.AppImage"

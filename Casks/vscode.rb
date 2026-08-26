@@ -29,7 +29,6 @@ cask "vscode" do
     end
   end
 
-  conflicts_with cask: "visual-studio-code"
   depends_on :linux
 
   app_image "vscode-#{version}-#{arch}.AppImage"
