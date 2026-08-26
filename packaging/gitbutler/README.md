@@ -23,7 +23,11 @@ at install.
    processes, GLib schemas, GIO modules, and GDK pixbuf loaders so the
    AppImage runs on hosts without webkit. AppRun preserves argv[0] with
    `exec -a "${ARGV0:-$0}"` so `gitbutler-tauri` can still pick between
-   the `but` CLI and the GUI by name.
+   the `but` CLI and the GUI by name, and seeds
+   `~/.config/gitbutler/settings.json` with
+   `ui.checkForUpdatesIntervalInSeconds: 0` to disable the in-app
+   auto-update checker (mirroring the `disable-auto-updates` Cargo
+   feature the GitButler flatpak ships with).
 3. `../lib/package-common.sh` — shared bash helpers sourced by the build script.
 
 The cask version uses the upstream `version` string (e.g. `0.22.1`), not
