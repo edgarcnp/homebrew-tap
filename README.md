@@ -78,19 +78,23 @@ Add `--zap` to also remove the desktop entry and icon:
 brew uninstall --cask --zap <cask>
 ```
 
+### How the AppImages run
+
+The uruntime first tries to **mount** the embedded filesystem via FUSE3; if FUSE is unavailable, it falls back to **extract-and-run** (extracting the image to a temp dir and running from there). So the AppImages work even on systems without FUSE.
+
 ### Sandboxing
 
 AppImage builds never add `--no-sandbox`. If your distribution disables unprivileged user namespaces, use the `.deb`/`.rpm` packages instead.
 
 ## How these AppImages differ from the official ones
 
-The upstream projects ship their own AppImages (built with their own toolchains, e.g. Tauri's bundler). The AppImages in this tap are **rebuilt from scratch** in this repository's CI with a different pipeline (`linuxdeploy` + the uruntime `appimagetool`, a custom `AppRun`, and per-app packaging scripts), which is why they behave slightly differently:
+Official AppImages are usually built with AppImageKit's `appimagetool`: squashfs + the classic type-2 runtime. The AppImages in this tap are built with [pkgforge `appimagetool`](https://github.com/pkgforge-dev/appimagetool), which uses:
 
-- **Self-contained webkit runtime (gitbutler):** the `libwebkit2gtk-4.1` closure is bundled and helper paths are binary-patched relative to the AppImage, so it runs on hosts without webkit2gtk installed.
-- **Checksums pinned at install:** the cask verifies the AppImage's SHA-256, so what you install is exactly what CI built.
-- **Updates via Homebrew:** the app's built-in auto-update is disabled; `brew upgrade` is the update path.
+- **uruntime** (from the [Anylinux-AppImages](https://github.com/pkgforge-dev/Anylinux-AppImages) project) as the runtime instead of the classic type-2 runtime. FUSE3-compatible.
+- **DWARFS** compression instead of squashfs — smaller, delta-friendly images, plus built-in zsync.
+- A single Rust binary with no Python/C++ toolchain dependencies.
 
-The binaries themselves are the official upstream releases — only the packaging is different.
+The binaries inside are the official upstream releases; only the packaging toolchain differs.
 
 ## Documentation
 
