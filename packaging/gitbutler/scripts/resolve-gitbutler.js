@@ -104,8 +104,9 @@ async function resolveGitButlerPackage(options) {
   const outputDir = path.resolve(options.outputDir);
   fs.mkdirSync(outputDir, { recursive: true });
 
-  // The redirect target URL is the version source; metadata-only mode stops
-  // after the response headers so the .deb payload is never transferred.
+// The redirect target URL is the version source; metadata-only mode
+// downloads the payload to compute the SHA-256 (the CDN publishes no
+// checksums) but discards the bytes instead of writing them to disk.
   const response = await fetchFollowRedirects(`${repository}/${archPath}/deb`);
   const parsed = parseFinalUrl(response.url);
   if (parsed.archPath !== archPath) {
@@ -127,7 +128,11 @@ async function resolveGitButlerPackage(options) {
       throw new Error(`Downloaded .deb SHA256 mismatch after write: got ${onDisk}, expected ${sha256}`);
     }
   } else {
-    await response.body?.cancel();
+    // The CDN publishes no checksums, so the SHA-256 must be computed from
+    // the payload itself; download and hash it, then discard the bytes.
+    const bytes = await readPayload(response);
+    sha256 = sha256Buffer(bytes);
+    size = bytes.length;
   }
   const result = {
     package: "git-butler",
