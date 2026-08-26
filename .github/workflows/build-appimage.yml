@@ -273,12 +273,25 @@ jobs:
           sudo chmod 0755 /usr/local/bin/appimagetool
       - name: Install linuxdeploy
         run: |
-          # linuxdeploy only publishes a moving "continuous" tag (no versioned
-          # releases for current builds), so this is a best-effort download.
+          # pinned continuous build (last-modified 2026-08-01), verified via SHA256;
+          # hashes captured 2026-08-26 for the "continuous" tag (no versioned
+          # releases for current builds), so we pin by SHA256 instead of tag.
+          # Renovate should bump the hashes via renovate.json customManagers.
           curl -fL --retry 5 --retry-all-errors --retry-delay 5 \
             -o /tmp/linuxdeploy \
             "https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-${{ matrix.appimage_arch }}.AppImage"
           test -s /tmp/linuxdeploy
+          case "${{ matrix.appimage_arch }}" in
+            x86_64) expected="421ca71d5c69ea97c6309276232990d43df1dcece0edfaa26bbf926ff96ed12e" ;;
+            aarch64) expected="9f04c4c2a8b69c392c4bbcc1a88bdd4d0a8ac03f587cf5242814cb7ae47b78e5" ;;
+            *) echo "Unknown appimage_arch: ${{ matrix.appimage_arch }}" >&2; exit 1 ;;
+          esac
+          actual="$(sha256sum /tmp/linuxdeploy | awk '{print $1}')"
+          if [ "$actual" != "$expected" ]; then
+            echo "SHA256 mismatch for linuxdeploy (${{ matrix.appimage_arch }}): expected $expected, got $actual" >&2
+            exit 1
+          fi
+          echo "SHA256 verified for linuxdeploy (${{ matrix.appimage_arch }}): $actual"
           chmod +x /tmp/linuxdeploy
           sudo mv /tmp/linuxdeploy /opt/linuxdeploy
           sudo ln -sf /opt/linuxdeploy /usr/local/bin/linuxdeploy

@@ -58,6 +58,17 @@
             ],
             "datasourceTemplate": "github-releases",
             "depNameTemplate": "pkgforge-dev/appimagetool"
+        },
+        {
+            "customType": "regex",
+            "managerFilePatterns": [
+                ".github/workflows/.+\\.ya?ml$"
+            ],
+            "matchStrings": [
+                "https://github\\.com/linuxdeploy/linuxdeploy/releases/download/(?<currentValue>[^/]+)/linuxdeploy-"
+            ],
+            "datasourceTemplate": "github-releases",
+            "depNameTemplate": "linuxdeploy/linuxdeploy"
         }
     ]
 }
