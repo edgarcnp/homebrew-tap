@@ -18,7 +18,8 @@ KEY_FILE="${PACKAGING_DIR}/assets/microsoft-vscode-repository-key.gpg.base64"
 APPRUN_TEMPLATE="${PACKAGING_DIR}/templates/AppRun"
 DESKTOP_TEMPLATE="${PACKAGING_DIR}/templates/vscode.desktop"
 WORK_DIR="${WORK_DIR_OVERRIDE:-$(mktemp -d)}"
-if [[ -z "${WORK_DIR_OVERRIDE:-}" ]]; then
+if [[ -z "${WORK_DIR_OVERRIDE:-}" ]]
+then
   # Clean up the temp dir we created; an explicit WORK_DIR_OVERRIDE is
   # caller-owned and left alone.
   trap 'rm -rf "${WORK_DIR}"' EXIT
@@ -87,7 +88,8 @@ main() {
 
   local resolved_version
   resolved_version="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).version' "${metadata_path}")"
-  if [[ -n "${PACKAGE_VERSION}" ]]; then
+  if [[ -n "${PACKAGE_VERSION}" ]]
+  then
     [[ "${resolved_version}" = "${PACKAGE_VERSION}" ]] || error "Resolved upstream version ${resolved_version} does not match PACKAGE_VERSION ${PACKAGE_VERSION}"
   else
     PACKAGE_VERSION="${resolved_version}"
