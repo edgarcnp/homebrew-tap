@@ -175,6 +175,57 @@ jobs:
           APP_CASK: ${{ inputs.app_cask }}
           TAG_PREFIX: ${{ inputs.tag_prefix }}
         run: |
+          # Download the release assets for TAG_PREFIX$version and compare
+          # their SHA-256 against the cask's pinned values. A rebuilt release
+          # (DWARFS images are not byte-reproducible) can change checksums
+          # without a version bump; detect that so the cask is caught up to
+          # the actual assets instead of silently skipping.
+          verify_release_assets() {
+            local version="$1"
+            local tmp_dir
+            tmp_dir="$(mktemp -d)"
+
+            local ok="false"
+            local cask_x86_64 cask_arm64
+            cask_x86_64="$(sed -n 's/^.*x86_64_linux:[[:space:]]*"\([0-9a-f]\{64\}\)".*$/\1/p' "tap/Casks/${APP_CASK}.rb" | head -n1)"
+            cask_arm64="$(sed -n 's/^.*arm64_linux:[[:space:]]*"\([0-9a-f]\{64\}\)".*$/\1/p' "tap/Casks/${APP_CASK}.rb" | head -n1)"
+            if [[ -z "${cask_x86_64}" || -z "${cask_arm64}" ]]; then
+              echo "could not parse pinned checksums from tap/Casks/${APP_CASK}.rb" >&2
+            elif gh release download "${TAG_PREFIX}${version}" \
+              --repo "$GITHUB_REPOSITORY" \
+              --pattern "${{ inputs.asset_prefix }}-*-x86_64.AppImage" \
+              --pattern "${{ inputs.asset_prefix }}-*-aarch64.AppImage" \
+              --dir "${tmp_dir}" --clobber
+            then
+              shopt -s nullglob
+              local x86_files arm_files
+              x86_files=("${tmp_dir}"/${{ inputs.asset_prefix }}-*-x86_64.AppImage)
+              arm_files=("${tmp_dir}"/${{ inputs.asset_prefix }}-*-aarch64.AppImage)
+              if [[ "${#x86_files[@]}" -ne 1 || "${#arm_files[@]}" -ne 1 ]]; then
+                echo "expected exactly one asset per architecture in release ${TAG_PREFIX}${version}" >&2
+              else
+                local released_x86_64 released_arm64
+                released_x86_64="$(sha256sum "${x86_files[0]}" | awk '{print $1}')"
+                released_arm64="$(sha256sum "${arm_files[0]}" | awk '{print $1}')"
+                if [[ "${released_x86_64}" = "${cask_x86_64}" && "${released_arm64}" = "${cask_arm64}" ]]; then
+                  echo "release assets match cask checksums"
+                  ok="true"
+                else
+                  echo "release assets differ from cask checksums:" >&2
+                  echo "  x86_64: cask ${cask_x86_64} vs release ${released_x86_64}" >&2
+                  echo "  arm64:  cask ${cask_arm64} vs release ${released_arm64}" >&2
+                fi
+              fi
+            else
+              echo "failed to download release ${TAG_PREFIX}${version}" >&2
+            fi
+
+            rm -rf -- "${tmp_dir}"
+            if [[ "${ok}" = "true" ]]; then
+              return 0
+            fi
+            return 1
+          }
           cask_version="$(sed -n 's/^[[:space:]]*version "\([^"]*\)".*/\1/p' "tap/Casks/${APP_CASK}.rb" | head -n1)"
           version="${{ steps.resolve.outputs.version }}"
           newer="false"
@@ -203,8 +254,13 @@ jobs:
             fi
           else
             if [ "$release_exists" = "true" ]; then
-              echo "Cask ${cask_version} already at or above upstream ${version}; skipping"
-              skipped="true"
+              if verify_release_assets "$version"; then
+                echo "Cask ${cask_version} already at or above upstream ${version}; skipping"
+                skipped="true"
+              else
+                echo "Cask ${cask_version} at upstream version but release assets differ; catching cask up"
+                repair="true"
+              fi
             else
               echo "Cask ${cask_version} references a version with no release; (re)building"
             fi
