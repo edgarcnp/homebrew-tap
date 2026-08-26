@@ -4,8 +4,8 @@ Homebrew tap with Linux desktop apps, repackaged as AppImages and built automati
 
 ## Supported platforms
 
-> [!Warning]
-> All casks in this tap are **Wayland-only**. Their desktop entries force the Wayland platform (`--ozone-platform=wayland`), so the apps will not start on a pure X11 session or if Wayland is unavailable.
+> [!Note]
+> All casks are supported on Wayland. Casks prefer Wayland when available; they fall back to X11 otherwise.
 
 Casks should work on any Linux distro with Homebrew, but this tap is mainly supported on Fedora Linux, including the Atomic flavor. All casks ship AppImages and rely on unprivileged user namespaces (enabled by default on Fedora) for the Chromium sandbox.
 

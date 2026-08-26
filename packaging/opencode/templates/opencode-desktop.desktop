@@ -1,7 +1,7 @@
 [Desktop Entry]
 Name=__PACKAGE_DISPLAY_NAME__
 Comment=__PACKAGE_COMMENT__
-Exec=env ELECTRON_OZONE_PLATFORM_HINT=wayland AppRun --ozone-platform=wayland %U
+Exec=AppRun %U
 Icon=__PACKAGE_NAME__
 Terminal=false
 Type=Application
