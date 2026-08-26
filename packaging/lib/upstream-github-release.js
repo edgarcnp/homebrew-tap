@@ -12,6 +12,37 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const DEB_ARCHES = ["amd64", "arm64"];
+const MAX_PAYLOAD_BYTES = 512 * 1024 * 1024;
+
+function writeFileAtomic(filePath, data) {
+  const tmp = filePath + ".tmp." + process.pid;
+  fs.writeFileSync(tmp, data, { mode: 0o600 });
+  fs.renameSync(tmp, filePath);
+}
+
+async function readPayload(response) {
+  if (!response.body) {
+    const bytes = Buffer.from(await response.arrayBuffer());
+    if (bytes.length > MAX_PAYLOAD_BYTES) {
+      throw new Error(`Payload too large (${bytes.length} bytes) for ${response.url}`);
+    }
+    return bytes;
+  }
+  const reader = response.body.getReader();
+  const chunks = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.length;
+    if (total > MAX_PAYLOAD_BYTES) {
+      await reader.cancel();
+      throw new Error(`Payload exceeds size cap (${MAX_PAYLOAD_BYTES} bytes) for ${response.url}`);
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks);
+}
 
 function normalizeTagVersion(tag) {
   const version = String(tag).replace(/^v/, "");
@@ -30,7 +61,8 @@ function parseSha256Digest(digest) {
 async function fetchJson(url, token) {
   const headers = { "User-Agent": "homebrew-tap-appimage-builder" };
   if (token) headers.Authorization = `Bearer ${token}`;
-  const response = await fetch(url, { headers });
+  // Abort slow/stalled downloads (30s or 60s) instead of hanging indefinitely
+  const response = await fetch(url, { headers, signal: AbortSignal.timeout(30000) });
   if (!response.ok) {
     throw new Error(`GitHub API request failed (${response.status}) for ${url}`);
   }
@@ -63,13 +95,14 @@ async function selectRelease(repository, assetPrefix, token) {
 }
 
 async function downloadAndVerify(url, destination, expectedSha256, expectedSize, label) {
-  const response = await fetch(url, { redirect: "follow" });
+  // Abort slow/stalled downloads (30s or 60s) instead of hanging indefinitely
+  const response = await fetch(url, { redirect: "follow", signal: AbortSignal.timeout(60000) });
   if (!response.ok) throw new Error(`Download failed (${response.status}) for ${url}`);
   const finalUrl = new URL(response.url);
   if (finalUrl.protocol !== "https:") {
     throw new Error(`Download redirected to non-HTTPS URL (${finalUrl.protocol}) for ${url}`);
   }
-  const bytes = Buffer.from(await response.arrayBuffer());
+  const bytes = await readPayload(response);
   if (bytes.length !== expectedSize) {
     throw new Error(`${label} size mismatch: expected ${expectedSize}, got ${bytes.length}`);
   }
@@ -80,7 +113,7 @@ async function downloadAndVerify(url, destination, expectedSha256, expectedSize,
       `${label} SHA256 mismatch: expected ${expectedSha256}, got ${actual.toString("hex")}`,
     );
   }
-  fs.writeFileSync(destination, bytes, { mode: 0o600 });
+  writeFileAtomic(destination, bytes);
 }
 
 async function resolveUpstreamRelease(options) {
@@ -126,7 +159,7 @@ async function resolveUpstreamRelease(options) {
     );
   }
   const result = { ...metadata, path: packagePath };
-  fs.writeFileSync(options.metadataPath, `${JSON.stringify(result, null, 2)}\n`);
+  writeFileAtomic(options.metadataPath, `${JSON.stringify(result, null, 2)}\n`);
   return result;
 }
 

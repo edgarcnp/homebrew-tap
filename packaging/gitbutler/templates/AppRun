@@ -4,15 +4,18 @@ set -euo pipefail
 resolve_appdir() {
     local source="${BASH_SOURCE[0]}"
     local dir
+    local max_links=20
 
-    while [ -L "$source" ]; do
+    while [ -L "$source" ] && [ "$max_links" -gt 0 ]; do
         dir="$(cd -P "$(dirname "$source")" && pwd)"
         source="$(readlink "$source")"
         case "$source" in
             /*) ;;
             *) source="$dir/$source" ;;
         esac
+        max_links=$((max_links - 1))
     done
+    if [ "$max_links" -eq 0 ]; then echo "Too many symlink levels" >&2; exit 1; fi
 
     cd -P "$(dirname "$source")" && pwd
 }
@@ -21,7 +24,7 @@ APPDIR="${APPDIR:-$(resolve_appdir)}"
 export APPDIR
 
 # Bundled webkit runtime libs and data live under usr/ inside the AppDir.
-export LD_LIBRARY_PATH="${APPDIR}/usr/lib:${LD_LIBRARY_PATH:-}"
+export LD_LIBRARY_PATH="${APPDIR}/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 export GIO_MODULE_DIR="${APPDIR}/usr/lib/gio/modules"
 export GDK_PIXBUF_MODULE_FILE="${APPDIR}/usr/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache"
 export GSETTINGS_SCHEMA_DIR="${APPDIR}/usr/share/glib-2.0/schemas"

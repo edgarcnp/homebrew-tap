@@ -4,15 +4,18 @@ set -euo pipefail
 resolve_appdir() {
     local source="${BASH_SOURCE[0]}"
     local dir
+    local max_links=20
 
-    while [ -L "$source" ]; do
+    while [ -L "$source" ] && [ "$max_links" -gt 0 ]; do
         dir="$(cd -P "$(dirname "$source")" && pwd)"
         source="$(readlink "$source")"
         case "$source" in
             /*) ;;
             *) source="$dir/$source" ;;
         esac
+        max_links=$((max_links - 1))
     done
+    if [ "$max_links" -eq 0 ]; then echo "Too many symlink levels" >&2; exit 1; fi
 
     cd -P "$(dirname "$source")" && pwd
 }
