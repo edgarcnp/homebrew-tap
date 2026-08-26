@@ -75,10 +75,4 @@ cask "vscode" do
     "~/.local/share/icons/hicolor/256x256/apps/vscode.png",
     "~/.vscode",
   ]
-
-  caveats <<~EOS
-    This AppImage requires libfuse2 and unprivileged user namespaces.
-    On Fedora both are enabled by default. On Debian/Ubuntu install
-    libfuse2 and ensure kernel.unprivileged_userns_clone=1.
-  EOS
 end
