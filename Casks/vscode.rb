@@ -2,8 +2,8 @@ cask "vscode" do
   arch arm: "aarch64", intel: "x86_64"
 
   version "1.135.0"
-  sha256 arm64_linux:  "cc37c205a10aafcd59201d235dc95b6edc1a582ea8dccccadc5b51ad8ad753d0",
-         x86_64_linux: "a0549b12d5b6b0fa4497c4509cfca42c817dbf56b5f92a1d0d4b4a703fbefd78"
+  sha256 arm64_linux:  "06a9ca846ffa131d92c3d58c07b30573097ec4ac807deffa35d42868e9025b22",
+         x86_64_linux: "58f5010f5a697cfec72481c9d6161d4585abf6cc6a29fda1beaa2fa62701a06b"
 
   url "https://github.com/edgarcnp/homebrew-tap/releases/download/vscode-v#{version}/vscode-#{version}-#{arch}.AppImage",
       verified: "github.com/edgarcnp/homebrew-tap/"
