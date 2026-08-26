@@ -18,6 +18,11 @@ KEY_FILE="${PACKAGING_DIR}/assets/microsoft-vscode-repository-key.gpg.base64"
 APPRUN_TEMPLATE="${PACKAGING_DIR}/templates/AppRun"
 DESKTOP_TEMPLATE="${PACKAGING_DIR}/templates/vscode.desktop"
 WORK_DIR="${WORK_DIR_OVERRIDE:-$(mktemp -d)}"
+if [[ -z "${WORK_DIR_OVERRIDE:-}" ]]; then
+  # Clean up the temp dir we created; an explicit WORK_DIR_OVERRIDE is
+  # caller-owned and left alone.
+  trap 'rm -rf "${WORK_DIR}"' EXIT
+fi
 DIST_DIR="${DIST_DIR_OVERRIDE:-${REPO_DIR}/dist}"
 APPDIR="${APPIMAGE_APPDIR_OVERRIDE:-${DIST_DIR}/appimage.AppDir}"
 PACKAGE_NAME="${PACKAGE_NAME:-vscode}"
@@ -25,31 +30,6 @@ PACKAGE_DISPLAY_NAME="${PACKAGE_DISPLAY_NAME:-Visual Studio Code}"
 PACKAGE_COMMENT="${PACKAGE_COMMENT:-Code Editing. Redefined.}"
 PACKAGE_VERSION="${PACKAGE_VERSION:-}"
 TARGET_ARCH="${TARGET_ARCH:-$(uname -m)}"
-
-map_arch() {
-  case "${TARGET_ARCH}" in
-    amd64 | x86_64)
-      echo "amd64 x86_64"
-      ;;
-    arm64 | aarch64)
-      echo "arm64 aarch64"
-      ;;
-    *) error "Unsupported AppImage architecture: ${TARGET_ARCH} (upstream packages support amd64 and arm64 only)" ;;
-  esac
-}
-
-resolve_appimagetool() {
-  if [[ -n "${APPIMAGETOOL:-}" ]]
-  then
-    [[ -x "${APPIMAGETOOL}" ]] || error "APPIMAGETOOL is not executable: ${APPIMAGETOOL}"
-    printf '%s\n' "${APPIMAGETOOL}"
-    return 0
-  fi
-
-  command -v appimagetool >/dev/null 2>&1 || error "appimagetool is required.
-Install appimagetool or set APPIMAGETOOL=/path/to/appimagetool."
-  command -v appimagetool
-}
 
 prepare_appdir() {
   local payload_dir="$1"
@@ -60,27 +40,27 @@ prepare_appdir() {
   ensure_file_exists "${icon}" "vscode icon"
 
   info "Preparing AppDir at ${APPDIR}"
-  rm -rf "${APPDIR}"
-  mkdir -p \
+  rm -rf -- "${APPDIR}"
+  mkdir -p -- \
     "${APPDIR}/opt" \
     "${APPDIR}/usr/share/applications" \
     "${APPDIR}/usr/share/icons/hicolor/256x256/apps"
 
-  cp -aT "${code_dir}" "${APPDIR}/opt/vscode"
+  cp -aT -- "${code_dir}" "${APPDIR}/opt/vscode"
 
   render_template "${APPRUN_TEMPLATE}" "${APPDIR}/AppRun"
-  chmod 0755 "${APPDIR}/AppRun"
+  chmod 0755 -- "${APPDIR}/AppRun"
 
   render_template "${DESKTOP_TEMPLATE}" "${APPDIR}/${PACKAGE_NAME}.desktop"
-  chmod 0644 "${APPDIR}/${PACKAGE_NAME}.desktop"
-  cp "${APPDIR}/${PACKAGE_NAME}.desktop" "${APPDIR}/usr/share/applications/${PACKAGE_NAME}.desktop"
+  chmod 0644 -- "${APPDIR}/${PACKAGE_NAME}.desktop"
+  cp -- "${APPDIR}/${PACKAGE_NAME}.desktop" "${APPDIR}/usr/share/applications/${PACKAGE_NAME}.desktop"
 
-  cp "${icon}" "${APPDIR}/${PACKAGE_NAME}.png"
-  cp "${icon}" "${APPDIR}/.DirIcon"
-  cp "${icon}" "${APPDIR}/usr/share/icons/hicolor/256x256/apps/${PACKAGE_NAME}.png"
+  cp -- "${icon}" "${APPDIR}/${PACKAGE_NAME}.png"
+  cp -- "${icon}" "${APPDIR}/.DirIcon"
+  cp -- "${icon}" "${APPDIR}/usr/share/icons/hicolor/256x256/apps/${PACKAGE_NAME}.png"
 
   normalize_package_payload_permissions "${APPDIR}"
-  chmod 0755 "${APPDIR}/opt/vscode/bin/code"
+  chmod 0755 -- "${APPDIR}/opt/vscode/bin/code"
 }
 
 main() {
@@ -107,8 +87,7 @@ main() {
 
   local resolved_version
   resolved_version="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).version' "${metadata_path}")"
-  if [[ -n "${PACKAGE_VERSION}" ]]
-  then
+  if [[ -n "${PACKAGE_VERSION}" ]]; then
     [[ "${resolved_version}" = "${PACKAGE_VERSION}" ]] || error "Resolved upstream version ${resolved_version} does not match PACKAGE_VERSION ${PACKAGE_VERSION}"
   else
     PACKAGE_VERSION="${resolved_version}"
@@ -120,7 +99,7 @@ main() {
   [[ "${deb_arch_actual}" = "${deb_arch}" ]] || error "Downloaded package architecture ${deb_arch_actual} does not match requested ${deb_arch}"
 
   local payload_dir="${WORK_DIR}/deb-payload"
-  mkdir -p "${payload_dir}"
+  mkdir -p -- "${payload_dir}"
   info "Extracting package: ${deb_path}"
   dpkg-deb -x "${deb_path}" "${payload_dir}"
 
@@ -128,13 +107,13 @@ main() {
 
   local appimagetool
   appimagetool="$(resolve_appimagetool)"
-  mkdir -p "${DIST_DIR}"
+  mkdir -p -- "${DIST_DIR}"
   local output_file="${DIST_DIR}/vscode-${PACKAGE_VERSION}-${appimage_arch}.AppImage"
-  rm -f "${output_file}"
+  rm -f -- "${output_file}"
   info "Building AppImage: ${output_file}"
   ARCH="${appimage_arch}" VERSION="${PACKAGE_VERSION}" \
     "${appimagetool}" --no-appstream "${APPDIR}" "${output_file}" >&2
-  chmod 0755 "${output_file}"
+  chmod 0755 -- "${output_file}"
   smoke_test_appimage "${output_file}"
   info "Built AppImage: ${output_file}"
 }

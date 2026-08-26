@@ -20,6 +20,12 @@ const MAX_PAYLOAD_BYTES = 512 * 1024 * 1024;
 // Pin to releases.gitbutler.com to prevent open redirect to attacker-controlled host
 const ALLOWED_HOSTS = new Set(["releases.gitbutler.com"]);
 
+function writeFileAtomic(filePath, data) {
+  const tmp = filePath + ".tmp." + process.pid;
+  fs.writeFileSync(tmp, data, { mode: 0o600 });
+  fs.renameSync(tmp, filePath);
+}
+
 function sha256Buffer(bytes) {
   return crypto.createHash("sha256").update(bytes).digest("hex");
 }
@@ -32,7 +38,8 @@ function sha256Buffer(bytes) {
 async function fetchFollowRedirects(url) {
   const initial = new URL(url);
   if (initial.protocol !== "https:") throw new Error(`Initial URL must be https (got ${initial.protocol}) for ${url}`);
-  const response = await fetch(url, { redirect: "follow" });
+  // Abort slow/stalled downloads (30s or 60s) instead of hanging indefinitely
+  const response = await fetch(url, { redirect: "follow", signal: AbortSignal.timeout(60000) });
   if (!response.ok) throw new Error(`Download failed (${response.status}) for ${url}`);
   const declaredLength = Number(response.headers.get("content-length") ?? 0);
   if (declaredLength > MAX_PAYLOAD_BYTES) {
@@ -146,7 +153,7 @@ async function resolveGitButlerPackage(options) {
     sha256 = sha256Buffer(bytes);
     size = bytes.length;
     packagePath = path.join(outputDir, `git-butler_${version}_${debArch}.deb`);
-    fs.writeFileSync(packagePath, bytes, { mode: 0o600 });
+    writeFileAtomic(packagePath, bytes);
     const onDisk = sha256Buffer(fs.readFileSync(packagePath));
     if (onDisk !== sha256) {
       throw new Error(`Downloaded .deb SHA256 mismatch after write: got ${onDisk}, expected ${sha256}`);
@@ -169,7 +176,7 @@ async function resolveGitButlerPackage(options) {
     repository: parsed.repository,
     path: packagePath,
   };
-  fs.writeFileSync(options.metadataPath, `${JSON.stringify(result, null, 2)}\n`);
+  writeFileAtomic(options.metadataPath, `${JSON.stringify(result, null, 2)}\n`);
   return result;
 }
 

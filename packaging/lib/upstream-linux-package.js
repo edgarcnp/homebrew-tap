@@ -11,6 +11,38 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 
+const MAX_PAYLOAD_BYTES = 512 * 1024 * 1024;
+
+function writeFileAtomic(filePath, data) {
+  const tmp = filePath + ".tmp." + process.pid;
+  fs.writeFileSync(tmp, data, { mode: 0o600 });
+  fs.renameSync(tmp, filePath);
+}
+
+async function readPayload(response) {
+  if (!response.body) {
+    const bytes = Buffer.from(await response.arrayBuffer());
+    if (bytes.length > MAX_PAYLOAD_BYTES) {
+      throw new Error(`Payload too large (${bytes.length} bytes) for ${response.url}`);
+    }
+    return bytes;
+  }
+  const reader = response.body.getReader();
+  const chunks = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.length;
+    if (total > MAX_PAYLOAD_BYTES) {
+      await reader.cancel();
+      throw new Error(`Payload exceeds size cap (${MAX_PAYLOAD_BYTES} bytes) for ${response.url}`);
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks);
+}
+
 function mapMachineArch(machine = os.arch()) {
   const normalized = String(machine).trim().toLowerCase();
   if (["x64", "x86_64", "amd64"].includes(normalized)) return "amd64";
@@ -161,13 +193,13 @@ function verifyIndexedFile(filePath, expected, label) {
   }
 }
 
-async function download(url, destination) {
-  const response = await fetch(url, { redirect: "follow" });
+async function download(url, destination, timeoutMs = 30000) {
+  const response = await fetch(url, { redirect: "follow", signal: AbortSignal.timeout(timeoutMs) });
   if (!response.ok) throw new Error(`Download failed (${response.status}) for ${url}`);
   const finalUrl = new URL(response.url);
   if (finalUrl.protocol !== "https:") throw new Error(`Download redirected to non-HTTPS URL (${finalUrl.protocol}) for ${url}`);
-  const bytes = Buffer.from(await response.arrayBuffer());
-  fs.writeFileSync(destination, bytes, { mode: 0o600 });
+  const bytes = await readPayload(response);
+  writeFileAtomic(destination, bytes);
 }
 
 function verifySigningKey(keyPath, expectedFingerprint) {
@@ -209,7 +241,7 @@ async function resolveUpstreamPackage(options) {
 
   const keyPath = path.join(outputDir, "repository-key.gpg");
   const keyBase64 = fs.readFileSync(options.keyBase64Path, "utf8").replace(/\s+/g, "");
-  fs.writeFileSync(keyPath, Buffer.from(keyBase64, "base64"), { mode: 0o600 });
+  writeFileAtomic(keyPath, Buffer.from(keyBase64, "base64"));
 
   const inReleasePath = path.join(outputDir, "InRelease");
   await download(`${repository}/dists/stable/InRelease`, inReleasePath);
@@ -231,11 +263,11 @@ async function resolveUpstreamPackage(options) {
   let packagePath = null;
   if (!options.metadataOnly) {
     packagePath = path.join(outputDir, `${options.packageName}_${metadata.packageVersion}_${architecture}.deb`);
-    await download(`${repository}/${metadata.repositoryPath}`, packagePath);
+    await download(`${repository}/${metadata.repositoryPath}`, packagePath, 60000);
     verifyIndexedFile(packagePath, metadata, path.basename(packagePath));
   }
   const result = { ...metadata, repository, path: packagePath };
-  fs.writeFileSync(options.metadataPath, `${JSON.stringify(result, null, 2)}\n`);
+  writeFileAtomic(options.metadataPath, `${JSON.stringify(result, null, 2)}\n`);
   return result;
 }
 
