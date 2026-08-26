@@ -2,7 +2,7 @@
 Name=__PACKAGE_DISPLAY_NAME__
 Comment=__PACKAGE_COMMENT__
 GenericName=Text Editor
-Exec=env ELECTRON_OZONE_PLATFORM_HINT=wayland AppRun --ozone-platform=wayland %F
+Exec=AppRun %F
 Icon=__PACKAGE_NAME__
 Terminal=false
 Type=Application
@@ -16,5 +16,5 @@ Actions=new-empty-window;
 
 [Desktop Action new-empty-window]
 Name=New Empty Window
-Exec=env ELECTRON_OZONE_PLATFORM_HINT=wayland AppRun --new-window --ozone-platform=wayland %F
+Exec=AppRun --new-window %F
 Icon=__PACKAGE_NAME__

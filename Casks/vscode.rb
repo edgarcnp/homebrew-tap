@@ -48,7 +48,7 @@ cask "vscode" do
       [Desktop Entry]
       Name=Visual Studio Code
       Comment=Code Editing. Redefined.
-      Exec=env ELECTRON_OZONE_PLATFORM_HINT=wayland #{HOMEBREW_PREFIX}/bin/code --ozone-platform=wayland %F
+      Exec=#{HOMEBREW_PREFIX}/bin/code %F
       Icon=vscode
       Terminal=false
       Type=Application
