@@ -23,6 +23,47 @@ resolve_appdir() {
 APPDIR="${APPDIR:-$(resolve_appdir)}"
 export APPDIR
 
+# brew owns updates for this AppImage; block the app's own update channel the
+# same way the GitButler flatpak does. The flatpak compiles with the
+# `disable-auto-updates` cargo feature, which pins the GUI's update-check
+# interval to 0; the official .deb we repackage does not, but GitButler merges
+# ~/.config/gitbutler/settings.json over its compiled defaults, so seeding the
+# same key reproduces that behavior. PUBLIC_FLATPAK_ID additionally hides the
+# in-app "Update" button (the same signal the flatpak build uses).
+prevent_autoupdate() {
+    local config_dir config_file
+    config_dir="${XDG_CONFIG_HOME:-${HOME}/.config}/gitbutler"
+    config_file="${config_dir}/settings.json"
+    mkdir -p -- "${config_dir}" || return 0
+
+    if [[ ! -s "${config_file}" ]]; then
+        printf '%s\n' '{"ui":{"checkForUpdatesIntervalInSeconds":0}}' > "${config_file}"
+        return 0
+    fi
+
+    # Key already present: force it to 0 (no-op when already 0).
+    if grep -q '"checkForUpdatesIntervalInSeconds"' "${config_file}" 2>/dev/null; then
+        LC_ALL=C sed -i -E \
+            's/"checkForUpdatesIntervalInSeconds"[[:space:]]*:[[:space:]]*[0-9]+/"checkForUpdatesIntervalInSeconds": 0/' \
+            "${config_file}" 2>/dev/null || true
+        return 0
+    fi
+
+    # Multi-line pretty-printed JSON (the app's own format): insert the key as
+    # the first member of the "ui" object. BRE mode so "{" stays literal.
+    if grep -q '^[[:space:]]*"ui"[[:space:]]*:[[:space:]]*{$' "${config_file}" 2>/dev/null; then
+        LC_ALL=C sed -i '/^[[:space:]]*"ui"[[:space:]]*:[[:space:]]*{/a\    "checkForUpdatesIntervalInSeconds": 0,' \
+            "${config_file}" 2>/dev/null || true
+        return 0
+    fi
+
+    # Bare "{}" (what the app writes on first run): replace wholesale. Any
+    # other shape is left untouched rather than risk corrupting user settings.
+    if grep -q '^{[[:space:]]*}$' "${config_file}" 2>/dev/null; then
+        printf '%s\n' '{"ui":{"checkForUpdatesIntervalInSeconds":0}}' > "${config_file}"
+    fi
+}
+
 # Bundled webkit runtime libs and data live under usr/ inside the AppDir.
 export LD_LIBRARY_PATH="${APPDIR}/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 export GIO_MODULE_DIR="${APPDIR}/usr/lib/gio/modules"
@@ -35,4 +76,6 @@ cd "${APPDIR}"
 
 # gitbutler-tauri picks CLI vs GUI from its argv[0] basename; the runtime
 # re-execs AppRun with argv[0] changed, so restore the original via ARGV0.
+export PUBLIC_FLATPAK_ID=io.gitbutler.gitbutler
+prevent_autoupdate
 exec -a "${ARGV0:-$0}" "${APPDIR}/opt/gitbutler/bin/gitbutler-tauri" "$@"
