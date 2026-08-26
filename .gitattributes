@@ -1,0 +1,10 @@
+*.sh text eol=lf
+*.rb text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.js text eol=lf
+*.desktop text eol=lf
+*.png binary
+*.AppImage binary

@@ -1,1 +1,9 @@
 dist/
+.DS_Store
+.ruby-lsp/
+.bundle/
+vendor/bundle/
+*.gem
+*.rbc
+pkg/
+coverage/
