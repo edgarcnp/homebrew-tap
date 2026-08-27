@@ -6,17 +6,17 @@
 (return 0 2>/dev/null) || exit 1
 
 info() {
-  echo "[INFO] $*" >&2
+  printf '[INFO] %s\n' "$*" >&2
 }
 
 warn() {
-  echo "[WARN] $*" >&2
+  printf '[WARN] %s\n' "$*" >&2
 }
 
 # Requires callers to run under `set -Eeuo pipefail`; error() exits and
 # `set -E` makes the failure visible to the caller's ERR trap.
 error() {
-  echo "[ERROR] $*" >&2
+  printf '[ERROR] %s\n' "$*" >&2
   exit 1
 }
 
@@ -27,7 +27,7 @@ ensure_file_exists() {
 }
 
 sed_escape_replacement() {
-  printf '%s' "$1" | sed -e ':a;$!N;$!ba;s/[\/&\\]/\\&/g;s/\n/\\n/g'
+  printf '%s' "$1" | sed -e 's/[\/&|\\]/\\&/g' -e ':a;$!N;$!ba;s/\n/\\n/g'
 }
 
 # Echoes "<deb_arch> <appimage_arch>" for the TARGET_ARCH global set by the
@@ -77,7 +77,8 @@ render_template() {
   version="$(sed_escape_replacement "${PACKAGE_VERSION}")"
 
   local tmp_target
-  tmp_target="$(mktemp "${target}.tmp.XXXXXX")"
+  tmp_target="$(mktemp -p "$(dirname -- "${target}")" "$(basename -- "${target}").tmp.XXXXXX")" || error "render_template: mktemp failed for ${target}"
+  trap 'rm -f -- "${tmp_target}"' RETURN
   sed \
     -e "s/__PACKAGE_NAME__/${package_name}/g" \
     -e "s/__PACKAGE_DISPLAY_NAME__/${display_name}/g" \
@@ -85,18 +86,22 @@ render_template() {
     -e "s/__VERSION__/${version}/g" \
     -- "${source}" >"${tmp_target}" || {
     rm -f -- "${tmp_target}"
+    trap - RETURN
     error "render_template: failed to render ${source}"
   }
   mv -- "${tmp_target}" "${target}" || {
     rm -f -- "${tmp_target}"
+    trap - RETURN
     error "render_template: failed to move rendered template into place"
   }
+  trap - RETURN
 }
 
 normalize_package_payload_permissions() {
   local root="$1"
 
   [[ -d "${root}" ]] || error "Missing package root: ${root}"
+  # Requires GNU find for -perm /... semantics (3 passes retained).
   find "${root}" -type d -exec chmod 0755 {} +
   find "${root}" -type f \( -perm /u=x -o -perm /g=x -o -perm /o=x \) -exec chmod 0755 {} +
   find "${root}" -type f ! \( -perm /u=x -o -perm /g=x -o -perm /o=x \) -exec chmod 0644 {} +
@@ -115,6 +120,7 @@ smoke_test_appimage() {
   [[ -f "${appimage}" ]] || error "Smoke test: missing AppImage: ${appimage}"
   [[ -x "${appimage}" ]] || error "Smoke test: AppImage is not executable: ${appimage}"
 
+  [[ "${SMOKE_TIMEOUT:-20}" =~ ^[0-9]+$ ]] || SMOKE_TIMEOUT=20
   local SMOKE_TIMEOUT="${SMOKE_TIMEOUT:-20}"
 
   info "Smoke testing: ${appimage}"

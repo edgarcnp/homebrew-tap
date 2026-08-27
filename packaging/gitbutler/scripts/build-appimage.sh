@@ -7,7 +7,7 @@ set -Eeuo pipefail
 # helper processes (WebKitWebProcess/WebKitNetworkProcess) and their runtime
 # data; dist output lands in <tap>/dist for CI.
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname -- "${BASH_SOURCE[0]:-$0}")" && pwd)"
 PACKAGING_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 REPO_DIR="$(cd "${PACKAGING_DIR}/../.." && pwd)"
 LIB_DIR="$(cd "${PACKAGING_DIR}/../lib" && pwd)"
@@ -19,16 +19,26 @@ LIB_DIR="$(cd "${PACKAGING_DIR}/../lib" && pwd)"
 RESOLVE_SCRIPT="${PACKAGING_DIR}/scripts/resolve-gitbutler.js"
 APPRUN_TEMPLATE="${PACKAGING_DIR}/templates/AppRun"
 DESKTOP_TEMPLATE="${PACKAGING_DIR}/templates/gitbutler.desktop"
-WORK_DIR="${WORK_DIR_OVERRIDE:-$(mktemp -d)}"
+WORK_DIR="${WORK_DIR_OVERRIDE:-$(mktemp -d "${TMPDIR:-/tmp}/gb-build.XXXXXX")}" || error "mktemp failed"
 if [[ -z "${WORK_DIR_OVERRIDE:-}" ]]
 then
   # Clean up the temp dir we created; an explicit WORK_DIR_OVERRIDE is
   # caller-owned and left alone.
-  trap 'rm -rf "${WORK_DIR}"' EXIT
+  cleanup() { rm -rf -- "${WORK_DIR}"; }
+  trap cleanup EXIT
 fi
 DIST_DIR="${DIST_DIR_OVERRIDE:-${REPO_DIR}/dist}"
 APPDIR="${APPIMAGE_APPDIR_OVERRIDE:-${DIST_DIR}/appimage.AppDir}"
+if [[ -n "${DIST_DIR_OVERRIDE:-}" ]]
+then
+  [[ "${DIST_DIR_OVERRIDE}" == /* ]] || error "DIST_DIR_OVERRIDE must be absolute: ${DIST_DIR_OVERRIDE}"
+  [[ "${DIST_DIR_OVERRIDE}" != "/" ]] || error "refusing DIST_DIR_OVERRIDE=/"
+fi
+[[ "${APPDIR}" == "${DIST_DIR}"/* ]] || error "APPDIR must be inside DIST_DIR: ${APPDIR}"
+[[ "${APPDIR}" != "/" && "${APPDIR}" != "${REPO_DIR}" && "${APPDIR}" != "${DIST_DIR}" ]] || error "refusing to operate on suspicious APPDIR"
+[[ "${PACKAGE_VERSION:-}" != *[/\\]* ]] || error "PACKAGE_VERSION contains path separator"
 PACKAGE_NAME="${PACKAGE_NAME:-gitbutler}"
+[[ "${PACKAGE_NAME}" =~ ^[A-Za-z0-9._-]+$ ]] || error "invalid PACKAGE_NAME: ${PACKAGE_NAME}"
 PACKAGE_DISPLAY_NAME="${PACKAGE_DISPLAY_NAME:-GitButler}"
 PACKAGE_COMMENT="${PACKAGE_COMMENT:-Git, finally designed for humans}"
 TARGET_ARCH="${TARGET_ARCH:-$(uname -m)}"
@@ -237,7 +247,11 @@ bundle_gio_modules() {
   fi
   [[ -n "${gio_dir}" && -d "${gio_dir}" ]] || error "GIO modules directory not found; install glib-networking before building"
   mkdir -p -- "${APPDIR}/usr/lib/gio/modules"
-  cp -- "${gio_dir}"/*.so "${APPDIR}/usr/lib/gio/modules/"
+  shopt -s nullglob
+  local _gio_so=("${gio_dir}"/*.so)
+  ((${#_gio_so[@]})) || error "No GIO modules found in ${gio_dir}"
+  shopt -u nullglob
+  cp -- "${_gio_so[@]}" "${APPDIR}/usr/lib/gio/modules/"
   info "Bundled GIO modules from ${gio_dir}"
 }
 
@@ -260,7 +274,11 @@ bundle_gdk_pixbuf_loaders() {
   fi
   [[ -n "${pixbuf_dir}" && -d "${pixbuf_dir}/loaders" ]] || error "GDK pixbuf loader directory not found; install libgdk-pixbuf2.0-bin before building"
   mkdir -p -- "${APPDIR}/usr/lib/gdk-pixbuf-2.0/2.10.0/loaders"
-  cp -- "${pixbuf_dir}"/loaders/*.so "${APPDIR}/usr/lib/gdk-pixbuf-2.0/2.10.0/loaders/"
+  shopt -s nullglob
+  local _pix_so=("${pixbuf_dir}"/loaders/*.so)
+  ((${#_pix_so[@]})) || error "No GDK pixbuf loaders found in ${pixbuf_dir}/loaders"
+  shopt -u nullglob
+  cp -- "${_pix_so[@]}" "${APPDIR}/usr/lib/gdk-pixbuf-2.0/2.10.0/loaders/"
   if command -v gdk-pixbuf-query-loaders >/dev/null 2>&1
   then
     GDK_PIXBUF_MODULEDIR="${APPDIR}/usr/lib/gdk-pixbuf-2.0/2.10.0/loaders" \

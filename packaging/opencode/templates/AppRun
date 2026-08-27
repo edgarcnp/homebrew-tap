@@ -7,8 +7,8 @@ resolve_appdir() {
     local max_links=20
 
     while [ -L "$source" ] && [ "$max_links" -gt 0 ]; do
-        dir="$(cd -P "$(dirname "$source")" && pwd)"
-        source="$(readlink "$source")"
+        dir="$(cd -P -- "$(dirname -- "$source")" && pwd)"
+        source="$(readlink -- "$source")"
         case "$source" in
             /*) ;;
             *) source="$dir/$source" ;;
@@ -17,7 +17,7 @@ resolve_appdir() {
     done
     if [ "$max_links" -eq 0 ]; then echo "Too many symlink levels" >&2; exit 1; fi
 
-    cd -P "$(dirname "$source")" && pwd
+    cd -P -- "$(dirname -- "$source")" && pwd
 }
 
 APPDIR="${APPDIR:-$(resolve_appdir)}"
