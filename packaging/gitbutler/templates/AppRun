@@ -57,10 +57,14 @@ prevent_autoupdate() {
         return 0
     fi
 
-    # Bare "{}" (what the app writes on first run): replace wholesale. Any
-    # other shape is left untouched rather than risk corrupting user settings.
-    if grep -q '^{[[:space:]]*}$' "${config_file}" 2>/dev/null; then
+    # No "ui" object at all: add one before the root's closing brace. The "$"
+    # address marks the last line, so this works for both compact and
+    # pretty-printed JSON. The bare "{}" case is handled first.
+    if grep -qx '{[[:space:]]*}' "${config_file}" 2>/dev/null; then
         printf '%s\n' '{"ui":{"checkForUpdatesIntervalInSeconds":0}}' > "${config_file}"
+    else
+        LC_ALL=C sed -i -E '$ s/\}[[:space:]]*$/,"ui":{"checkForUpdatesIntervalInSeconds":0}}/' \
+            "${config_file}" 2>/dev/null || true
     fi
 }
 
