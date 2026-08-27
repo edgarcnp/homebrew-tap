@@ -10,6 +10,10 @@ on:
       head_sha:
         description: Expected pull request head commit SHA (optional)
 
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
 permissions: {}
 
 defaults:

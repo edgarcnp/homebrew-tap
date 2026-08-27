@@ -113,7 +113,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
-          node-version: 24
+          node-version: 24.11.0
       - name: Resolve upstream version
         id: resolve
         env:
@@ -161,6 +161,7 @@ jobs:
           arm64_version="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).version' "$arm64_metadata")"
           [ "$version" = "$arm64_version" ] || { echo "amd64/arm64 upstream version mismatch" >&2; exit 1; }
           version="${version//[^0-9A-Za-z._-]/_}"
+          [[ "$version" =~ ^[0-9A-Za-z._-]+$ ]] || exit 1
           {
             echo "upstream_sha256_amd64=$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).sha256' "$amd64_metadata")"
             echo "upstream_sha256_arm64=$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).sha256' "$arm64_metadata")"
@@ -174,6 +175,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           APP_CASK: ${{ inputs.app_cask }}
           TAG_PREFIX: ${{ inputs.tag_prefix }}
+          ASSET_PREFIX: ${{ inputs.asset_prefix }}
         run: |
           # Download the release assets for TAG_PREFIX$version and compare
           # their SHA-256 against the cask's pinned values. A rebuilt release
@@ -196,14 +198,14 @@ jobs:
               echo "could not parse pinned checksums from tap/Casks/${APP_CASK}.rb" >&2
             elif timeout 60 gh release download "${TAG_PREFIX}${version}" \
               --repo "$GITHUB_REPOSITORY" \
-              --pattern "${{ inputs.asset_prefix }}-*-x86_64.AppImage" \
-              --pattern "${{ inputs.asset_prefix }}-*-aarch64.AppImage" \
+              --pattern "${ASSET_PREFIX}-*-x86_64.AppImage" \
+              --pattern "${ASSET_PREFIX}-*-aarch64.AppImage" \
               --dir "${tmp_dir}" --clobber
             then
               shopt -s nullglob
               local x86_files arm_files
-              x86_files=("${tmp_dir}"/${{ inputs.asset_prefix }}-*-x86_64.AppImage)
-              arm_files=("${tmp_dir}"/${{ inputs.asset_prefix }}-*-aarch64.AppImage)
+              x86_files=("${tmp_dir}"/"${ASSET_PREFIX}"-*-x86_64.AppImage)
+              arm_files=("${tmp_dir}"/"${ASSET_PREFIX}"-*-aarch64.AppImage)
               if [[ "${#x86_files[@]}" -ne 1 || "${#arm_files[@]}" -ne 1 ]]; then
                 echo "expected exactly one asset per architecture in release ${TAG_PREFIX}${version}" >&2
               else
@@ -328,7 +330,7 @@ jobs:
           test -s /tmp/appimagetool-uruntime
           test -s /tmp/appimagetool-uruntime.b3sum
           python3 -m pip --version >/dev/null 2>&1 || sudo apt-get install -y python3-pip
-          python3 -m pip install --quiet --user blake3
+          python3 -m pip install --quiet --user "blake3==0.4.2"
           python3 - <<'PYEOF'
           import blake3, pathlib, sys
 
@@ -405,17 +407,19 @@ jobs:
           UPSTREAM_SHA_ARM64: ${{ needs.detect.outputs.upstream_sha256_arm64 }}
           UPSTREAM_URL_AMD64: ${{ needs.detect.outputs.upstream_url_amd64 }}
           UPSTREAM_URL_ARM64: ${{ needs.detect.outputs.upstream_url_arm64 }}
+          APP_CASK: ${{ inputs.app_cask }}
+          ASSET_PREFIX: ${{ inputs.asset_prefix }}
         run: |
           # shellcheck disable=SC2016 # printf format strings and GitHub Actions templates are intentional
           {
             printf '%s\n\n' '## Artifact checksums'
-            printf '%s\n' 'Upstream `.deb` integrity is verified against the release source (signed APT index or download-time SHA-256) before packaging; the AppImage hashes are enforced by the `${{ inputs.app_cask }}` cask at install.'
+            printf 'Upstream `.deb` integrity is verified against the release source (signed APT index or download-time SHA-256) before packaging; the AppImage hashes are enforced by the `%s` cask at install.\n' "${APP_CASK}"
             printf '\n'
             printf '%s\n' '| Artifact | SHA-256 |'
             printf '%s\n' '| --- | --- |'
             printf '| Upstream `.deb` (amd64) | `%s` |\n' "${UPSTREAM_SHA_AMD64:-n/a}"
             printf '| Upstream `.deb` (arm64) | `%s` |\n' "${UPSTREAM_SHA_ARM64:-n/a}"
-            for file in assets/${{ inputs.asset_prefix }}-*.AppImage; do
+            for file in assets/"${ASSET_PREFIX}"-*.AppImage; do
               [ -e "$file" ] || continue
               arch="${file##*-}"
               arch="${arch%.AppImage}"
@@ -470,22 +474,27 @@ jobs:
         env:
           PACKAGE_VERSION: ${{ needs.detect.outputs.version }}
           GH_TOKEN: ${{ github.token }}
+          TAG_PREFIX: ${{ inputs.tag_prefix }}
+          ASSET_PREFIX: ${{ inputs.asset_prefix }}
+          APP_CASK: ${{ inputs.app_cask }}
         run: |
+          [[ "$PACKAGE_VERSION" =~ ^[0-9A-Za-z._-]+$ ]] || { echo "invalid version: $PACKAGE_VERSION" >&2; exit 1; }
           # hash the released assets, not the run artifacts, so the cask
           # always matches what the release actually hosts
-          gh release download "${{ inputs.tag_prefix }}$PACKAGE_VERSION" \
+          gh release download "${TAG_PREFIX}${PACKAGE_VERSION}" \
             --repo "$GITHUB_REPOSITORY" \
-            --pattern "${{ inputs.asset_prefix }}-*-x86_64.AppImage" \
-            --pattern "${{ inputs.asset_prefix }}-*-aarch64.AppImage" \
+            --pattern "${ASSET_PREFIX}-*-x86_64.AppImage" \
+            --pattern "${ASSET_PREFIX}-*-aarch64.AppImage" \
             --dir assets --clobber
-          x86_64_sha="$(sha256sum assets/${{ inputs.asset_prefix }}-*-x86_64.AppImage | awk '{print $1}')"
-          arm64_sha="$(sha256sum assets/${{ inputs.asset_prefix }}-*-aarch64.AppImage | awk '{print $1}')"
+          x86_64_sha="$(sha256sum assets/"${ASSET_PREFIX}"-*-x86_64.AppImage | awk '{print $1}')"
+          arm64_sha="$(sha256sum assets/"${ASSET_PREFIX}"-*-aarch64.AppImage | awk '{print $1}')"
           python3 - "$PACKAGE_VERSION" "$x86_64_sha" "$arm64_sha" <<'PY'
+          import os
           import re
           import sys
 
           version, x64, arm = sys.argv[1], sys.argv[2], sys.argv[3]
-          path = "Casks/${{ inputs.app_cask }}.rb"
+          path = f"Casks/{os.environ['APP_CASK']}.rb"
           text = open(path, encoding="utf-8").read()
           text, n = re.subn(r'^(\s*)version "[^"]*"', rf'\1version "{version}"', text, count=1, flags=re.M)
           if n != 1:
@@ -504,23 +513,25 @@ jobs:
       - name: Commit and push cask update
         env:
           GH_TOKEN: ${{ github.token }}
+          APP_CASK: ${{ inputs.app_cask }}
+          PACKAGE_VERSION: ${{ needs.detect.outputs.version }}
         run: |
           # no author/committer fields: the token identity (github-actions[bot])
           # becomes author/committer and GitHub auto-signs the commit
           base="$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq .commit.sha)"
           for _ in 1 2 3 4 5; do
             blob="$(gh api --method POST "repos/$GITHUB_REPOSITORY/git/blobs" \
-              -F encoding=utf-8 -F content=@"Casks/${{ inputs.app_cask }}.rb" --jq .sha)"
+              -F encoding=utf-8 -F content=@"Casks/${APP_CASK}.rb" --jq .sha)"
             base_tree="$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$base" --jq .tree.sha)"
             tree="$(gh api --method POST "repos/$GITHUB_REPOSITORY/git/trees" \
               -f base_tree="$base_tree" \
-              -f "tree[][path]=Casks/${{ inputs.app_cask }}.rb" \
+              -f "tree[][path]=Casks/${APP_CASK}.rb" \
               -f "tree[][mode]=100644" \
               -f "tree[][type]=blob" \
               -f "tree[][sha]=$blob" \
               --jq .sha)"
             commit="$(gh api --method POST "repos/$GITHUB_REPOSITORY/git/commits" \
-              -f message="chore(cask): update ${{ inputs.app_cask }} to ${{ needs.detect.outputs.version }}" \
+              -f message="chore(cask): update ${APP_CASK} to ${PACKAGE_VERSION}" \
               -f tree="$tree" -f "parents[]=$base" --jq .sha)"
             if gh api --method PATCH "repos/$GITHUB_REPOSITORY/git/refs/heads/main" \
               -f sha="$commit" --silent; then
@@ -551,20 +562,25 @@ jobs:
         env:
           PACKAGE_VERSION: ${{ needs.detect.outputs.version }}
           GH_TOKEN: ${{ github.token }}
+          TAG_PREFIX: ${{ inputs.tag_prefix }}
+          ASSET_PREFIX: ${{ inputs.asset_prefix }}
+          APP_CASK: ${{ inputs.app_cask }}
         run: |
-          gh release download "${{ inputs.tag_prefix }}$PACKAGE_VERSION" \
+          [[ "$PACKAGE_VERSION" =~ ^[0-9A-Za-z._-]+$ ]] || { echo "invalid version: $PACKAGE_VERSION" >&2; exit 1; }
+          gh release download "${TAG_PREFIX}${PACKAGE_VERSION}" \
             --repo "$GITHUB_REPOSITORY" \
-            --pattern "${{ inputs.asset_prefix }}-*-x86_64.AppImage" \
-            --pattern "${{ inputs.asset_prefix }}-*-aarch64.AppImage" \
+            --pattern "${ASSET_PREFIX}-*-x86_64.AppImage" \
+            --pattern "${ASSET_PREFIX}-*-aarch64.AppImage" \
             --dir assets --clobber
-          x86_64_sha="$(sha256sum assets/${{ inputs.asset_prefix }}-*-x86_64.AppImage | awk '{print $1}')"
-          arm64_sha="$(sha256sum assets/${{ inputs.asset_prefix }}-*-aarch64.AppImage | awk '{print $1}')"
+          x86_64_sha="$(sha256sum assets/"${ASSET_PREFIX}"-*-x86_64.AppImage | awk '{print $1}')"
+          arm64_sha="$(sha256sum assets/"${ASSET_PREFIX}"-*-aarch64.AppImage | awk '{print $1}')"
           python3 - "$PACKAGE_VERSION" "$x86_64_sha" "$arm64_sha" <<'PY'
+          import os
           import re
           import sys
 
           version, x64, arm = sys.argv[1], sys.argv[2], sys.argv[3]
-          path = "Casks/${{ inputs.app_cask }}.rb"
+          path = f"Casks/{os.environ['APP_CASK']}.rb"
           text = open(path, encoding="utf-8").read()
           text, n = re.subn(r'^(\s*)version "[^"]*"', rf'\1version "{version}"', text, count=1, flags=re.M)
           if n != 1:
@@ -583,23 +599,25 @@ jobs:
       - name: Commit and push cask update
         env:
           GH_TOKEN: ${{ github.token }}
+          APP_CASK: ${{ inputs.app_cask }}
+          PACKAGE_VERSION: ${{ needs.detect.outputs.version }}
         run: |
           # no author/committer fields: the token identity (github-actions[bot])
           # becomes author/committer and GitHub auto-signs the commit
           base="$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq .commit.sha)"
           for _ in 1 2 3 4 5; do
             blob="$(gh api --method POST "repos/$GITHUB_REPOSITORY/git/blobs" \
-              -F encoding=utf-8 -F content=@"Casks/${{ inputs.app_cask }}.rb" --jq .sha)"
+              -F encoding=utf-8 -F content=@"Casks/${APP_CASK}.rb" --jq .sha)"
             base_tree="$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$base" --jq .tree.sha)"
             tree="$(gh api --method POST "repos/$GITHUB_REPOSITORY/git/trees" \
               -f base_tree="$base_tree" \
-              -f "tree[][path]=Casks/${{ inputs.app_cask }}.rb" \
+              -f "tree[][path]=Casks/${APP_CASK}.rb" \
               -f "tree[][mode]=100644" \
               -f "tree[][type]=blob" \
               -f "tree[][sha]=$blob" \
               --jq .sha)"
             commit="$(gh api --method POST "repos/$GITHUB_REPOSITORY/git/commits" \
-              -f message="chore(cask): update ${{ inputs.app_cask }} to ${{ needs.detect.outputs.version }}" \
+              -f message="chore(cask): update ${APP_CASK} to ${PACKAGE_VERSION}" \
               -f tree="$tree" -f "parents[]=$base" --jq .sha)"
             if gh api --method PATCH "repos/$GITHUB_REPOSITORY/git/refs/heads/main" \
               -f sha="$commit" --silent; then
