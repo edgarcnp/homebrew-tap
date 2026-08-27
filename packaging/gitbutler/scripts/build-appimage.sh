@@ -168,6 +168,51 @@ bundle_webkit_helpers() {
   info "Bundled webkit helpers from ${webkit_dir} into ${helpers_dir}"
 }
 
+# The official .deb ships with Tauri's built-in updater enabled. brew owns
+# updates for this AppImage, so neutralize the updater at the source: rewrite
+# the embedded updater endpoint host to a never-resolving name (same byte
+# length, like the webkit helper patch) so neither the periodic auto-check nor
+# the manual "Check for updates…" menu item can ever find or install an
+# update. Fail loudly if upstream changes the endpoint, rather than shipping
+# a build with the updater silently re-enabled.
+disable_updater_endpoint() {
+  local binary="${APPDIR}/opt/gitbutler/bin/gitbutler-tauri"
+  ensure_file_exists "${binary}" "gitbutler runtime"
+
+  local from to
+  from="https://app.gitbutler.com/releases/release/"
+  to="https://x.invalid.invalid/releases/release/"
+  [[ "${#from}" -eq "${#to}" ]] || error "updater endpoint patch length mismatch: ${#from} vs ${#to}; refusing to corrupt ELF"
+
+  local escaped_from escaped_to
+  escaped_from="$(sed_escape_replacement "${from}")"
+  escaped_from="${escaped_from//|/\\|}"
+  escaped_to="$(sed_escape_replacement "${to}")"
+  escaped_to="${escaped_to//|/\\|}"
+
+  local tmp_bin
+  tmp_bin="$(mktemp "${binary}.tmp.XXXXXX")"
+  cp -- "${binary}" "${tmp_bin}" || {
+    rm -f -- "${tmp_bin}"
+    error "failed to copy ${binary} to temp file"
+  }
+  LC_ALL=C sed -i "s|${escaped_from}|${escaped_to}|g" "${tmp_bin}" || {
+    rm -f -- "${tmp_bin}"
+    error "failed to patch updater endpoint in ${binary}"
+  }
+  mv -- "${tmp_bin}" "${binary}" || {
+    rm -f -- "${tmp_bin}"
+    error "failed to move patched binary into place"
+  }
+
+  strings "${binary}" | grep -F -q -- "${to}" || error "updater endpoint patch verification failed: ${to} not found in ${binary}"
+  if strings "${binary}" | grep -F -q -- "${from}"
+  then
+    error "updater endpoint patch verification failed: original endpoint ${from} still present in ${binary}"
+  fi
+  info "Neutralized updater endpoint: ${from} -> ${to}"
+}
+
 bundle_glib_schemas() {
   local schemas="/usr/share/glib-2.0/schemas/gschemas.compiled"
   [[ -f "${schemas}" ]] || error "Missing ${schemas}; install libwebkit2gtk-4.1-dev before building"
@@ -268,6 +313,7 @@ main() {
   dpkg-deb -x "${deb_path}" "${payload_dir}"
 
   prepare_appdir "${payload_dir}"
+  disable_updater_endpoint
 
   local linuxdeploy
   linuxdeploy="$(resolve_linuxdeploy)"

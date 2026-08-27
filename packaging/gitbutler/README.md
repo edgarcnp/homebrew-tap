@@ -21,9 +21,13 @@ at install.
    binary-patches the hardcoded webkit helper-process paths in the .so to
    relative paths (the `././` prefix trick) and bundles the helper
    processes, GLib schemas, GIO modules, and GDK pixbuf loaders so the
-   AppImage runs on hosts without webkit. AppRun preserves argv[0] with
-   `exec -a "${ARGV0:-$0}"` so `gitbutler-tauri` can still pick between
-   the `but` CLI and the GUI by name, and seeds
+   AppImage runs on hosts without webkit. The updater endpoint in the binary
+   is rewritten to a never-resolving host (`x.invalid.invalid`,
+   same-length patch) so the Tauri built-in updater can never find or install
+   an update — both the auto-check (already disabled via settings seeding)
+   and the manual "Check for updates…" menu item are neutered. AppRun
+   preserves argv[0] with `exec -a "${ARGV0:-$0}"` so `gitbutler-tauri` can
+   still pick between the `but` CLI and the GUI by name, and seeds
    `~/.config/gitbutler/settings.json` with
    `ui.checkForUpdatesIntervalInSeconds: 0` to disable the in-app
    auto-update checker (mirroring the `disable-auto-updates` Cargo
