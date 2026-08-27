@@ -6,7 +6,7 @@ set -Eeuo pipefail
 # digest exposed by the GitHub API. Dist output lands in <tap>/dist for
 # the CI workflow.
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname -- "${BASH_SOURCE[0]:-$0}")" && pwd)"
 PACKAGING_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 REPO_DIR="$(cd "${PACKAGING_DIR}/../.." && pwd)"
 LIB_DIR="$(cd "${PACKAGING_DIR}/../lib" && pwd)"
@@ -17,16 +17,26 @@ LIB_DIR="$(cd "${PACKAGING_DIR}/../lib" && pwd)"
 
 APPRUN_TEMPLATE="${PACKAGING_DIR}/templates/AppRun"
 DESKTOP_TEMPLATE="${PACKAGING_DIR}/templates/opencode-desktop.desktop"
-WORK_DIR="${WORK_DIR_OVERRIDE:-$(mktemp -d)}"
+WORK_DIR="${WORK_DIR_OVERRIDE:-$(mktemp -d "${TMPDIR:-/tmp}/opencode-build.XXXXXX")}" || error "mktemp failed"
 if [[ -z "${WORK_DIR_OVERRIDE:-}" ]]
 then
   # Clean up the temp dir we created; an explicit WORK_DIR_OVERRIDE is
   # caller-owned and left alone.
-  trap 'rm -rf "${WORK_DIR}"' EXIT
+  cleanup() { rm -rf -- "${WORK_DIR}"; }
+  trap cleanup EXIT
 fi
 DIST_DIR="${DIST_DIR_OVERRIDE:-${REPO_DIR}/dist}"
 APPDIR="${APPIMAGE_APPDIR_OVERRIDE:-${DIST_DIR}/appimage.AppDir}"
+if [[ -n "${DIST_DIR_OVERRIDE:-}" ]]
+then
+  [[ "${DIST_DIR_OVERRIDE}" == /* ]] || error "DIST_DIR_OVERRIDE must be absolute: ${DIST_DIR_OVERRIDE}"
+  [[ "${DIST_DIR_OVERRIDE}" != "/" ]] || error "refusing DIST_DIR_OVERRIDE=/"
+fi
+[[ "${APPDIR}" == "${DIST_DIR}"/* ]] || error "APPDIR must be inside DIST_DIR: ${APPDIR}"
+[[ "${APPDIR}" != "/" && "${APPDIR}" != "${REPO_DIR}" && "${APPDIR}" != "${DIST_DIR}" ]] || error "refusing to operate on suspicious APPDIR"
+[[ "${PACKAGE_VERSION:-}" != *[/\\]* ]] || error "PACKAGE_VERSION contains path separator"
 PACKAGE_NAME="${PACKAGE_NAME:-opencode-desktop}"
+[[ "${PACKAGE_NAME}" =~ ^[A-Za-z0-9._-]+$ ]] || error "invalid PACKAGE_NAME: ${PACKAGE_NAME}"
 PACKAGE_DISPLAY_NAME="${PACKAGE_DISPLAY_NAME:-OpenCode}"
 PACKAGE_COMMENT="${PACKAGE_COMMENT:-Open source AI coding agent}"
 PACKAGE_VERSION="${PACKAGE_VERSION:-}"

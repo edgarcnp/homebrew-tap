@@ -7,8 +7,8 @@ resolve_appdir() {
     local max_links=20
 
     while [ -L "$source" ] && [ "$max_links" -gt 0 ]; do
-        dir="$(cd -P "$(dirname "$source")" && pwd)"
-        source="$(readlink "$source")"
+        dir="$(cd -P -- "$(dirname -- "$source")" && pwd)"
+        source="$(readlink -- "$source")"
         case "$source" in
             /*) ;;
             *) source="$dir/$source" ;;
@@ -17,7 +17,7 @@ resolve_appdir() {
     done
     if [ "$max_links" -eq 0 ]; then echo "Too many symlink levels" >&2; exit 1; fi
 
-    cd -P "$(dirname "$source")" && pwd
+    cd -P -- "$(dirname -- "$source")" && pwd
 }
 
 APPDIR="${APPDIR:-$(resolve_appdir)}"
@@ -30,13 +30,18 @@ export APPDIR
 # ~/.config/gitbutler/settings.json over its compiled defaults, so seeding the
 # same key reproduces that behavior.
 prevent_autoupdate() {
-    local config_dir config_file
+    local config_dir config_file tmp_file
     config_dir="${XDG_CONFIG_HOME:-${HOME}/.config}/gitbutler"
     config_file="${config_dir}/settings.json"
+    [[ ! -L "${config_dir}" ]] || return 0
+    [[ ! -L "${config_file}" ]] || return 0
+    umask 077
     mkdir -p -- "${config_dir}" || return 0
 
     if [[ ! -s "${config_file}" ]]; then
-        printf '%s\n' '{"ui":{"checkForUpdatesIntervalInSeconds":0}}' > "${config_file}"
+        tmp_file="$(mktemp "${config_dir}/settings.json.tmp.XXXXXX")" || return 0
+        printf '%s\n' '{"ui":{"checkForUpdatesIntervalInSeconds":0}}' > "${tmp_file}" || { rm -f -- "${tmp_file}"; return 0; }
+        mv -- "${tmp_file}" "${config_file}" || { rm -f -- "${tmp_file}"; return 0; }
         return 0
     fi
 
@@ -60,7 +65,9 @@ prevent_autoupdate() {
     # address marks the last line, so this works for both compact and
     # pretty-printed JSON. The bare "{}" case is handled first.
     if grep -qx '{[[:space:]]*}' "${config_file}" 2>/dev/null; then
-        printf '%s\n' '{"ui":{"checkForUpdatesIntervalInSeconds":0}}' > "${config_file}"
+        tmp_file="$(mktemp "${config_dir}/settings.json.tmp.XXXXXX")" || return 0
+        printf '%s\n' '{"ui":{"checkForUpdatesIntervalInSeconds":0}}' > "${tmp_file}" || { rm -f -- "${tmp_file}"; return 0; }
+        mv -- "${tmp_file}" "${config_file}" || { rm -f -- "${tmp_file}"; return 0; }
     else
         LC_ALL=C sed -i -E '$ s/\}[[:space:]]*$/,"ui":{"checkForUpdatesIntervalInSeconds":0}}/' \
             "${config_file}" 2>/dev/null || true

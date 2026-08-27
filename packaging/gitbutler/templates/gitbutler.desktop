@@ -1,3 +1,4 @@
+# NOTE: Placeholders __PACKAGE_NAME__/__VERSION__ are substituted via render_template; injection mitigated by PACKAGE_NAME validation in build-appimage.sh
 [Desktop Entry]
 Name=__PACKAGE_DISPLAY_NAME__
 Comment=__PACKAGE_COMMENT__
