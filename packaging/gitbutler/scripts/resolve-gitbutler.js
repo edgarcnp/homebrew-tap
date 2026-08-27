@@ -19,11 +19,54 @@ const MAX_PAYLOAD_BYTES = 512 * 1024 * 1024;
 
 // Pin to releases.gitbutler.com to prevent open redirect to attacker-controlled host
 const ALLOWED_HOSTS = new Set(["releases.gitbutler.com"]);
+const ALLOWED_INIT_HOSTS = new Set(["app.gitbutler.com"]);
+
+async function fetchWithRetry(url, opts, retries = 3) {
+  let lastError;
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      const response = await fetch(url, opts);
+      if (response.status === 429 || response.status >= 500) {
+        if (attempt < retries - 1) {
+          const retryAfter = response.headers.get("retry-after");
+          let delay = 100 * Math.pow(2, attempt);
+          if (retryAfter) {
+            const secs = Number(retryAfter);
+            if (!Number.isNaN(secs)) delay = secs * 1000;
+            else {
+              const date = Date.parse(retryAfter);
+              if (!Number.isNaN(date)) delay = Math.max(0, date - Date.now());
+            }
+          }
+          await new Promise((r) => setTimeout(r, delay));
+          continue;
+        }
+      }
+      return response;
+    } catch (e) {
+      lastError = e;
+      if (attempt < retries - 1) {
+        const delay = 100 * Math.pow(2, attempt);
+        await new Promise((r) => setTimeout(r, delay));
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw lastError;
+}
 
 function writeFileAtomic(filePath, data) {
-  const tmp = filePath + ".tmp." + process.pid;
-  fs.writeFileSync(tmp, data, { mode: 0o600 });
-  fs.renameSync(tmp, filePath);
+  const tmp = filePath + ".tmp." + crypto.randomBytes(8).toString("hex");
+  fs.writeFileSync(tmp, data, { mode: 0o600, flag: "wx" });
+  try {
+    fs.renameSync(tmp, filePath);
+  } catch (e) {
+    try {
+      fs.unlinkSync(tmp);
+    } catch {}
+    throw e;
+  }
 }
 
 function sha256Buffer(bytes) {
@@ -39,12 +82,14 @@ async function fetchFollowRedirects(url) {
   const initial = new URL(url);
   if (initial.protocol !== "https:") throw new Error(`Initial URL must be https (got ${initial.protocol}) for ${url}`);
   // Abort slow/stalled downloads (30s or 60s) instead of hanging indefinitely
-  const response = await fetch(url, { redirect: "follow", signal: AbortSignal.timeout(60000) });
+  const response = await fetchWithRetry(url, { redirect: "follow", signal: AbortSignal.timeout(60000) });
   if (!response.ok) throw new Error(`Download failed (${response.status}) for ${url}`);
   const declaredLength = Number(response.headers.get("content-length") ?? 0);
   if (declaredLength > MAX_PAYLOAD_BYTES) {
     throw new Error(`Payload too large (Content-Length ${declaredLength}) for ${url}`);
   }
+  const finalHost = new URL(response.url).hostname;
+  if (!ALLOWED_HOSTS.has(finalHost)) throw new Error(`Unexpected redirect host (${finalHost}) for ${response.url}`);
   return response;
 }
 
@@ -114,12 +159,15 @@ async function resolveGitButlerPackage(options) {
     throw new Error(`Unsupported architecture '${architecture}'; GitButler packages support amd64 and arm64 only`);
   }
 
-  const repository = String(options.repository).replace(/\/+$/, "");
+  let repository = String(options.repository).replace(/\/+$/, "");
   try {
     const u = new URL(repository);
     if (u.protocol !== "https:") throw new Error(`Repository must be https (got ${u.protocol}) for ${repository}`);
+    if (u.search || u.hash) throw new Error(`Repository must not contain query or hash for ${repository}`);
+    repository = u.origin + u.pathname.replace(/\/+$/, "");
+    if (!ALLOWED_INIT_HOSTS.has(new URL(repository).hostname)) throw new Error("unexpected repository host");
   } catch (e) {
-    if (e.message.includes("Repository must be https")) throw e;
+    if (e.message.includes("Repository must be https") || e.message.includes("Repository must not contain") || e.message.includes("unexpected repository host")) throw e;
     throw new Error(`Invalid repository URL (${repository}): ${e.message}`);
   }
   // Validate RESOLVE_BASE_URL if present - must be https to prevent downgrade via env override
@@ -134,6 +182,9 @@ async function resolveGitButlerPackage(options) {
   }
   const outputDir = path.resolve(options.outputDir);
   fs.mkdirSync(outputDir, { recursive: true });
+  const resolvedMeta = path.resolve(options.metadataPath);
+  const resolvedOut = path.resolve(options.outputDir);
+  if (!resolvedMeta.startsWith(resolvedOut + path.sep) && resolvedMeta !== resolvedOut) throw new Error("metadataPath must be inside outputDir");
 
 // The redirect target URL is the version source; metadata-only mode
 // downloads the payload to compute the SHA-256 (the CDN publishes no
@@ -148,6 +199,10 @@ async function resolveGitButlerPackage(options) {
   let sha256 = "";
   let size = null;
   let packagePath = null;
+  {
+    const len = Number(response.headers.get("content-length") || 0);
+    if (len > MAX_PAYLOAD_BYTES) throw new Error(`Payload too large (Content-Length ${len}) for ${response.url}`);
+  }
   if (!options.metadataOnly) {
     const bytes = await readPayload(response);
     sha256 = sha256Buffer(bytes);

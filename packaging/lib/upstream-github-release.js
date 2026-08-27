@@ -14,13 +14,47 @@ const path = require("node:path");
 const DEB_ARCHES = ["amd64", "arm64"];
 const MAX_PAYLOAD_BYTES = 512 * 1024 * 1024;
 
+function assertHttpsNoSearch(urlStr) { const u=new URL(urlStr); if(u.protocol!=="https:"||u.search||u.hash) throw new Error("URL must be https without query/hash: "+urlStr); return u; }
+
+async function fetchWithRetry(url, opts, retries=3) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const response = await fetch(url, opts);
+    if (response.status === 429 || (response.status >= 500 && response.status < 600)) {
+      if (attempt === retries) return response;
+      const retryAfter = response.headers.get("retry-after");
+      let delayMs = 500 * Math.pow(2, attempt);
+      if (retryAfter) {
+        const secs = Number(retryAfter);
+        if (Number.isFinite(secs)) delayMs = secs * 1000;
+        else {
+          const dateMs = Date.parse(retryAfter);
+          if (Number.isFinite(dateMs)) delayMs = Math.max(0, dateMs - Date.now());
+        }
+      }
+      await new Promise((r) => setTimeout(r, delayMs));
+      continue;
+    }
+    return response;
+  }
+  throw new Error("fetchWithRetry exhausted");
+}
+
 function writeFileAtomic(filePath, data) {
-  const tmp = filePath + ".tmp." + process.pid;
-  fs.writeFileSync(tmp, data, { mode: 0o600 });
-  fs.renameSync(tmp, filePath);
+  const tmp = filePath + ".tmp." + crypto.randomBytes(8).toString("hex");
+  fs.writeFileSync(tmp, data, { mode: 0o600, flag: "wx" });
+  try {
+    fs.renameSync(tmp, filePath);
+  } catch (err) {
+    try {
+      fs.unlinkSync(tmp);
+    } catch {}
+    throw err;
+  }
 }
 
 async function readPayload(response) {
+  const lenHeader = Number(response.headers.get("content-length") || 0);
+  if (lenHeader > MAX_PAYLOAD_BYTES) throw new Error("payload too large");
   if (!response.body) {
     const bytes = Buffer.from(await response.arrayBuffer());
     if (bytes.length > MAX_PAYLOAD_BYTES) {
@@ -59,10 +93,12 @@ function parseSha256Digest(digest) {
 }
 
 async function fetchJson(url, token) {
+  if (String(url).includes("?per_page=")) { const u=new URL(url); if(u.protocol!=="https:"||u.hash) throw new Error("URL must be https without query/hash: "+url); } else { assertHttpsNoSearch(url); }
+  if(token && /[\r\n]/.test(String(token))) throw new Error("invalid token");
   const headers = { "User-Agent": "homebrew-tap-appimage-builder" };
   if (token) headers.Authorization = `Bearer ${token}`;
   // Abort slow/stalled downloads (30s or 60s) instead of hanging indefinitely
-  const response = await fetch(url, { headers, signal: AbortSignal.timeout(30000) });
+  const response = await fetchWithRetry(url, { headers, redirect: "error", signal: AbortSignal.timeout(30000) });
   if (!response.ok) {
     throw new Error(`GitHub API request failed (${response.status}) for ${url}`);
   }
@@ -70,6 +106,7 @@ async function fetchJson(url, token) {
 }
 
 async function selectRelease(repository, assetPrefix, token) {
+  if(!/^https:\/\/api\.github\.com\/repos\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(String(repository).replace(/\/+$/,""))) throw new Error("invalid repository");
   const releases = await fetchJson(`${repository}/releases?per_page=30`, token);
   if (!Array.isArray(releases)) throw new Error("GitHub API did not return a release list");
   for (const release of releases) {
@@ -80,7 +117,7 @@ async function selectRelease(repository, assetPrefix, token) {
     let complete = true;
     for (const arch of DEB_ARCHES) {
       const asset = assets.get(`${assetPrefix}-${arch}.deb`);
-      if (!asset || !/^sha256:/.test(asset.digest ?? "") || !Number.isInteger(asset.size)) {
+      if (!asset || !/^sha256:/.test(asset.digest ?? "") || !Number.isSafeInteger(asset.size) || asset.size <= 0 || asset.size > MAX_PAYLOAD_BYTES) {
         complete = false;
         break;
       }
@@ -102,6 +139,8 @@ async function downloadAndVerify(url, destination, expectedSha256, expectedSize,
   if (finalUrl.protocol !== "https:") {
     throw new Error(`Download redirected to non-HTTPS URL (${finalUrl.protocol}) for ${url}`);
   }
+  const final = new URL(response.url); if(!["github.com","objects.githubusercontent.com","github-releases.githubusercontent.com","release-assets.githubusercontent.com"].includes(final.hostname) && !final.hostname.endsWith(".githubusercontent.com")) throw new Error("unexpected download host");
+  const len=Number(response.headers.get("content-length")||0); if(len>MAX_PAYLOAD_BYTES) throw new Error("payload too large");
   const bytes = await readPayload(response);
   if (bytes.length !== expectedSize) {
     throw new Error(`${label} size mismatch: expected ${expectedSize}, got ${bytes.length}`);
@@ -129,6 +168,7 @@ async function resolveUpstreamRelease(options) {
   }
   const outputDir = path.resolve(options.outputDir);
   fs.mkdirSync(outputDir, { recursive: true });
+  const resolvedMeta = path.resolve(options.metadataPath); const resolvedOut = path.resolve(options.outputDir); if(!resolvedMeta.startsWith(resolvedOut+path.sep) && resolvedMeta!==resolvedOut) throw new Error("metadataPath must be inside outputDir");
 
   const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN || "";
   const { tag, selected } = await selectRelease(repository, options.assetPrefix, token);
@@ -167,14 +207,18 @@ async function main() {
   const args = process.argv.slice(2);
   const values = {};
   let metadataOnly = false;
+  const allowedFlags = new Set(["--output-dir", "--metadata", "--repository", "--asset-prefix", "--arch"]);
   for (let i = 0; i < args.length;) {
     if (args[i] === "--metadata-only") {
       metadataOnly = true;
       i += 1;
       continue;
     }
-    if (!args[i].startsWith("--") || i + 1 >= args.length) {
+    if (!args[i].startsWith("--") || !allowedFlags.has(args[i])) {
       throw new Error(`Invalid argument: ${args[i]}`);
+    }
+    if (!args[i+1] || args[i+1].startsWith("--")) {
+      throw new Error(`Missing value for ${args[i]}`);
     }
     values[args[i]] = args[i + 1];
     i += 2;
