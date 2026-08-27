@@ -113,7 +113,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
-          node-version: 24.11.0
+          node-version: 24.20.0
       - name: Resolve upstream version
         id: resolve
         env:
@@ -331,7 +331,7 @@ jobs:
           test -s /tmp/appimagetool-uruntime
           test -s /tmp/appimagetool-uruntime.b3sum
           python3 -m pip --version >/dev/null 2>&1 || sudo apt-get install -y python3-pip
-          python3 -m pip install --quiet --user "blake3==0.4.2"
+          python3 -m pip install --quiet --user "blake3==1.0.9"
           python3 - <<'PYEOF'
           import blake3, pathlib, sys
 
