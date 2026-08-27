@@ -14,9 +14,14 @@ const path = require("node:path");
 const MAX_PAYLOAD_BYTES = 512 * 1024 * 1024;
 
 function writeFileAtomic(filePath, data) {
-  const tmp = filePath + ".tmp." + process.pid;
-  fs.writeFileSync(tmp, data, { mode: 0o600 });
-  fs.renameSync(tmp, filePath);
+  const tmp = filePath + ".tmp." + crypto.randomBytes(8).toString("hex");
+  fs.writeFileSync(tmp, data, { mode: 0o600, flag: "wx" });
+  try {
+    fs.renameSync(tmp, filePath);
+  } catch (error) {
+    try { fs.unlinkSync(tmp); } catch {}
+    throw error;
+  }
 }
 
 async function readPayload(response) {
@@ -58,15 +63,25 @@ function sha256File(filePath) {
 
 function extractClearSignedPayload(source) {
   const lines = String(source).replace(/\r\n/g, "\n").split("\n");
+  if (lines.length > 100000) throw new Error("InRelease too large");
   if (lines.shift() !== "-----BEGIN PGP SIGNED MESSAGE-----") {
     throw new Error("InRelease is not an OpenPGP clear-signed message");
   }
-  while (lines.length > 0 && lines.shift() !== "") {}
+  let headerCount = 0;
+  let foundBlank = false;
+  while (lines.length > 0) {
+    if (headerCount++ > 50) throw new Error("InRelease header too large");
+    const line = lines.shift();
+    if (line === "") { foundBlank = true; break; }
+  }
+  if (!foundBlank) throw new Error("InRelease missing header terminator");
   const payload = [];
+  let foundSig = false;
   for (const line of lines) {
-    if (line === "-----BEGIN PGP SIGNATURE-----") break;
+    if (line === "-----BEGIN PGP SIGNATURE-----") { foundSig = true; break; }
     payload.push(line.startsWith("- ") ? line.slice(2) : line);
   }
+  if (!foundSig) throw new Error("InRelease missing PGP signature");
   if (payload.length === 0) throw new Error("InRelease signed payload is empty");
   return payload.join("\n");
 }
@@ -81,14 +96,20 @@ function parseReleaseSha256(payload) {
     }
     if (!inSha256) continue;
     const match = line.match(/^\s*([0-9a-f]{64})\s+(\d+)\s+(\S+)\s*$/i);
-    if (match) entries.set(match[3], { sha256: match[1].toLowerCase(), size: Number(match[2]) });
+    if (match) {
+      const entry = match[3];
+      if (entry.includes("..") || entry.startsWith("/")) continue;
+      const size = Number(match[2]);
+      if (!Number.isSafeInteger(size) || size > MAX_PAYLOAD_BYTES || size <= 0) continue;
+      entries.set(entry, { sha256: match[1].toLowerCase(), size });
+    }
   }
   return entries;
 }
 
 function parseDeb822(source) {
   return String(source).trim().split(/\n\s*\n/).filter(Boolean).map((paragraph) => {
-    const fields = {};
+    const fields = Object.create(null);
     let current = null;
     for (const line of paragraph.split(/\r?\n/)) {
       if (/^[ \t]/.test(line) && current) {
@@ -98,6 +119,7 @@ function parseDeb822(source) {
       const separator = line.indexOf(":");
       if (separator < 1) throw new Error(`Malformed Packages line: ${line}`);
       current = line.slice(0, separator);
+      if (current === "__proto__" || current === "constructor" || current === "prototype") throw new Error("invalid field name");
       fields[current] = line.slice(separator + 1).trim();
     }
     return fields;
@@ -193,11 +215,48 @@ function verifyIndexedFile(filePath, expected, label) {
   }
 }
 
+async function fetchWithRetry(url, timeoutMs) {
+  let lastError;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const response = await fetch(url, { redirect: "follow", signal: AbortSignal.timeout(timeoutMs) });
+      if (response.status === 429 || (response.status >= 500 && response.status < 600)) {
+        const retryAfter = response.headers.get("retry-after");
+        let delayMs = Math.pow(2, attempt) * 1000;
+        if (retryAfter) {
+          const secs = Number(retryAfter);
+          if (Number.isFinite(secs)) delayMs = Math.max(delayMs, secs * 1000);
+          else {
+            const dateMs = Date.parse(retryAfter);
+            if (!Number.isNaN(dateMs)) delayMs = Math.max(delayMs, dateMs - Date.now());
+          }
+        }
+        lastError = new Error(`Download failed (${response.status}) for ${url}`);
+        if (attempt < 2) { await new Promise((r) => setTimeout(r, delayMs)); continue; }
+        throw lastError;
+      }
+      return response;
+    } catch (error) {
+      lastError = error;
+      if (error.name === "TimeoutError" || error.name === "AbortError") throw error;
+      if (attempt < 2) {
+        const delayMs = Math.pow(2, attempt) * 1000;
+        await new Promise((r) => setTimeout(r, delayMs));
+        continue;
+      }
+      throw lastError;
+    }
+  }
+  throw lastError;
+}
+
 async function download(url, destination, timeoutMs = 30000) {
-  const response = await fetch(url, { redirect: "follow", signal: AbortSignal.timeout(timeoutMs) });
+  const response = await fetchWithRetry(url, timeoutMs);
   if (!response.ok) throw new Error(`Download failed (${response.status}) for ${url}`);
   const finalUrl = new URL(response.url);
   if (finalUrl.protocol !== "https:") throw new Error(`Download redirected to non-HTTPS URL (${finalUrl.protocol}) for ${url}`);
+  const contentLength = response.headers.get("content-length");
+  if (contentLength && Number(contentLength) > MAX_PAYLOAD_BYTES) throw new Error(`Payload too large (${contentLength} bytes) for ${url}`);
   const bytes = await readPayload(response);
   writeFileAtomic(destination, bytes);
 }
@@ -205,9 +264,10 @@ async function download(url, destination, timeoutMs = 30000) {
 function verifySigningKey(keyPath, expectedFingerprint) {
   const result = childProcess.spawnSync(
     "gpg", ["--batch", "--show-keys", "--with-colons", keyPath],
-    { encoding: "utf8" },
+    { encoding: "utf8", timeout: 10000, maxBuffer: 1 << 20 },
   );
-  if (result.status !== 0) throw new Error(`Could not inspect pinned signing key: ${result.stderr.trim()}`);
+  if (result.error && result.error.code === "ETIMEDOUT") throw new Error(`Could not inspect pinned signing key: timed out`);
+  if (result.status !== 0) throw new Error(`Could not inspect pinned signing key: ${(result.stderr || "").trim()}`);
   const fingerprints = result.stdout.split(/\r?\n/)
     .filter((line) => line.startsWith("fpr:"))
     .map((line) => line.split(":")[9]);
@@ -221,9 +281,10 @@ function verifyInRelease(inReleasePath, keyPath, expectedFingerprint) {
   // gpgv does not enforce pinned-key expiry/revocation; key rotation must be tracked in-repo.
   const result = childProcess.spawnSync(
     "gpgv", ["--keyring", keyPath, inReleasePath],
-    { encoding: "utf8" },
+    { encoding: "utf8", timeout: 10000, maxBuffer: 1 << 20 },
   );
-  if (result.status !== 0) throw new Error(`InRelease signature verification failed: ${result.stderr.trim()}`);
+  if (result.error && result.error.code === "ETIMEDOUT") throw new Error(`InRelease signature verification failed: timed out`);
+  if (result.status !== 0) throw new Error(`InRelease signature verification failed: ${(result.stderr || "").trim()}`);
   return extractClearSignedPayload(fs.readFileSync(inReleasePath, "utf8"));
 }
 
@@ -236,11 +297,29 @@ async function resolveUpstreamPackage(options) {
   }
   const architecture = mapMachineArch(options.architecture);
   const repository = String(options.repository).replace(/\/+$/, "");
+  {
+    const u = new URL(repository);
+    if (u.protocol !== "https:" || u.search || u.hash) throw new Error("URL must be https without query/hash: " + repository);
+  }
   const outputDir = path.resolve(options.outputDir);
   fs.mkdirSync(outputDir, { recursive: true });
+  if (!path.resolve(options.metadataPath).startsWith(path.resolve(options.outputDir) + path.sep) && path.resolve(options.metadataPath) !== path.resolve(options.outputDir)) throw new Error("metadataPath must be inside outputDir");
+  if (options.keyBase64Path) {
+    if (!path.resolve(options.keyBase64Path).startsWith(path.resolve(options.outputDir) + path.sep) && path.resolve(options.keyBase64Path) !== path.resolve(options.outputDir)) {
+      // Key outside outputDir - ensure not traversing outside repo and file exists safely
+      const resolvedKey = path.resolve(options.keyBase64Path);
+      if (resolvedKey.includes("..") || !fs.existsSync(resolvedKey)) throw new Error("keyBase64Path must be inside outputDir or a safe existing path");
+      const repoRoot = path.resolve(process.cwd());
+      if (!resolvedKey.startsWith(repoRoot + path.sep) && resolvedKey !== repoRoot) throw new Error("keyBase64Path must be inside outputDir");
+    }
+    const stat = fs.statSync(options.keyBase64Path);
+    if (stat.size > 1024 * 1024) throw new Error("keyBase64 too large");
+  }
 
   const keyPath = path.join(outputDir, "repository-key.gpg");
-  const keyBase64 = fs.readFileSync(options.keyBase64Path, "utf8").replace(/\s+/g, "");
+  const rawKeyBase64 = fs.readFileSync(options.keyBase64Path, "utf8");
+  if (!/^[A-Za-z0-9+/=\s]+$/.test(rawKeyBase64)) throw new Error("keyBase64 contains invalid characters");
+  const keyBase64 = rawKeyBase64.replace(/\s+/g, "");
   writeFileAtomic(keyPath, Buffer.from(keyBase64, "base64"));
 
   const inReleasePath = path.join(outputDir, "InRelease");
