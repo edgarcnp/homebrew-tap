@@ -30,22 +30,12 @@ cask "opencode-desktop" do
     end
   end
 
-  depends_on :linux
   auto_updates false
-
-  caveats <<~EOS
-    This cask installs an AppImage that requires unprivileged user namespaces or FUSE.
-    On some systems you may need to enable unprivileged_userns_clone or install FUSE3.
-  EOS
+  depends_on :linux
 
   app_image "opencode-desktop-#{version}-#{arch}.AppImage"
   binary "opencode-desktop-#{version}-#{arch}.AppImage", target: "opencode-desktop"
   artifact "opencode-desktop.desktop", target: "#{Dir.home}/.local/share/applications/opencode-desktop.desktop"
-
-  uninstall delete: [
-    "#{Dir.home}/.local/share/applications/opencode-desktop.desktop",
-    "#{Dir.home}/.local/share/icons/hicolor/128x128/apps/opencode-desktop.png",
-  ]
 
   preflight do
     FileUtils.chmod "+x", staged_path/"opencode-desktop-#{version}-#{arch}.AppImage"
@@ -78,6 +68,11 @@ cask "opencode-desktop" do
     EOS
   end
 
+  uninstall delete: [
+    "#{Dir.home}/.local/share/applications/opencode-desktop.desktop",
+    "#{Dir.home}/.local/share/icons/hicolor/128x128/apps/opencode-desktop.png",
+  ]
+
   zap trash: [
     "~/.cache/ai.opencode.desktop",
     "~/.config/ai.opencode.desktop",
@@ -85,4 +80,9 @@ cask "opencode-desktop" do
     "~/.local/share/applications/opencode-desktop.desktop",
     "~/.local/share/icons/hicolor/128x128/apps/opencode-desktop.png",
   ]
+
+  caveats <<~EOS
+    This cask installs an AppImage that requires unprivileged user namespaces or FUSE.
+    On some systems you may need to enable unprivileged_userns_clone or install FUSE3.
+  EOS
 end
