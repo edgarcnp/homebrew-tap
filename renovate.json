@@ -20,7 +20,7 @@
     ],
     "rollbackPrs": true,
     "schedule": [
-        "* * * * *"
+        "before 4am on monday"
     ],
     "vulnerabilityAlerts": {
         "groupName": null,
@@ -32,6 +32,9 @@
         "branchTopic": "{{{datasource}}}-{{{depNameSanitized}}}-vulnerability",
         "prCreation": "immediate",
         "vulnerabilityFixStrategy": "lowest"
+    },
+    "docker": {
+        "enabled": true
     },
     "packageRules": [
         {
@@ -69,6 +72,17 @@
             ],
             "datasourceTemplate": "github-releases",
             "depNameTemplate": "linuxdeploy/linuxdeploy"
+        },
+        {
+            "customType": "regex",
+            "managerFilePatterns": [
+                "\\.github/workflows/tests\\.yml$"
+            ],
+            "matchStrings": [
+                "rhysd/actionlint.*?v(?<currentValue>[\\d\\.]+)"
+            ],
+            "datasourceTemplate": "github-releases",
+            "depNameTemplate": "rhysd/actionlint"
         }
     ]
 }

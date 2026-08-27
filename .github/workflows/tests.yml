@@ -40,11 +40,11 @@ jobs:
         # os: [ macos-26 ]
         include:
           - container:
-              image: ghcr.io/homebrew/brew:main
+              image: ghcr.io/homebrew/brew:main@sha256:ae15a6ca4bd9079c89054e1adab6f076cb062db640df166a40a538ea99a1e5cc
               options: --privileged
     runs-on: ${{ matrix.os }}
     timeout-minutes: 40
-    container: ${{ fromJSON(toJSON(matrix.container)) }} # zizmor: ignore[unpinned-images]
+    container: ${{ fromJSON(toJSON(matrix.container)) }}
     permissions:
       actions: read
       checks: read
@@ -91,20 +91,14 @@ jobs:
         env:
           TAP_REPO: ${{ github.repository }}
         run: |
-          # latest release, verified against the sha256 checksums file
-          # shipped alongside the binaries in the same release
-          version="$(curl -fsSL -o /dev/null -w '%{url_effective}' https://github.com/rhysd/actionlint/releases/latest | sed 's#.*/v##')"
+          # pinned actionlint version - update ACTIONLINT_VERSION and ACTIONLINT_SHA256 together
+          # rhysd/actionlint v1.7.8
+          ACTIONLINT_VERSION="1.7.8"
+          ACTIONLINT_SHA256="be92c2652ab7b6d08425428797ceabeb16e31a781c07bc388456b4e592f3e36a"
           curl -fL --retry 5 --retry-all-errors --retry-delay 5 \
             -o /tmp/actionlint.tar.gz \
-            "https://github.com/rhysd/actionlint/releases/download/v${version}/actionlint_${version}_linux_amd64.tar.gz"
-          curl -fL --retry 5 --retry-all-errors --retry-delay 5 \
-            -o /tmp/actionlint-checksums.txt \
-            "https://github.com/rhysd/actionlint/releases/download/v${version}/actionlint_${version}_checksums.txt"
-          test -s /tmp/actionlint.tar.gz
-          test -s /tmp/actionlint-checksums.txt
-          expected="$(grep -F "actionlint_${version}_linux_amd64.tar.gz" /tmp/actionlint-checksums.txt | awk '{print $1}')"
-          got="$(sha256sum /tmp/actionlint.tar.gz | awk '{print $1}')"
-          [ "$expected" = "$got" ] || { echo "actionlint checksum mismatch: got $got, expected $expected" >&2; exit 1; }
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          echo "${ACTIONLINT_SHA256}  /tmp/actionlint.tar.gz" | sha256sum -c -
           tar -C /tmp -xzf /tmp/actionlint.tar.gz actionlint
           cd "$(brew --repository "$TAP_REPO")"
           /tmp/actionlint -color .github/workflows/build-appimage.yml .github/workflows/build-vscode.yml .github/workflows/build-gitbutler.yml .github/workflows/build-opencode-desktop.yml .github/workflows/cask-smoke.yml .github/workflows/tests.yml .github/workflows/autobump.yml .github/workflows/publish.yml

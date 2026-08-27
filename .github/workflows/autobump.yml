@@ -11,6 +11,10 @@ on:
     # Every day at 22:15 UTC
     - cron: 15 22 * * *
 
+concurrency:
+  group: autobump
+  cancel-in-progress: false
+
 permissions: {}
 
 defaults:
