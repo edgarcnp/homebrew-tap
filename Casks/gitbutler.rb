@@ -30,23 +30,13 @@ cask "gitbutler" do
     end
   end
 
-  depends_on :linux
   auto_updates false
-
-  caveats <<~EOS
-    This cask installs an AppImage that requires unprivileged user namespaces or FUSE.
-    On some systems you may need to enable unprivileged_userns_clone or install FUSE3.
-  EOS
+  depends_on :linux
 
   app_image "gitbutler-#{version}-#{arch}.AppImage"
   binary "gitbutler-#{version}-#{arch}.AppImage", target: "gitbutler-tauri"
   binary "gitbutler-#{version}-#{arch}.AppImage", target: "but"
   artifact "gitbutler.desktop", target: "#{Dir.home}/.local/share/applications/gitbutler.desktop"
-
-  uninstall delete: [
-    "#{Dir.home}/.local/share/applications/gitbutler.desktop",
-    "#{Dir.home}/.local/share/icons/hicolor/256x256/apps/gitbutler.png",
-  ]
 
   preflight do
     FileUtils.chmod "+x", staged_path/"gitbutler-#{version}-#{arch}.AppImage"
@@ -79,6 +69,11 @@ cask "gitbutler" do
     EOS
   end
 
+  uninstall delete: [
+    "#{Dir.home}/.local/share/applications/gitbutler.desktop",
+    "#{Dir.home}/.local/share/icons/hicolor/256x256/apps/gitbutler.png",
+  ]
+
   zap trash: [
     "~/.cache/gitbutler",
     "~/.config/gitbutler",
@@ -86,4 +81,9 @@ cask "gitbutler" do
     "~/.local/share/gitbutler",
     "~/.local/share/icons/hicolor/256x256/apps/gitbutler.png",
   ]
+
+  caveats <<~EOS
+    This cask installs an AppImage that requires unprivileged user namespaces or FUSE.
+    On some systems you may need to enable unprivileged_userns_clone or install FUSE3.
+  EOS
 end

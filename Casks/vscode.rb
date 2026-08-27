@@ -6,7 +6,7 @@ cask "vscode" do
          x86_64_linux: "58f5010f5a697cfec72481c9d6161d4585abf6cc6a29fda1beaa2fa62701a06b"
 
   url "https://github.com/edgarcnp/homebrew-tap/releases/download/vscode-v#{version}/vscode-#{version}-#{arch}.AppImage",
-       verified: "github.com/edgarcnp/homebrew-tap"
+      verified: "github.com/edgarcnp/homebrew-tap"
   name "Visual Studio Code"
   desc "Repackage of Visual Studio Code as an AppImage"
   homepage "https://code.visualstudio.com/"
@@ -30,23 +30,13 @@ cask "vscode" do
     end
   end
 
-  depends_on :linux
   auto_updates false
   conflicts_with cask: ["visual-studio-code", "code", "vscodium"]
-
-  caveats <<~EOS
-    This cask installs an AppImage that requires unprivileged user namespaces or FUSE.
-    On some systems you may need to enable unprivileged_userns_clone or install FUSE3.
-  EOS
+  depends_on :linux
 
   app_image "vscode-#{version}-#{arch}.AppImage"
   binary "vscode-#{version}-#{arch}.AppImage", target: "code"
   artifact "vscode.desktop", target: "#{Dir.home}/.local/share/applications/vscode.desktop"
-
-  uninstall delete: [
-    "#{Dir.home}/.local/share/applications/vscode.desktop",
-    "#{Dir.home}/.local/share/icons/hicolor/256x256/apps/vscode.png",
-  ]
 
   preflight do
     FileUtils.chmod "+x", staged_path/"vscode-#{version}-#{arch}.AppImage"
@@ -79,6 +69,11 @@ cask "vscode" do
     EOS
   end
 
+  uninstall delete: [
+    "#{Dir.home}/.local/share/applications/vscode.desktop",
+    "#{Dir.home}/.local/share/icons/hicolor/256x256/apps/vscode.png",
+  ]
+
   zap trash: [
     "~/.cache/Code",
     "~/.config/Code",
@@ -86,4 +81,9 @@ cask "vscode" do
     "~/.local/share/icons/hicolor/256x256/apps/vscode.png",
     "~/.vscode",
   ]
+
+  caveats <<~EOS
+    This cask installs an AppImage that requires unprivileged user namespaces or FUSE.
+    On some systems you may need to enable unprivileged_userns_clone or install FUSE3.
+  EOS
 end
