@@ -50,6 +50,23 @@ prepare_appdir() {
   ensure_file_exists "${code_dir}/code" "code runtime"
   ensure_file_exists "${icon}" "vscode icon"
 
+  # Remove the update service URL from product.json so VS Code's built-in
+  # updater is disabled; updates come via Homebrew only.
+  local product_json="${code_dir}/resources/app/product.json"
+  ensure_file_exists "${product_json}" "vscode product.json"
+  node -e '
+    const fs = require("fs")
+    const p = process.argv[1]
+    const json = JSON.parse(fs.readFileSync(p, "utf8"))
+    if ("updateUrl" in json) {
+      delete json.updateUrl
+      fs.writeFileSync(p, JSON.stringify(json, null, "\t") + "\n")
+      console.error("[INFO] Removed updateUrl from product.json")
+    } else {
+      console.error("[INFO] product.json has no updateUrl; updater already disabled")
+    }
+  ' "${product_json}"
+
   info "Preparing AppDir at ${APPDIR}"
   rm -rf -- "${APPDIR}"
   mkdir -p -- \
