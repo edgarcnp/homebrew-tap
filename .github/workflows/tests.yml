@@ -2,15 +2,6 @@
 name: brew test-bot
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - "Casks/**"
-      - "Formula/**"
-      - ".github/workflows/**"
-      - "packaging/**"
-      - "renovate.json"
   pull_request:
     paths:
       - "Casks/**"
@@ -45,9 +36,6 @@ jobs:
     timeout-minutes: 40
     container:
       image: ${{ fromJSON(toJSON(matrix.container)).image }}
-      # --privileged only on trusted branches (push): fork PRs run untrusted
-      # cask Ruby via brew audit/test-bot, so they must run unprivileged
-      options: ${{ github.event_name != 'pull_request' && '--privileged' || '' }}
     permissions:
       actions: read
       checks: read
