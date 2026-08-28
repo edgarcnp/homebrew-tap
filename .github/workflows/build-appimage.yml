@@ -485,95 +485,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - name: Update cask version and checksums
-        env:
-          PACKAGE_VERSION: ${{ needs.detect.outputs.version }}
-          GH_TOKEN: ${{ github.token }}
-          TAG_PREFIX: ${{ inputs.tag_prefix }}
-          ASSET_PREFIX: ${{ inputs.asset_prefix }}
-          APP_CASK: ${{ inputs.app_cask }}
-        run: |
-          [[ "$PACKAGE_VERSION" =~ ^[0-9A-Za-z._-]+$ ]] || { echo "invalid version: $PACKAGE_VERSION" >&2; exit 1; }
-          # Only trust release assets from a release this pipeline's own bot
-          # account published as a final (non-draft, non-prerelease) release;
-          # assets re-uploaded by anyone with contents:write have no
-          # provenance and must never be pinned into the cask.
-          release_meta="$(gh release view "${TAG_PREFIX}${PACKAGE_VERSION}" \
-            --repo "$GITHUB_REPOSITORY" --json author,isDraft,isPrerelease \
-            --jq '[.author.login, (.isDraft|tostring), (.isPrerelease|tostring)] | join(" ")')"
-          read -r release_author release_draft release_prerelease <<<"${release_meta}"
-          if [[ "${release_author}" != "github-actions[bot]" \
-            || "${release_draft}" == "true" \
-            || "${release_prerelease}" == "true" ]]; then
-            echo "warning: release ${TAG_PREFIX}${PACKAGE_VERSION} (author=${release_author}, draft=${release_draft}, prerelease=${release_prerelease}) is not a trusted bot release; not pinning cask, rebuild required" >&2
-            exit 1
-          fi
-          # hash the released assets, not the run artifacts, so the cask
-          # always matches what the release actually hosts
-          gh release download "${TAG_PREFIX}${PACKAGE_VERSION}" \
-            --repo "$GITHUB_REPOSITORY" \
-            --pattern "${ASSET_PREFIX}-*-x86_64.AppImage" \
-            --pattern "${ASSET_PREFIX}-*-aarch64.AppImage" \
-            --dir assets --clobber
-          x86_64_sha="$(sha256sum assets/"${ASSET_PREFIX}"-*-x86_64.AppImage | awk '{print $1}')"
-          arm64_sha="$(sha256sum assets/"${ASSET_PREFIX}"-*-aarch64.AppImage | awk '{print $1}')"
-          python3 - "$PACKAGE_VERSION" "$x86_64_sha" "$arm64_sha" <<'PY'
-          import os
-          import re
-          import sys
-
-          version, x64, arm = sys.argv[1], sys.argv[2], sys.argv[3]
-          path = f"Casks/{os.environ['APP_CASK']}.rb"
-          text = open(path, encoding="utf-8").read()
-          text, n = re.subn(r'^(\s*)version "[^"]*"', rf'\1version "{version}"', text, count=1, flags=re.M)
-          if n != 1:
-              print(f"no cask version pattern found in {path}", file=sys.stderr)
-              sys.exit(1)
-          text, n = re.subn(r'(x86_64_linux:\s*")[0-9a-f]{64}(")', rf"\g<1>{x64}\g<2>", text, count=1)
-          if n != 1:
-              print(f"no x86_64_linux sha256 pattern found in {path}", file=sys.stderr)
-              sys.exit(1)
-          text, n = re.subn(r'(arm64_linux:\s*")[0-9a-f]{64}(")', rf"\g<1>{arm}\g<2>", text, count=1)
-          if n != 1:
-              print(f"no arm64_linux sha256 pattern found in {path}", file=sys.stderr)
-              sys.exit(1)
-          open(path, "w", encoding="utf-8").write(text)
-          PY
-      - name: Commit and push cask update
-        env:
-          GH_TOKEN: ${{ github.token }}
-          APP_CASK: ${{ inputs.app_cask }}
-          PACKAGE_VERSION: ${{ needs.detect.outputs.version }}
-        run: |
-          # no author/committer fields: the token identity (github-actions[bot])
-          # becomes author/committer and GitHub auto-signs the commit
-          base="$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq .commit.sha)"
-          for _ in 1 2 3 4 5; do
-            blob="$(gh api --method POST "repos/$GITHUB_REPOSITORY/git/blobs" \
-              -F encoding=utf-8 -F content=@"Casks/${APP_CASK}.rb" --jq .sha)"
-            base_tree="$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$base" --jq .tree.sha)"
-            tree="$(gh api --method POST "repos/$GITHUB_REPOSITORY/git/trees" \
-              -f base_tree="$base_tree" \
-              -f "tree[][path]=Casks/${APP_CASK}.rb" \
-              -f "tree[][mode]=100644" \
-              -f "tree[][type]=blob" \
-              -f "tree[][sha]=$blob" \
-              --jq .sha)"
-            commit="$(gh api --method POST "repos/$GITHUB_REPOSITORY/git/commits" \
-              -f message="chore(cask): update ${APP_CASK} to ${PACKAGE_VERSION}" \
-              -f tree="$tree" -f "parents[]=$base" --jq .sha)"
-            if gh api --method PATCH "repos/$GITHUB_REPOSITORY/git/refs/heads/main" \
-              -f sha="$commit" --silent; then
-              echo "pushed cask update ${commit}"
-              exit 0
-            fi
-            # concurrent runs may advance the branch between read and write;
-            # rebase onto the new head and retry (422 fast-forward rejection)
-            sleep 10
-            base="$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq .commit.sha)"
-          done
-          echo "could not push cask update after 5 attempts" >&2
-          exit 1
+      - name: Pin cask to published release
+        uses: ./.github/actions/update-cask
+        with:
+          package_version: ${{ needs.detect.outputs.version }}
+          tag_prefix: ${{ inputs.tag_prefix }}
+          asset_prefix: ${{ inputs.asset_prefix }}
+          app_cask: ${{ inputs.app_cask }}
+          token: ${{ github.token }}
 
   repair-cask:
     needs: detect
@@ -589,90 +508,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - name: Catch cask up to existing release
-        env:
-          PACKAGE_VERSION: ${{ needs.detect.outputs.version }}
-          GH_TOKEN: ${{ github.token }}
-          TAG_PREFIX: ${{ inputs.tag_prefix }}
-          ASSET_PREFIX: ${{ inputs.asset_prefix }}
-          APP_CASK: ${{ inputs.app_cask }}
-        run: |
-          [[ "$PACKAGE_VERSION" =~ ^[0-9A-Za-z._-]+$ ]] || { echo "invalid version: $PACKAGE_VERSION" >&2; exit 1; }
-          # Only trust release assets from a release this pipeline's own bot
-          # account published as a final (non-draft, non-prerelease) release;
-          # assets re-uploaded by anyone with contents:write have no
-          # provenance and must never be pinned into the cask.
-          release_meta="$(gh release view "${TAG_PREFIX}${PACKAGE_VERSION}" \
-            --repo "$GITHUB_REPOSITORY" --json author,isDraft,isPrerelease \
-            --jq '[.author.login, (.isDraft|tostring), (.isPrerelease|tostring)] | join(" ")')"
-          read -r release_author release_draft release_prerelease <<<"${release_meta}"
-          if [[ "${release_author}" != "github-actions[bot]" \
-            || "${release_draft}" == "true" \
-            || "${release_prerelease}" == "true" ]]; then
-            echo "warning: release ${TAG_PREFIX}${PACKAGE_VERSION} (author=${release_author}, draft=${release_draft}, prerelease=${release_prerelease}) is not a trusted bot release; not pinning cask, rebuild required" >&2
-            exit 1
-          fi
-          gh release download "${TAG_PREFIX}${PACKAGE_VERSION}" \
-            --repo "$GITHUB_REPOSITORY" \
-            --pattern "${ASSET_PREFIX}-*-x86_64.AppImage" \
-            --pattern "${ASSET_PREFIX}-*-aarch64.AppImage" \
-            --dir assets --clobber
-          x86_64_sha="$(sha256sum assets/"${ASSET_PREFIX}"-*-x86_64.AppImage | awk '{print $1}')"
-          arm64_sha="$(sha256sum assets/"${ASSET_PREFIX}"-*-aarch64.AppImage | awk '{print $1}')"
-          python3 - "$PACKAGE_VERSION" "$x86_64_sha" "$arm64_sha" <<'PY'
-          import os
-          import re
-          import sys
-
-          version, x64, arm = sys.argv[1], sys.argv[2], sys.argv[3]
-          path = f"Casks/{os.environ['APP_CASK']}.rb"
-          text = open(path, encoding="utf-8").read()
-          text, n = re.subn(r'^(\s*)version "[^"]*"', rf'\1version "{version}"', text, count=1, flags=re.M)
-          if n != 1:
-              print(f"no cask version pattern found in {path}", file=sys.stderr)
-              sys.exit(1)
-          text, n = re.subn(r'(x86_64_linux:\s*")[0-9a-f]{64}(")', rf"\g<1>{x64}\g<2>", text, count=1)
-          if n != 1:
-              print(f"no x86_64_linux sha256 pattern found in {path}", file=sys.stderr)
-              sys.exit(1)
-          text, n = re.subn(r'(arm64_linux:\s*")[0-9a-f]{64}(")', rf"\g<1>{arm}\g<2>", text, count=1)
-          if n != 1:
-              print(f"no arm64_linux sha256 pattern found in {path}", file=sys.stderr)
-              sys.exit(1)
-          open(path, "w", encoding="utf-8").write(text)
-          PY
-      - name: Commit and push cask update
-        env:
-          GH_TOKEN: ${{ github.token }}
-          APP_CASK: ${{ inputs.app_cask }}
-          PACKAGE_VERSION: ${{ needs.detect.outputs.version }}
-        run: |
-          # no author/committer fields: the token identity (github-actions[bot])
-          # becomes author/committer and GitHub auto-signs the commit
-          base="$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq .commit.sha)"
-          for _ in 1 2 3 4 5; do
-            blob="$(gh api --method POST "repos/$GITHUB_REPOSITORY/git/blobs" \
-              -F encoding=utf-8 -F content=@"Casks/${APP_CASK}.rb" --jq .sha)"
-            base_tree="$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$base" --jq .tree.sha)"
-            tree="$(gh api --method POST "repos/$GITHUB_REPOSITORY/git/trees" \
-              -f base_tree="$base_tree" \
-              -f "tree[][path]=Casks/${APP_CASK}.rb" \
-              -f "tree[][mode]=100644" \
-              -f "tree[][type]=blob" \
-              -f "tree[][sha]=$blob" \
-              --jq .sha)"
-            commit="$(gh api --method POST "repos/$GITHUB_REPOSITORY/git/commits" \
-              -f message="chore(cask): update ${APP_CASK} to ${PACKAGE_VERSION}" \
-              -f tree="$tree" -f "parents[]=$base" --jq .sha)"
-            if gh api --method PATCH "repos/$GITHUB_REPOSITORY/git/refs/heads/main" \
-              -f sha="$commit" --silent; then
-              echo "pushed cask update ${commit}"
-              exit 0
-            fi
-            # concurrent runs may advance the branch between read and write;
-            # rebase onto the new head and retry (422 fast-forward rejection)
-            sleep 10
-            base="$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq .commit.sha)"
-          done
-          echo "could not push cask update after 5 attempts" >&2
-          exit 1
+      - name: Pin cask to published release
+        uses: ./.github/actions/update-cask
+        with:
+          package_version: ${{ needs.detect.outputs.version }}
+          tag_prefix: ${{ inputs.tag_prefix }}
+          asset_prefix: ${{ inputs.asset_prefix }}
+          app_cask: ${{ inputs.app_cask }}
+          token: ${{ github.token }}
