@@ -16,7 +16,11 @@ on code.visualstudio.com, so the full verification chain applies:
 3. `scripts/build-appimage.sh` — extracts the `.deb`, stages an AppDir
    (AppRun, desktop entry, icon) and builds the AppImage with the FUSE3-native
    uruntime `appimagetool` (pkgforge fork; the `../scripts/appimagetool-uruntime.sh`
-   shim keeps the upstream `appimagetool` invocation working).
+   shim keeps the upstream `appimagetool` invocation working). The built-in
+   updater is disabled because brew owns updates: `updateUrl` is removed from
+   `product.json`, and the whole AppDir is scanned for residual references to
+   `update.code.visualstudio.com` (`verify_updater_neutralized`) so a second
+   copy can never silently re-enable it.
 
 The cask version uses the upstream version (e.g. `1.133.0`), not the
 `.deb` build epoch suffix (e.g. `1.133.0-1786487972`), which differs between
