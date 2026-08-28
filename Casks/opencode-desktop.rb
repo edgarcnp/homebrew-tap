@@ -5,6 +5,10 @@ cask "opencode-desktop" do
   sha256 arm64_linux:  "b0ebfa68bd22c3ea5d1991ff85babc89265f1324aa311b6597e2ab4a6d2285fb",
          x86_64_linux: "a6b2439a6ed13747e880504fb795ef5efd69523aa834b276b5c6fdc153e32896"
 
+  xdg_data_home = ENV.fetch("XDG_DATA_HOME", File.join(Dir.home, ".local", "share"))
+  xdg_config_home = ENV.fetch("XDG_CONFIG_HOME", File.join(Dir.home, ".config"))
+  xdg_cache_home = ENV.fetch("XDG_CACHE_HOME", File.join(Dir.home, ".cache"))
+
   url "https://github.com/edgarcnp/homebrew-tap/releases/download/opencode-desktop-v#{version}/opencode-desktop-#{version}-#{arch}.AppImage",
       verified: "github.com/edgarcnp/homebrew-tap"
   name "OpenCode Desktop"
@@ -41,8 +45,8 @@ cask "opencode-desktop" do
     system(staged_path/"opencode-desktop-#{version}-#{arch}.AppImage", "--appimage-extract",
            chdir: staged_path) || odie("AppImage extraction failed")
 
-    icon_dir = "#{Dir.home}/.local/share/icons/hicolor/128x128/apps" # 128x128 per upstream build-appimage.sh:58-59
-    applications_dir = "#{Dir.home}/.local/share/applications"
+    icon_dir = "#{xdg_data_home}/icons/hicolor/128x128/apps" # 128x128 per upstream build-appimage.sh:58-59
+    applications_dir = "#{xdg_data_home}/applications"
     FileUtils.mkdir_p [icon_dir, applications_dir]
 
     icon_source = staged_path/"squashfs-root/opencode-desktop.png"
@@ -68,16 +72,16 @@ cask "opencode-desktop" do
   end
 
   uninstall trash: [
-    "#{Dir.home}/.local/share/applications/opencode-desktop.desktop",
-    "#{Dir.home}/.local/share/icons/hicolor/128x128/apps/opencode-desktop.png",
+    "#{xdg_data_home}/applications/opencode-desktop.desktop",
+    "#{xdg_data_home}/icons/hicolor/128x128/apps/opencode-desktop.png",
   ]
 
   zap trash: [
-    "~/.cache/ai.opencode.desktop",
-    "~/.config/ai.opencode.desktop",
-    "~/.local/share/ai.opencode.desktop",
-    "~/.local/share/applications/opencode-desktop.desktop",
-    "~/.local/share/icons/hicolor/128x128/apps/opencode-desktop.png",
+    "#{xdg_cache_home}/ai.opencode.desktop",
+    "#{xdg_config_home}/ai.opencode.desktop",
+    "#{xdg_data_home}/ai.opencode.desktop",
+    "#{xdg_data_home}/applications/opencode-desktop.desktop",
+    "#{xdg_data_home}/icons/hicolor/128x128/apps/opencode-desktop.png",
   ]
 
   caveats <<~EOS

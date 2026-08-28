@@ -251,10 +251,14 @@ async function fetchWithRetry(url, timeoutMs) {
 }
 
 async function download(url, destination, timeoutMs = 30000) {
+  const requestUrl = new URL(url);
+  if (requestUrl.protocol !== "https:") throw new Error(`URL must be https: ${url}`);
+  const expectedHost = requestUrl.hostname;
   const response = await fetchWithRetry(url, timeoutMs);
   if (!response.ok) throw new Error(`Download failed (${response.status}) for ${url}`);
   const finalUrl = new URL(response.url);
   if (finalUrl.protocol !== "https:") throw new Error(`Download redirected to non-HTTPS URL (${finalUrl.protocol}) for ${url}`);
+  if (finalUrl.hostname !== expectedHost) throw new Error(`Download redirected to unexpected host (${finalUrl.hostname}) for ${url}`);
   const contentLength = response.headers.get("content-length");
   if (contentLength && Number(contentLength) > MAX_PAYLOAD_BYTES) throw new Error(`Payload too large (${contentLength} bytes) for ${url}`);
   const bytes = await readPayload(response);
@@ -305,14 +309,17 @@ async function resolveUpstreamPackage(options) {
   fs.mkdirSync(outputDir, { recursive: true });
   if (!path.resolve(options.metadataPath).startsWith(path.resolve(options.outputDir) + path.sep) && path.resolve(options.metadataPath) !== path.resolve(options.outputDir)) throw new Error("metadataPath must be inside outputDir");
   if (options.keyBase64Path) {
-    if (!path.resolve(options.keyBase64Path).startsWith(path.resolve(options.outputDir) + path.sep) && path.resolve(options.keyBase64Path) !== path.resolve(options.outputDir)) {
-      // Key outside outputDir - ensure not traversing outside repo and file exists safely
-      const resolvedKey = path.resolve(options.keyBase64Path);
-      if (resolvedKey.includes("..") || !fs.existsSync(resolvedKey)) throw new Error("keyBase64Path must be inside outputDir or a safe existing path");
-      const repoRoot = path.resolve(process.cwd());
-      if (!resolvedKey.startsWith(repoRoot + path.sep) && resolvedKey !== repoRoot) throw new Error("keyBase64Path must be inside outputDir");
-    }
-    const stat = fs.statSync(options.keyBase64Path);
+    const resolvedKey = path.resolve(options.keyBase64Path);
+    const resolvedOut = path.resolve(options.outputDir);
+    // The key may live in the tap repository itself (outside the scratch
+    // outputDir); derive the repo root from this file's location so the
+    // containment check does not depend on the caller's working directory.
+    const repoRoot = path.resolve(__dirname, "..", "..");
+    const insideOutput = resolvedKey.startsWith(resolvedOut + path.sep) || resolvedKey === resolvedOut;
+    const insideRepo = resolvedKey.startsWith(repoRoot + path.sep) || resolvedKey === repoRoot;
+    if (!insideOutput && !insideRepo) throw new Error("keyBase64Path must be inside outputDir or the tap repository");
+    const stat = fs.statSync(resolvedKey);
+    if (!stat.isFile()) throw new Error("keyBase64Path is not a regular file");
     if (stat.size > 1024 * 1024) throw new Error("keyBase64 too large");
   }
 

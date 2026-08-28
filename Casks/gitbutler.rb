@@ -5,6 +5,10 @@ cask "gitbutler" do
   sha256 arm64_linux:  "418a75523cd0adf1a74b3579c85afc08d0fcab78bbc26cc8b74db755cccd3f03",
          x86_64_linux: "06f80ba50cc2c73d99d83c3d998c997f2532aae2498145fbe369f355d737b7b2"
 
+  xdg_data_home = ENV.fetch("XDG_DATA_HOME", File.join(Dir.home, ".local", "share"))
+  xdg_config_home = ENV.fetch("XDG_CONFIG_HOME", File.join(Dir.home, ".config"))
+  xdg_cache_home = ENV.fetch("XDG_CACHE_HOME", File.join(Dir.home, ".cache"))
+
   url "https://github.com/edgarcnp/homebrew-tap/releases/download/gitbutler-v#{version}/gitbutler-#{version}-#{arch}.AppImage",
       verified: "github.com/edgarcnp/homebrew-tap"
   name "GitButler"
@@ -42,8 +46,8 @@ cask "gitbutler" do
     system(staged_path/"gitbutler-#{version}-#{arch}.AppImage", "--appimage-extract",
            chdir: staged_path) || odie("AppImage extraction failed")
 
-    icon_dir = "#{Dir.home}/.local/share/icons/hicolor/256x256/apps" # 256x256 per upstream build-appimage.sh
-    applications_dir = "#{Dir.home}/.local/share/applications"
+    icon_dir = "#{xdg_data_home}/icons/hicolor/256x256/apps" # 256x256 per upstream build-appimage.sh
+    applications_dir = "#{xdg_data_home}/applications"
     FileUtils.mkdir_p [icon_dir, applications_dir]
 
     icon_source = staged_path/"squashfs-root/gitbutler.png"
@@ -69,16 +73,16 @@ cask "gitbutler" do
   end
 
   uninstall trash: [
-    "#{Dir.home}/.local/share/applications/gitbutler.desktop",
-    "#{Dir.home}/.local/share/icons/hicolor/256x256/apps/gitbutler.png",
+    "#{xdg_data_home}/applications/gitbutler.desktop",
+    "#{xdg_data_home}/icons/hicolor/256x256/apps/gitbutler.png",
   ]
 
   zap trash: [
-    "~/.cache/gitbutler",
-    "~/.config/gitbutler",
-    "~/.local/share/applications/gitbutler.desktop",
-    "~/.local/share/gitbutler",
-    "~/.local/share/icons/hicolor/256x256/apps/gitbutler.png",
+    "#{xdg_cache_home}/gitbutler",
+    "#{xdg_config_home}/gitbutler",
+    "#{xdg_data_home}/applications/gitbutler.desktop",
+    "#{xdg_data_home}/gitbutler",
+    "#{xdg_data_home}/icons/hicolor/256x256/apps/gitbutler.png",
   ]
 
   caveats <<~EOS

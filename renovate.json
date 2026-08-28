@@ -72,17 +72,6 @@
             ],
             "datasourceTemplate": "github-releases",
             "depNameTemplate": "linuxdeploy/linuxdeploy"
-        },
-        {
-            "customType": "regex",
-            "managerFilePatterns": [
-                "\\.github/workflows/tests\\.yml$"
-            ],
-            "matchStrings": [
-                "rhysd/actionlint.*?v(?<currentValue>[\\d\\.]+)"
-            ],
-            "datasourceTemplate": "github-releases",
-            "depNameTemplate": "rhysd/actionlint"
         }
     ]
 }
