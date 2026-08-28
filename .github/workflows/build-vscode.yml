@@ -14,7 +14,9 @@ permissions: {}
 jobs:
   build:
     permissions:
+      attestations: write
       contents: write
+      id-token: write
     uses: ./.github/workflows/build-appimage.yml
     with:
       app_cask: vscode
