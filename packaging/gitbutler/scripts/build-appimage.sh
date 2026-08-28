@@ -318,6 +318,7 @@ main() {
 
   local deb_path metadata_path
   info "Resolving git-butler package for ${deb_arch}"
+  # shellcheck disable=SC2154 # WORK_DIR is set by setup_work_dir from package-common.sh
   metadata_path="${WORK_DIR}/metadata.json"
   deb_path="$(node "${RESOLVE_SCRIPT}" \
     --output-dir "${WORK_DIR}" \
