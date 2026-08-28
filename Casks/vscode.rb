@@ -29,15 +29,15 @@ cask "vscode" do
   preflight do
     CaskHelpers.extract_appimage(staged_path/"vscode-#{version}-#{arch}.AppImage")
     CaskHelpers.install_desktop_integration(
-      app_name: "vscode",
+      app_name:  "vscode",
       icon_path: staged_path/"squashfs-root/vscode.png",
-      icon_dir: "#{CaskHelpers.xdg_data_home}/icons/hicolor/256x256/apps",
-      entry: CaskHelpers.desktop_entry(
-        name: "Visual Studio Code",
-        comment: "Code Editing. Redefined.",
-        exec: "\"#{HOMEBREW_PREFIX}/bin/code\" %F",
-        icon: "vscode",
-        wm_class: "Code",
+      icon_dir:  "#{CaskHelpers.xdg_data_home}/icons/hicolor/256x256/apps",
+      entry:     CaskHelpers.desktop_entry(
+        name:      "Visual Studio Code",
+        comment:   "Code Editing. Redefined.",
+        exec:      "\"#{HOMEBREW_PREFIX}/bin/code\" %F",
+        icon:      "vscode",
+        wm_class:  "Code",
         mime_type: "application/x-code-workspace;",
       ),
     )
@@ -46,12 +46,12 @@ cask "vscode" do
   uninstall trash: CaskHelpers.desktop_files("vscode", icon_dir: "256x256")
 
   zap trash: [
-    *CaskHelpers.desktop_files("vscode", icon_dir: "256x256"),
-    "#{Dir.home}/.vscode-cli",
-    "#{Dir.home}/.vscode-server",
     "#{CaskHelpers.xdg_cache_home}/Code",
     "#{CaskHelpers.xdg_config_home}/Code",
+    "#{Dir.home}/.vscode-cli",
+    "#{Dir.home}/.vscode-server",
     "~/.vscode",
+    *CaskHelpers.desktop_files("vscode", icon_dir: "256x256"),
   ]
 
   caveats <<~EOS

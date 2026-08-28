@@ -21,11 +21,13 @@ APPRUN_TEMPLATE="${PACKAGING_DIR}/templates/AppRun"
 DESKTOP_TEMPLATE="${PACKAGING_DIR}/templates/gitbutler.desktop"
 setup_work_dir "gb-build"
 DIST_DIR="${DIST_DIR_OVERRIDE:-${REPO_DIR}/dist}"
-if [[ -n "${DIST_DIR_OVERRIDE:-}" ]]; then
+if [[ -n "${DIST_DIR_OVERRIDE:-}" ]]
+then
   validate_absolute_override "${DIST_DIR_OVERRIDE}" "DIST_DIR_OVERRIDE"
 fi
 APPDIR="$(resolve_appdir_override "${REPO_DIR}" "${DIST_DIR}")"
-if [[ -n "${WORK_DIR_OVERRIDE:-}" ]]; then
+if [[ -n "${WORK_DIR_OVERRIDE:-}" ]]
+then
   validate_absolute_override "${WORK_DIR_OVERRIDE}" "WORK_DIR_OVERRIDE"
 fi
 validate_package_version "${PACKAGE_VERSION:-}"
@@ -41,7 +43,8 @@ TARGET_ARCH="${TARGET_ARCH:-$(uname -m)}"
 RESOLVE_BASE_URL="${RESOLVE_BASE_URL:-https://app.gitbutler.com/downloads/release/linux}"
 
 resolve_linuxdeploy() {
-  if [[ -n "${LINUXDEPLOY:-}" ]]; then
+  if [[ -n "${LINUXDEPLOY:-}" ]]
+  then
     [[ -x "${LINUXDEPLOY}" ]] || error "LINUXDEPLOY is not executable: ${LINUXDEPLOY}"
     printf '%s\n' "${LINUXDEPLOY}"
     return 0
@@ -104,16 +107,20 @@ run_linuxdeploy() {
 bundle_webkit_helpers() {
   local webkit_dir=""
   local candidate
-  for candidate in /usr/libexec/webkit2gtk-4.1 /usr/lib/x86_64-linux-gnu/webkit2gtk-4.1 /usr/lib64/webkit2gtk-4.1; do
-    if [[ -d "${candidate}" ]]; then
+  for candidate in /usr/libexec/webkit2gtk-4.1 /usr/lib/x86_64-linux-gnu/webkit2gtk-4.1 /usr/lib64/webkit2gtk-4.1
+  do
+    if [[ -d "${candidate}" ]]
+    then
       webkit_dir="${candidate}"
       break
     fi
   done
-  if [[ -z "${webkit_dir}" ]]; then
+  if [[ -z "${webkit_dir}" ]]
+  then
     local webkit_process
     webkit_process="$(find /usr -maxdepth 4 -name WebKitWebProcess -path "*webkit2gtk*" 2>/dev/null | head -n1 || true)"
-    if [[ -n "${webkit_process}" ]]; then
+    if [[ -n "${webkit_process}" ]]
+    then
       webkit_dir="$(dirname "${webkit_process}")"
     fi
   fi
@@ -158,7 +165,8 @@ bundle_webkit_helpers() {
   mkdir -p -- "${helpers_dir}"
   cp -- "${webkit_dir}/WebKitWebProcess" "${helpers_dir}/"
   cp -- "${webkit_dir}/WebKitNetworkProcess" "${helpers_dir}/"
-  if [[ -d "${webkit_dir}/injected-bundle" ]]; then
+  if [[ -d "${webkit_dir}/injected-bundle" ]]
+  then
     cp -r -- "${webkit_dir}/injected-bundle" "${helpers_dir}/"
   fi
   info "Bundled webkit helpers from ${webkit_dir} into ${helpers_dir}"
@@ -202,7 +210,8 @@ disable_updater_endpoint() {
   }
 
   strings "${binary}" | grep -F -q -- "${to}" || error "updater endpoint patch verification failed: ${to} not found in ${binary}"
-  if strings "${binary}" | grep -F -q -- "${from}"; then
+  if strings "${binary}" | grep -F -q -- "${from}"
+  then
     error "updater endpoint patch verification failed: original endpoint ${from} still present in ${binary}"
   fi
   info "Neutralized updater endpoint: ${from} -> ${to}"
@@ -215,7 +224,8 @@ verify_updater_neutralized() {
   local from="https://app.gitbutler.com/releases/release/"
   local matches
   matches="$(grep -rlaF -- "${from}" "${APPDIR}" 2>/dev/null || true)"
-  if [[ -n "${matches}" ]]; then
+  if [[ -n "${matches}" ]]
+  then
     error "updater endpoint patch incomplete: original endpoint still present in: ${matches}"
   fi
   info "Verified no file in APPDIR still references the upstream updater endpoint"
@@ -232,9 +242,12 @@ bundle_glib_schemas() {
 bundle_gio_modules() {
   local gio_dir
   gio_dir="$(pkg-config --variable=giomoduledir gio-2.0 2>/dev/null || true)"
-  if [[ -z "${gio_dir}" || ! -d "${gio_dir}" ]]; then
-    for candidate in /usr/lib/x86_64-linux-gnu/gio/modules /usr/lib64/gio/modules; do
-      if [[ -d "${candidate}" ]]; then
+  if [[ -z "${gio_dir}" || ! -d "${gio_dir}" ]]
+  then
+    for candidate in /usr/lib/x86_64-linux-gnu/gio/modules /usr/lib64/gio/modules
+    do
+      if [[ -d "${candidate}" ]]
+      then
         gio_dir="${candidate}"
         break
       fi
@@ -254,11 +267,14 @@ bundle_gdk_pixbuf_loaders() {
   local pixbuf_module_dir
   pixbuf_module_dir="$(pkg-config --variable=gdk_pixbuf_moduledir gdk-pixbuf-2.0 2>/dev/null || true)"
   local pixbuf_dir=""
-  if [[ -n "${pixbuf_module_dir}" && -d "${pixbuf_module_dir}" ]]; then
+  if [[ -n "${pixbuf_module_dir}" && -d "${pixbuf_module_dir}" ]]
+  then
     pixbuf_dir="$(dirname "${pixbuf_module_dir}")"
   else
-    for candidate in /usr/lib/x86_64-linux-gnu/gdk-pixbuf-2.0/2.10.0 /usr/lib64/gdk-pixbuf-2.0/2.10.0; do
-      if [[ -d "${candidate}" ]]; then
+    for candidate in /usr/lib/x86_64-linux-gnu/gdk-pixbuf-2.0/2.10.0 /usr/lib64/gdk-pixbuf-2.0/2.10.0
+    do
+      if [[ -d "${candidate}" ]]
+      then
         pixbuf_dir="${candidate}"
         break
       fi
@@ -271,7 +287,8 @@ bundle_gdk_pixbuf_loaders() {
   ((${#_pix_so[@]})) || error "No GDK pixbuf loaders found in ${pixbuf_dir}/loaders"
   shopt -u nullglob
   cp -- "${_pix_so[@]}" "${APPDIR}/usr/lib/gdk-pixbuf-2.0/2.10.0/loaders/"
-  if command -v gdk-pixbuf-query-loaders >/dev/null 2>&1; then
+  if command -v gdk-pixbuf-query-loaders >/dev/null 2>&1
+  then
     GDK_PIXBUF_MODULEDIR="${APPDIR}/usr/lib/gdk-pixbuf-2.0/2.10.0/loaders" \
       gdk-pixbuf-query-loaders >"${APPDIR}/usr/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache"
   fi
@@ -310,7 +327,8 @@ main() {
 
   local resolved_version
   resolved_version="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).version' "${metadata_path}")"
-  if [[ -n "${PACKAGE_VERSION}" ]]; then
+  if [[ -n "${PACKAGE_VERSION}" ]]
+  then
     [[ "${resolved_version}" = "${PACKAGE_VERSION}" ]] || error "Resolved upstream version ${resolved_version} does not match PACKAGE_VERSION ${PACKAGE_VERSION}"
   else
     PACKAGE_VERSION="${resolved_version}"

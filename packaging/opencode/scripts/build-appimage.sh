@@ -19,11 +19,13 @@ APPRUN_TEMPLATE="${PACKAGING_DIR}/templates/AppRun"
 DESKTOP_TEMPLATE="${PACKAGING_DIR}/templates/opencode-desktop.desktop"
 setup_work_dir "opencode-build"
 DIST_DIR="${DIST_DIR_OVERRIDE:-${REPO_DIR}/dist}"
-if [[ -n "${DIST_DIR_OVERRIDE:-}" ]]; then
+if [[ -n "${DIST_DIR_OVERRIDE:-}" ]]
+then
   validate_absolute_override "${DIST_DIR_OVERRIDE}" "DIST_DIR_OVERRIDE"
 fi
 APPDIR="$(resolve_appdir_override "${REPO_DIR}" "${DIST_DIR}")"
-if [[ -n "${WORK_DIR_OVERRIDE:-}" ]]; then
+if [[ -n "${WORK_DIR_OVERRIDE:-}" ]]
+then
   validate_absolute_override "${WORK_DIR_OVERRIDE}" "WORK_DIR_OVERRIDE"
 fi
 validate_package_version "${PACKAGE_VERSION:-}"
@@ -46,7 +48,8 @@ prepare_appdir() {
 
   # Remove the electron-updater feed so the app never self-updates from
   # upstream (anomalyco/opencode); updates come via Homebrew only.
-  if [[ -f "${app_dir}/resources/app-update.yml" ]]; then
+  if [[ -f "${app_dir}/resources/app-update.yml" ]]
+  then
     rm -- "${app_dir}/resources/app-update.yml"
     info "Removed embedded electron-updater feed: resources/app-update.yml"
   else
@@ -100,7 +103,8 @@ main() {
 
   local resolved_version
   resolved_version="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).version' "${metadata_path}")"
-  if [[ -n "${PACKAGE_VERSION}" ]]; then
+  if [[ -n "${PACKAGE_VERSION}" ]]
+  then
     [[ "${resolved_version}" = "${PACKAGE_VERSION}" ]] || error "Resolved upstream version ${resolved_version} does not match PACKAGE_VERSION ${PACKAGE_VERSION}"
   else
     PACKAGE_VERSION="${resolved_version}"

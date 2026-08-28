@@ -12,25 +12,28 @@ resolve_appdir() {
   local dir
   local max_links=20
 
-  while [ -L "$source" ] && [ "$max_links" -gt 0 ]; do
-    dir="$(cd -P -- "$(dirname -- "$source")" && pwd)"
-    source="$(readlink -- "$source")"
-    case "$source" in
-    /*) ;;
-    *) source="$dir/$source" ;;
+  while [[ -L "${source}" ]] && [[ "${max_links}" -gt 0 ]]
+  do
+    dir="$(cd -P -- "$(dirname -- "${source}")" && pwd)"
+    source="$(readlink -- "${source}")"
+    case "${source}" in
+      /*) ;;
+      *) source="${dir}/${source}" ;;
     esac
     max_links=$((max_links - 1))
   done
-  if [ "$max_links" -eq 0 ]; then
+  if [[ "${max_links}" -eq 0 ]]
+  then
     echo "Too many symlink levels" >&2
     exit 1
   fi
 
-  cd -P -- "$(dirname -- "$source")" && pwd
+  cd -P -- "$(dirname -- "${source}")" && pwd
 }
 
 resolved_appdir="$(resolve_appdir)"
-if [[ -n "${APPDIR:-}" ]]; then
+if [[ -n "${APPDIR:-}" ]]
+then
   appdir_canonical="$(cd -P -- "${APPDIR}" 2>/dev/null && pwd)" || appdir_canonical=""
   [[ "${appdir_canonical}" = "${resolved_appdir}" ]] || APPDIR="${resolved_appdir}"
 else

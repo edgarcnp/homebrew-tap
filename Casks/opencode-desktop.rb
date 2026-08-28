@@ -28,15 +28,15 @@ cask "opencode-desktop" do
   preflight do
     CaskHelpers.extract_appimage(staged_path/"opencode-desktop-#{version}-#{arch}.AppImage")
     CaskHelpers.install_desktop_integration(
-      app_name: "opencode-desktop",
+      app_name:  "opencode-desktop",
       icon_path: staged_path/"squashfs-root/opencode-desktop.png",
-      icon_dir: "#{CaskHelpers.xdg_data_home}/icons/hicolor/128x128/apps",
-      entry: CaskHelpers.desktop_entry(
-        name: "OpenCode",
-        comment: "Open source AI coding agent",
-        exec: "\"#{HOMEBREW_PREFIX}/bin/opencode-desktop\" %U",
-        icon: "opencode-desktop",
-        wm_class: "ai.opencode.desktop",
+      icon_dir:  "#{CaskHelpers.xdg_data_home}/icons/hicolor/128x128/apps",
+      entry:     CaskHelpers.desktop_entry(
+        name:      "OpenCode",
+        comment:   "Open source AI coding agent",
+        exec:      "\"#{HOMEBREW_PREFIX}/bin/opencode-desktop\" %U",
+        icon:      "opencode-desktop",
+        wm_class:  "ai.opencode.desktop",
         mime_type: "x-scheme-handler/opencode;",
       ),
     )
@@ -45,10 +45,10 @@ cask "opencode-desktop" do
   uninstall trash: CaskHelpers.desktop_files("opencode-desktop", icon_dir: "128x128")
 
   zap trash: [
-    *CaskHelpers.desktop_files("opencode-desktop", icon_dir: "128x128"),
     "#{CaskHelpers.xdg_cache_home}/ai.opencode.desktop",
     "#{CaskHelpers.xdg_config_home}/ai.opencode.desktop",
     "#{CaskHelpers.xdg_data_home}/ai.opencode.desktop",
+    *CaskHelpers.desktop_files("opencode-desktop", icon_dir: "128x128"),
   ]
 
   caveats <<~EOS

@@ -29,15 +29,15 @@ cask "gitbutler" do
   preflight do
     CaskHelpers.extract_appimage(staged_path/"gitbutler-#{version}-#{arch}.AppImage")
     CaskHelpers.install_desktop_integration(
-      app_name: "gitbutler",
+      app_name:  "gitbutler",
       icon_path: staged_path/"squashfs-root/gitbutler.png",
-      icon_dir: "#{CaskHelpers.xdg_data_home}/icons/hicolor/128x128/apps",
-      entry: CaskHelpers.desktop_entry(
-        name: "GitButler",
-        comment: "Git, finally designed for humans",
-        exec: "\"#{HOMEBREW_PREFIX}/bin/gitbutler-tauri\" %U",
-        icon: "gitbutler",
-        wm_class: "gitbutler-tauri",
+      icon_dir:  "#{CaskHelpers.xdg_data_home}/icons/hicolor/128x128/apps",
+      entry:     CaskHelpers.desktop_entry(
+        name:      "GitButler",
+        comment:   "Git, finally designed for humans",
+        exec:      "\"#{HOMEBREW_PREFIX}/bin/gitbutler-tauri\" %U",
+        icon:      "gitbutler",
+        wm_class:  "gitbutler-tauri",
         mime_type: "x-scheme-handler/but;",
       ),
     )
@@ -46,12 +46,12 @@ cask "gitbutler" do
   uninstall trash: CaskHelpers.desktop_files("gitbutler", icon_dir: "128x128")
 
   zap trash: [
-    *CaskHelpers.desktop_files("gitbutler", icon_dir: "128x128"),
     "#{CaskHelpers.xdg_cache_home}/gitbutler",
     "#{CaskHelpers.xdg_config_home}/com.gitbutler.app",
     "#{CaskHelpers.xdg_config_home}/gitbutler",
     "#{CaskHelpers.xdg_data_home}/com.gitbutler.app",
     "#{CaskHelpers.xdg_data_home}/gitbutler",
+    *CaskHelpers.desktop_files("gitbutler", icon_dir: "128x128"),
   ]
 
   caveats <<~EOS
