@@ -425,13 +425,26 @@ jobs:
             printf -- '- Upstream `.deb` (amd64): %s\n' "$UPSTREAM_URL_AMD64"
             printf -- '- Upstream `.deb` (arm64): %s\n' "$UPSTREAM_URL_ARM64"
           } > release-notes.md
-      - uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
-        with:
-          tag_name: ${{ inputs.tag_prefix }}${{ needs.detect.outputs.version }}
-          name: ${{ inputs.app_name }} ${{ needs.detect.outputs.version }}
-          body_path: release-notes.md
-          files: assets/${{ inputs.asset_prefix }}-*.AppImage
-          fail_on_unmatched_files: true
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_PREFIX: ${{ inputs.tag_prefix }}
+          PACKAGE_VERSION: ${{ needs.detect.outputs.version }}
+          APP_NAME: ${{ inputs.app_name }}
+          ASSET_PREFIX: ${{ inputs.asset_prefix }}
+        run: |
+          TAG="${TAG_PREFIX}${PACKAGE_VERSION}"
+          shopt -s nullglob
+          appimages=(assets/"${ASSET_PREFIX}"-*.AppImage)
+          if [ "${#appimages[@]}" -eq 0 ]; then
+            echo "::error::no AppImage artifacts matched assets/${ASSET_PREFIX}-*.AppImage" >&2
+            exit 1
+          fi
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "${APP_NAME} ${PACKAGE_VERSION}" \
+            --notes-file release-notes.md \
+            "${appimages[@]}"
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
