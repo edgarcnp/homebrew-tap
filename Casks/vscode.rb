@@ -5,6 +5,10 @@ cask "vscode" do
   sha256 arm64_linux:  "6b8fe0ccdb73a347c70bbfc5e682eb757a1b97475abb2c7e898d113d4cc27b67",
          x86_64_linux: "fd4773133228ce03bfe4f5796374f45c03a9a3ffc5e66cd821ed8eca295a8004"
 
+  xdg_data_home = ENV.fetch("XDG_DATA_HOME", File.join(Dir.home, ".local", "share"))
+  xdg_config_home = ENV.fetch("XDG_CONFIG_HOME", File.join(Dir.home, ".config"))
+  xdg_cache_home = ENV.fetch("XDG_CACHE_HOME", File.join(Dir.home, ".cache"))
+
   url "https://github.com/edgarcnp/homebrew-tap/releases/download/vscode-v#{version}/vscode-#{version}-#{arch}.AppImage",
       verified: "github.com/edgarcnp/homebrew-tap"
   name "Visual Studio Code"
@@ -42,8 +46,8 @@ cask "vscode" do
     system(staged_path/"vscode-#{version}-#{arch}.AppImage", "--appimage-extract",
            chdir: staged_path) || odie("AppImage extraction failed")
 
-    icon_dir = "#{Dir.home}/.local/share/icons/hicolor/256x256/apps" # 256x256 per upstream build-appimage.sh
-    applications_dir = "#{Dir.home}/.local/share/applications"
+    icon_dir = "#{xdg_data_home}/icons/hicolor/256x256/apps" # 256x256 per upstream build-appimage.sh
+    applications_dir = "#{xdg_data_home}/applications"
     FileUtils.mkdir_p [icon_dir, applications_dir]
 
     icon_source = staged_path/"squashfs-root/vscode.png"
@@ -69,15 +73,15 @@ cask "vscode" do
   end
 
   uninstall trash: [
-    "#{Dir.home}/.local/share/applications/vscode.desktop",
-    "#{Dir.home}/.local/share/icons/hicolor/256x256/apps/vscode.png",
+    "#{xdg_data_home}/applications/vscode.desktop",
+    "#{xdg_data_home}/icons/hicolor/256x256/apps/vscode.png",
   ]
 
   zap trash: [
-    "~/.cache/Code",
-    "~/.config/Code",
-    "~/.local/share/applications/vscode.desktop",
-    "~/.local/share/icons/hicolor/256x256/apps/vscode.png",
+    "#{xdg_cache_home}/Code",
+    "#{xdg_config_home}/Code",
+    "#{xdg_data_home}/applications/vscode.desktop",
+    "#{xdg_data_home}/icons/hicolor/256x256/apps/vscode.png",
     "~/.vscode",
   ]
 

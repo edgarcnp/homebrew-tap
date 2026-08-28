@@ -18,8 +18,7 @@ KEY_FILE="${PACKAGING_DIR}/assets/microsoft-vscode-repository-key.gpg.base64"
 APPRUN_TEMPLATE="${PACKAGING_DIR}/templates/AppRun"
 DESKTOP_TEMPLATE="${PACKAGING_DIR}/templates/vscode.desktop"
 WORK_DIR="${WORK_DIR_OVERRIDE:-$(mktemp -d "${TMPDIR:-/tmp}/vscode-build.XXXXXX")}" || error "mktemp failed"
-if [[ -z "${WORK_DIR_OVERRIDE:-}" ]]
-then
+if [[ -z "${WORK_DIR_OVERRIDE:-}" ]]; then
   # Clean up the temp dir we created; an explicit WORK_DIR_OVERRIDE is
   # caller-owned and left alone.
   cleanup() { rm -rf -- "${WORK_DIR}"; }
@@ -27,13 +26,17 @@ then
 fi
 DIST_DIR="${DIST_DIR_OVERRIDE:-${REPO_DIR}/dist}"
 APPDIR="${APPIMAGE_APPDIR_OVERRIDE:-${DIST_DIR}/appimage.AppDir}"
-if [[ -n "${DIST_DIR_OVERRIDE:-}" ]]
-then
+if [[ -n "${DIST_DIR_OVERRIDE:-}" ]]; then
   [[ "${DIST_DIR_OVERRIDE}" == /* ]] || error "DIST_DIR_OVERRIDE must be absolute: ${DIST_DIR_OVERRIDE}"
   [[ "${DIST_DIR_OVERRIDE}" != "/" ]] || error "refusing DIST_DIR_OVERRIDE=/"
 fi
-[[ "${APPDIR}" == "${DIST_DIR}"/* ]] || error "APPDIR must be inside DIST_DIR: ${APPDIR}"
-[[ "${APPDIR}" != "/" && "${APPDIR}" != "${REPO_DIR}" && "${APPDIR}" != "${DIST_DIR}" ]] || error "refusing to operate on suspicious APPDIR"
+if [[ -n "${APPIMAGE_APPDIR_OVERRIDE:-}" ]]; then
+  [[ "${APPIMAGE_APPDIR_OVERRIDE}" == /* ]] || error "APPIMAGE_APPDIR_OVERRIDE must be absolute: ${APPIMAGE_APPDIR_OVERRIDE}"
+  [[ "${APPIMAGE_APPDIR_OVERRIDE}" != "/" && "${APPIMAGE_APPDIR_OVERRIDE}" != "${REPO_DIR}" && "${APPIMAGE_APPDIR_OVERRIDE}" != "${DIST_DIR}" ]] || error "refusing to operate on suspicious APPIMAGE_APPDIR_OVERRIDE"
+else
+  [[ "${APPDIR#"${DIST_DIR}/"}" != "${APPDIR}" ]] || error "APPDIR must be inside DIST_DIR: ${APPDIR}"
+  [[ "${APPDIR}" != "${REPO_DIR}" && "${APPDIR}" != "${DIST_DIR}" ]] || error "refusing to operate on suspicious APPDIR"
+fi
 [[ "${PACKAGE_VERSION:-}" != *[/\\]* ]] || error "PACKAGE_VERSION contains path separator"
 PACKAGE_NAME="${PACKAGE_NAME:-vscode}"
 [[ "${PACKAGE_NAME}" =~ ^[A-Za-z0-9._-]+$ ]] || error "invalid PACKAGE_NAME: ${PACKAGE_NAME}"
@@ -115,8 +118,7 @@ main() {
 
   local resolved_version
   resolved_version="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).version' "${metadata_path}")"
-  if [[ -n "${PACKAGE_VERSION}" ]]
-  then
+  if [[ -n "${PACKAGE_VERSION}" ]]; then
     [[ "${resolved_version}" = "${PACKAGE_VERSION}" ]] || error "Resolved upstream version ${resolved_version} does not match PACKAGE_VERSION ${PACKAGE_VERSION}"
   else
     PACKAGE_VERSION="${resolved_version}"

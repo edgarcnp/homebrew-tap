@@ -35,7 +35,6 @@ prevent_autoupdate() {
     config_file="${config_dir}/settings.json"
     [[ ! -L "${config_dir}" ]] || return 0
     [[ ! -L "${config_file}" ]] || return 0
-    umask 077
     mkdir -p -- "${config_dir}" || return 0
 
     if [[ ! -s "${config_file}" ]]; then

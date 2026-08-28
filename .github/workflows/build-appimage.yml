@@ -161,8 +161,8 @@ jobs:
           version="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).version' "$amd64_metadata")"
           arm64_version="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).version' "$arm64_metadata")"
           [ "$version" = "$arm64_version" ] || { echo "amd64/arm64 upstream version mismatch" >&2; exit 1; }
+          [[ "$version" =~ ^[0-9A-Za-z._-]+$ ]] || { echo "invalid upstream version: $version" >&2; exit 1; }
           version="${version//[^0-9A-Za-z._-]/_}"
-          [[ "$version" =~ ^[0-9A-Za-z._-]+$ ]] || exit 1
           {
             echo "upstream_sha256_amd64=$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).sha256' "$amd64_metadata")"
             echo "upstream_sha256_arm64=$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).sha256' "$arm64_metadata")"

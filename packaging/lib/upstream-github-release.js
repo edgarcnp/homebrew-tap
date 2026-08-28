@@ -14,11 +14,18 @@ const path = require("node:path");
 const DEB_ARCHES = ["amd64", "arm64"];
 const MAX_PAYLOAD_BYTES = 512 * 1024 * 1024;
 
-function assertHttpsNoSearch(urlStr) { const u=new URL(urlStr); if(u.protocol!=="https:"||u.search||u.hash) throw new Error("URL must be https without query/hash: "+urlStr); return u; }
-
-async function fetchWithRetry(url, opts, retries=3) {
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    const response = await fetch(url, opts);
+async function fetchWithRetry(url, opts, retries = 3) {
+  let lastError;
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    let response;
+    try {
+      response = await fetch(url, opts);
+    } catch (error) {
+      lastError = error;
+      if (attempt === retries) throw error;
+      await new Promise((r) => setTimeout(r, 500 * Math.pow(2, attempt)));
+      continue;
+    }
     if (response.status === 429 || (response.status >= 500 && response.status < 600)) {
       if (attempt === retries) return response;
       const retryAfter = response.headers.get("retry-after");
@@ -36,7 +43,7 @@ async function fetchWithRetry(url, opts, retries=3) {
     }
     return response;
   }
-  throw new Error("fetchWithRetry exhausted");
+  throw lastError;
 }
 
 function writeFileAtomic(filePath, data) {
@@ -93,8 +100,11 @@ function parseSha256Digest(digest) {
 }
 
 async function fetchJson(url, token) {
-  if (String(url).includes("?per_page=")) { const u=new URL(url); if(u.protocol!=="https:"||u.hash) throw new Error("URL must be https without query/hash: "+url); } else { assertHttpsNoSearch(url); }
-  if(token && /[\r\n]/.test(String(token))) throw new Error("invalid token");
+  const u = new URL(String(url));
+  if (u.protocol !== "https:") throw new Error(`URL must be https: ${url}`);
+  if (u.hostname !== "api.github.com") throw new Error(`unexpected host: ${url}`);
+  if (u.hash) throw new Error(`URL must not contain hash: ${url}`);
+  if (token && /[\r\n]/.test(String(token))) throw new Error("invalid token");
   const headers = { "User-Agent": "homebrew-tap-appimage-builder" };
   if (token) headers.Authorization = `Bearer ${token}`;
   // Abort slow/stalled downloads (30s or 60s) instead of hanging indefinitely
@@ -133,7 +143,7 @@ async function selectRelease(repository, assetPrefix, token) {
 
 async function downloadAndVerify(url, destination, expectedSha256, expectedSize, label) {
   // Abort slow/stalled downloads (30s or 60s) instead of hanging indefinitely
-  const response = await fetch(url, { redirect: "follow", signal: AbortSignal.timeout(60000) });
+  const response = await fetchWithRetry(url, { redirect: "follow", signal: AbortSignal.timeout(60000) });
   if (!response.ok) throw new Error(`Download failed (${response.status}) for ${url}`);
   const finalUrl = new URL(response.url);
   if (finalUrl.protocol !== "https:") {
