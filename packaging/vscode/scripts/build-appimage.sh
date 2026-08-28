@@ -37,6 +37,10 @@ else
   [[ "${APPDIR#"${DIST_DIR}/"}" != "${APPDIR}" ]] || error "APPDIR must be inside DIST_DIR: ${APPDIR}"
   [[ "${APPDIR}" != "${REPO_DIR}" && "${APPDIR}" != "${DIST_DIR}" ]] || error "refusing to operate on suspicious APPDIR"
 fi
+if [[ -n "${WORK_DIR_OVERRIDE:-}" ]]; then
+  [[ "${WORK_DIR_OVERRIDE}" == /* ]] || error "WORK_DIR_OVERRIDE must be absolute: ${WORK_DIR_OVERRIDE}"
+  [[ "${WORK_DIR_OVERRIDE}" != "/" ]] || error "refusing WORK_DIR_OVERRIDE=/"
+fi
 [[ "${PACKAGE_VERSION:-}" != *[/\\]* ]] || error "PACKAGE_VERSION contains path separator"
 PACKAGE_NAME="${PACKAGE_NAME:-vscode}"
 [[ "${PACKAGE_NAME}" =~ ^[A-Za-z0-9._-]+$ ]] || error "invalid PACKAGE_NAME: ${PACKAGE_NAME}"
@@ -94,6 +98,19 @@ prepare_appdir() {
   chmod 0755 -- "${APPDIR}/opt/vscode/bin/code"
 }
 
+verify_updater_neutralized() {
+  local from="update.code.visualstudio.com"
+  local matches
+  matches="$(grep -rlaF -- "${from}" "${APPDIR}" 2>/dev/null || true)"
+  if [[ -n "${matches}" ]]; then
+    error "updater endpoint patch incomplete: original endpoint still present in: ${matches}"
+  fi
+  if grep -Fq -- '"updateUrl"' "${APPDIR}/opt/vscode/resources/app/product.json" 2>/dev/null; then
+    error "updater endpoint patch incomplete: updateUrl still present in ${APPDIR}/opt/vscode/resources/app/product.json"
+  fi
+  info "Verified no file in APPDIR still references the upstream updater endpoint"
+}
+
 main() {
   ensure_file_exists "${KEY_FILE}" "pinned repository signing key"
   ensure_file_exists "${APPRUN_TEMPLATE}" "AppImage AppRun template"
@@ -123,6 +140,7 @@ main() {
   else
     PACKAGE_VERSION="${resolved_version}"
     info "Derived PACKAGE_VERSION ${PACKAGE_VERSION} from upstream metadata"
+    [[ "${PACKAGE_VERSION}" != *[/\\]* ]] || error "PACKAGE_VERSION contains path separator"
   fi
 
   local deb_arch_actual
@@ -138,6 +156,7 @@ main() {
 
   local appimagetool
   appimagetool="$(resolve_appimagetool)"
+  verify_updater_neutralized
   mkdir -p -- "${DIST_DIR}"
   local output_file="${DIST_DIR}/vscode-${PACKAGE_VERSION}-${appimage_arch}.AppImage"
   rm -f -- "${output_file}"

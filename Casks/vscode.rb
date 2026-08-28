@@ -16,26 +16,13 @@ cask "vscode" do
   homepage "https://code.visualstudio.com/"
 
   livecheck do
-    url "https://api.github.com/repos/edgarcnp/homebrew-tap/releases?per_page=100"
-    strategy :json do |json|
-      versions = json.filter_map do |release|
-        next if release["draft"] || release["prerelease"]
-
-        tag = release["tag_name"]
-        next unless tag&.start_with?("vscode-v")
-
-        candidate = tag.delete_prefix("vscode-v")
-        next if candidate.empty?
-        next unless candidate.match?(/\A\d+\.\d+\.\d+(?:[.-]\w+)*\z/)
-
-        candidate
-      end
-      versions.max_by { |candidate| Gem::Version.new(candidate) }
-    end
+    url "https://github.com/edgarcnp/homebrew-tap.git"
+    regex(/^vscode-v(\d+\.\d+\.\d+(?:[.-]\w+)*)$/)
+    strategy :git
   end
 
   auto_updates false
-  conflicts_with cask: ["visual-studio-code", "code", "vscodium"]
+  conflicts_with cask: ["visual-studio-code", "vscodium"]
   depends_on :linux
 
   app_image "vscode-#{version}-#{arch}.AppImage"
@@ -78,6 +65,8 @@ cask "vscode" do
   ]
 
   zap trash: [
+    "#{Dir.home}/.vscode-cli",
+    "#{Dir.home}/.vscode-server",
     "#{xdg_cache_home}/Code",
     "#{xdg_config_home}/Code",
     "#{xdg_data_home}/applications/vscode.desktop",

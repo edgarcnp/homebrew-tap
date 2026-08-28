@@ -20,7 +20,13 @@ resolve_appdir() {
     cd -P -- "$(dirname -- "$source")" && pwd
 }
 
-APPDIR="${APPDIR:-$(resolve_appdir)}"
+resolved_appdir="$(resolve_appdir)"
+if [[ -n "${APPDIR:-}" ]]; then
+  appdir_canonical="$(cd -P -- "${APPDIR}" 2>/dev/null && pwd)" || appdir_canonical=""
+  [[ "${appdir_canonical}" = "${resolved_appdir}" ]] || APPDIR="${resolved_appdir}"
+else
+  APPDIR="${resolved_appdir}"
+fi
 export APPDIR
 
 exec "$APPDIR/opt/vscode/bin/code" "$@"
