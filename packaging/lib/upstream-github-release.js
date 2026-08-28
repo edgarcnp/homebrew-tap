@@ -10,81 +10,14 @@
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
+const {
+  MAX_PAYLOAD_BYTES,
+  fetchWithRetry,
+  readPayload,
+  writeFileAtomic,
+} = require("./net-utils");
 
 const DEB_ARCHES = ["amd64", "arm64"];
-const MAX_PAYLOAD_BYTES = 512 * 1024 * 1024;
-
-async function fetchWithRetry(url, opts, retries = 3) {
-  let lastError;
-  for (let attempt = 0; attempt <= retries; attempt += 1) {
-    let response;
-    try {
-      response = await fetch(url, opts);
-    } catch (error) {
-      lastError = error;
-      if (attempt === retries) throw error;
-      await new Promise((r) => setTimeout(r, 500 * Math.pow(2, attempt)));
-      continue;
-    }
-    if (response.status === 429 || (response.status >= 500 && response.status < 600)) {
-      if (attempt === retries) return response;
-      const retryAfter = response.headers.get("retry-after");
-      let delayMs = 500 * Math.pow(2, attempt);
-      if (retryAfter) {
-        const secs = Number(retryAfter);
-        if (Number.isFinite(secs)) delayMs = secs * 1000;
-        else {
-          const dateMs = Date.parse(retryAfter);
-          if (Number.isFinite(dateMs)) delayMs = Math.max(0, dateMs - Date.now());
-        }
-      }
-      delayMs = Math.min(delayMs, 30000);
-      await new Promise((r) => setTimeout(r, delayMs));
-      continue;
-    }
-    return response;
-  }
-  throw lastError;
-}
-
-function writeFileAtomic(filePath, data) {
-  const tmp = filePath + ".tmp." + crypto.randomBytes(8).toString("hex");
-  fs.writeFileSync(tmp, data, { mode: 0o600, flag: "wx" });
-  try {
-    fs.renameSync(tmp, filePath);
-  } catch (err) {
-    try {
-      fs.unlinkSync(tmp);
-    } catch {}
-    throw err;
-  }
-}
-
-async function readPayload(response) {
-  const lenHeader = Number(response.headers.get("content-length") || 0);
-  if (lenHeader > MAX_PAYLOAD_BYTES) throw new Error("payload too large");
-  if (!response.body) {
-    const bytes = Buffer.from(await response.arrayBuffer());
-    if (bytes.length > MAX_PAYLOAD_BYTES) {
-      throw new Error(`Payload too large (${bytes.length} bytes) for ${response.url}`);
-    }
-    return bytes;
-  }
-  const reader = response.body.getReader();
-  const chunks = [];
-  let total = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    total += value.length;
-    if (total > MAX_PAYLOAD_BYTES) {
-      await reader.cancel();
-      throw new Error(`Payload exceeds size cap (${MAX_PAYLOAD_BYTES} bytes) for ${response.url}`);
-    }
-    chunks.push(value);
-  }
-  return Buffer.concat(chunks);
-}
 
 function normalizeTagVersion(tag) {
   const version = String(tag).replace(/^v/, "");
@@ -108,8 +41,8 @@ async function fetchJson(url, token) {
   if (token && /[\r\n]/.test(String(token))) throw new Error("invalid token");
   const headers = { "User-Agent": "homebrew-tap-appimage-builder" };
   if (token) headers.Authorization = `Bearer ${token}`;
-  // Abort slow/stalled downloads (30s or 60s) instead of hanging indefinitely
-  const response = await fetchWithRetry(url, { headers, redirect: "error", signal: AbortSignal.timeout(30000) });
+  // Abort slow/stalled downloads (30s) instead of hanging indefinitely
+  const response = await fetchWithRetry(url, { headers, redirect: "error", timeoutMs: 30000 });
   if (!response.ok) {
     throw new Error(`GitHub API request failed (${response.status}) for ${url}`);
   }
@@ -143,8 +76,8 @@ async function selectRelease(repository, assetPrefix, token) {
 }
 
 async function downloadAndVerify(url, destination, expectedSha256, expectedSize, label) {
-  // Abort slow/stalled downloads (30s or 60s) instead of hanging indefinitely
-  const response = await fetchWithRetry(url, { redirect: "follow", signal: AbortSignal.timeout(60000) });
+  // Abort slow/stalled downloads (60s) instead of hanging indefinitely
+  const response = await fetchWithRetry(url, { redirect: "follow", timeoutMs: 60000 });
   if (!response.ok) throw new Error(`Download failed (${response.status}) for ${url}`);
   const finalUrl = new URL(response.url);
   if (finalUrl.protocol !== "https:") {

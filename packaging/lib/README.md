@@ -9,6 +9,11 @@ Components shared by the per-app packagings in `packaging/<app>/`:
   templates. Resolves the real AppDir root at runtime (handles symlink chains
   and host-injected APPDIR overrides) and exports APPDIR. Every build script
   copies it into the AppDir alongside AppRun.
+- `net-utils.js` — shared network helpers used by all three resolvers:
+  `fetchWithRetry` (429/5xx + network-error retry with backoff, honors
+  `Retry-After`, capped at 30s; timeouts throw without retry),
+  `readPayload` (streaming reads under a 512 MiB cap), and
+  `writeFileAtomic`.
 - `upstream-linux-package.js` — signed-apt-repository resolver:
   pinned key -> `InRelease` -> `Packages` SHA-256 -> package SHA-256/size.
   Picks the newest `--package` entry per architecture. Required flags:

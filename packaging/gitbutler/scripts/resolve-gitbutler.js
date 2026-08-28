@@ -11,65 +11,18 @@ const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 const {
+  MAX_PAYLOAD_BYTES,
+  fetchWithRetry,
+  readPayload,
+  writeFileAtomic,
+} = require(path.join(__dirname, "..", "..", "lib", "net-utils"));
+const {
   normalizeUpstreamVersion,
 } = require(path.join(__dirname, "..", "..", "lib", "upstream-linux-package.js"));
-
-// Cap on payload bytes: upstream .debs are ~100 MiB; a broken or malicious
-// redirect serving a huge body must fail instead of exhausting memory.
-const MAX_PAYLOAD_BYTES = 512 * 1024 * 1024;
 
 // Pin to releases.gitbutler.com to prevent open redirect to attacker-controlled host
 const ALLOWED_HOSTS = new Set(["releases.gitbutler.com"]);
 const ALLOWED_INIT_HOSTS = new Set(["app.gitbutler.com"]);
-
-async function fetchWithRetry(url, opts, retries = 3) {
-  let lastError;
-  for (let attempt = 0; attempt < retries; attempt++) {
-    try {
-      const response = await fetch(url, opts);
-      if (response.status === 429 || response.status >= 500) {
-        if (attempt < retries - 1) {
-          const retryAfter = response.headers.get("retry-after");
-          let delay = 100 * Math.pow(2, attempt);
-          if (retryAfter) {
-            const secs = Number(retryAfter);
-            if (!Number.isNaN(secs)) delay = secs * 1000;
-            else {
-              const date = Date.parse(retryAfter);
-              if (!Number.isNaN(date)) delay = Math.max(0, date - Date.now());
-            }
-          }
-          delay = Math.min(delay, 30000);
-          await new Promise((r) => setTimeout(r, delay));
-          continue;
-        }
-      }
-      return response;
-    } catch (e) {
-      lastError = e;
-      if (attempt < retries - 1) {
-        const delay = 100 * Math.pow(2, attempt);
-        await new Promise((r) => setTimeout(r, delay));
-        continue;
-      }
-      throw e;
-    }
-  }
-  throw lastError;
-}
-
-function writeFileAtomic(filePath, data) {
-  const tmp = filePath + ".tmp." + crypto.randomBytes(8).toString("hex");
-  fs.writeFileSync(tmp, data, { mode: 0o600, flag: "wx" });
-  try {
-    fs.renameSync(tmp, filePath);
-  } catch (e) {
-    try {
-      fs.unlinkSync(tmp);
-    } catch {}
-    throw e;
-  }
-}
 
 function sha256Buffer(bytes) {
   return crypto.createHash("sha256").update(bytes).digest("hex");
@@ -126,8 +79,8 @@ function verifyTrustedDebHash(ledger, version, architecture, sha256) {
 async function fetchFollowRedirects(url) {
   const initial = new URL(url);
   if (initial.protocol !== "https:") throw new Error(`Initial URL must be https (got ${initial.protocol}) for ${url}`);
-  // Abort slow/stalled downloads (30s or 60s) instead of hanging indefinitely
-  const response = await fetchWithRetry(url, { redirect: "follow", signal: AbortSignal.timeout(60000) });
+  // Abort slow/stalled downloads (60s) instead of hanging indefinitely
+  const response = await fetchWithRetry(url, { redirect: "follow", timeoutMs: 60000 });
   if (!response.ok) throw new Error(`Download failed (${response.status}) for ${url}`);
   const declaredLength = Number(response.headers.get("content-length") ?? 0);
   if (declaredLength > MAX_PAYLOAD_BYTES) {
@@ -136,30 +89,6 @@ async function fetchFollowRedirects(url) {
   const finalHost = new URL(response.url).hostname;
   if (!ALLOWED_HOSTS.has(finalHost)) throw new Error(`Unexpected redirect host (${finalHost}) for ${response.url}`);
   return response;
-}
-
-async function readPayload(response) {
-  if (!response.body) {
-    const bytes = Buffer.from(await response.arrayBuffer());
-    if (bytes.length > MAX_PAYLOAD_BYTES) {
-      throw new Error(`Payload too large (${bytes.length} bytes) for ${response.url}`);
-    }
-    return bytes;
-  }
-  const reader = response.body.getReader();
-  const chunks = [];
-  let total = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    total += value.length;
-    if (total > MAX_PAYLOAD_BYTES) {
-      await reader.cancel();
-      throw new Error(`Payload exceeds size cap (${MAX_PAYLOAD_BYTES} bytes) for ${response.url}`);
-    }
-    chunks.push(value);
-  }
-  return Buffer.concat(chunks);
 }
 
 function parseFinalUrl(finalUrl) {
