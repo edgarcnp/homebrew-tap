@@ -19,31 +19,16 @@ LIB_DIR="$(cd "${PACKAGING_DIR}/../lib" && pwd)"
 RESOLVE_SCRIPT="${PACKAGING_DIR}/scripts/resolve-gitbutler.js"
 APPRUN_TEMPLATE="${PACKAGING_DIR}/templates/AppRun"
 DESKTOP_TEMPLATE="${PACKAGING_DIR}/templates/gitbutler.desktop"
-WORK_DIR="${WORK_DIR_OVERRIDE:-$(mktemp -d "${TMPDIR:-/tmp}/gb-build.XXXXXX")}" || error "mktemp failed"
-if [[ -z "${WORK_DIR_OVERRIDE:-}" ]]; then
-  # Clean up the temp dir we created; an explicit WORK_DIR_OVERRIDE is
-  # caller-owned and left alone.
-  cleanup() { rm -rf -- "${WORK_DIR}"; }
-  trap cleanup EXIT
-fi
+setup_work_dir "gb-build"
 DIST_DIR="${DIST_DIR_OVERRIDE:-${REPO_DIR}/dist}"
-APPDIR="${APPIMAGE_APPDIR_OVERRIDE:-${DIST_DIR}/appimage.AppDir}"
 if [[ -n "${DIST_DIR_OVERRIDE:-}" ]]; then
-  [[ "${DIST_DIR_OVERRIDE}" == /* ]] || error "DIST_DIR_OVERRIDE must be absolute: ${DIST_DIR_OVERRIDE}"
-  [[ "${DIST_DIR_OVERRIDE}" != "/" ]] || error "refusing DIST_DIR_OVERRIDE=/"
+  validate_absolute_override "${DIST_DIR_OVERRIDE}" "DIST_DIR_OVERRIDE"
 fi
-if [[ -n "${APPIMAGE_APPDIR_OVERRIDE:-}" ]]; then
-  [[ "${APPIMAGE_APPDIR_OVERRIDE}" == /* ]] || error "APPIMAGE_APPDIR_OVERRIDE must be absolute: ${APPIMAGE_APPDIR_OVERRIDE}"
-  [[ "${APPIMAGE_APPDIR_OVERRIDE}" != "/" && "${APPIMAGE_APPDIR_OVERRIDE}" != "${REPO_DIR}" && "${APPIMAGE_APPDIR_OVERRIDE}" != "${DIST_DIR}" ]] || error "refusing to operate on suspicious APPIMAGE_APPDIR_OVERRIDE"
-else
-  [[ "${APPDIR#"${DIST_DIR}/"}" != "${APPDIR}" ]] || error "APPDIR must be inside DIST_DIR: ${APPDIR}"
-  [[ "${APPDIR}" != "${REPO_DIR}" && "${APPDIR}" != "${DIST_DIR}" ]] || error "refusing to operate on suspicious APPDIR"
-fi
+APPDIR="$(resolve_appdir_override "${REPO_DIR}" "${DIST_DIR}")"
 if [[ -n "${WORK_DIR_OVERRIDE:-}" ]]; then
-  [[ "${WORK_DIR_OVERRIDE}" == /* ]] || error "WORK_DIR_OVERRIDE must be absolute: ${WORK_DIR_OVERRIDE}"
-  [[ "${WORK_DIR_OVERRIDE}" != "/" ]] || error "refusing WORK_DIR_OVERRIDE=/"
+  validate_absolute_override "${WORK_DIR_OVERRIDE}" "WORK_DIR_OVERRIDE"
 fi
-[[ "${PACKAGE_VERSION:-}" != *[/\\]* ]] || error "PACKAGE_VERSION contains path separator"
+validate_package_version "${PACKAGE_VERSION:-}"
 PACKAGE_NAME="${PACKAGE_NAME:-gitbutler}"
 [[ "${PACKAGE_NAME}" =~ ^[A-Za-z0-9._-]+$ ]] || error "invalid PACKAGE_NAME: ${PACKAGE_NAME}"
 PACKAGE_DISPLAY_NAME="${PACKAGE_DISPLAY_NAME:-GitButler}"
@@ -330,7 +315,7 @@ main() {
   else
     PACKAGE_VERSION="${resolved_version}"
     info "Derived PACKAGE_VERSION ${PACKAGE_VERSION} from upstream metadata"
-    [[ "${PACKAGE_VERSION}" != *[/\\]* ]] || error "PACKAGE_VERSION contains path separator"
+    validate_package_version "${PACKAGE_VERSION}"
   fi
 
   local payload_dir="${WORK_DIR}/deb-payload"
