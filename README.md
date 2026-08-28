@@ -100,11 +100,6 @@ The binaries inside are the official upstream releases; only the packaging toolc
 
 `brew help`, `man brew` or check [Homebrew's documentation](https://docs.brew.sh).
 
-## Development
-
-- `main` is branch-protected: it requires status checks (`brew test-bot`) to pass, and does not allow bypass for `github-actions[bot]`. The `update-cask` and `repair-cask` jobs in `build-appimage.yml` use `concurrency: group: push-casks` with `cancel-in-progress: false` to prevent concurrent `main` writes.
-- Renovate (via `renovate.json`) handles GitHub Actions dependency updates. Dependabot is configured but scoped to `open-pull-requests-limit: 0` (effectively disabled) so the two bots never open duplicate PRs; Renovate is the primary tool.
-
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE).
