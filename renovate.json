@@ -10,6 +10,7 @@
         "dependencies"
     ],
     "automerge": false,
+    "dependencyDashboard": false,
     "keepUpdatedLabel": "renovate-keep-updated",
     "osvVulnerabilityAlerts": true,
     "pruneBranchAfterAutomerge": true,
@@ -18,7 +19,7 @@
     ],
     "rollbackPrs": true,
     "schedule": [
-        "before 4am on monday"
+        "* * * * *"
     ],
     "vulnerabilityAlerts": {
         "groupName": null,
