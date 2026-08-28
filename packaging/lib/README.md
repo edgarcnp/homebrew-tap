@@ -5,6 +5,10 @@ Components shared by the per-app packagings in `packaging/<app>/`:
 - `package-common.sh` — bash helpers (`info`/`warn`/`error`,
   `ensure_file_exists`, `render_template`, `sed_escape_replacement`,
   `normalize_package_payload_permissions`).
+- `apprun-common.sh` — shared AppRun preamble sourced by the per-app AppRun
+  templates. Resolves the real AppDir root at runtime (handles symlink chains
+  and host-injected APPDIR overrides) and exports APPDIR. Every build script
+  copies it into the AppDir alongside AppRun.
 - `upstream-linux-package.js` — signed-apt-repository resolver:
   pinned key -> `InRelease` -> `Packages` SHA-256 -> package SHA-256/size.
   Picks the newest `--package` entry per architecture. Required flags:

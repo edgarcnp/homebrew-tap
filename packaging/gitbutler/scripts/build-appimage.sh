@@ -300,6 +300,8 @@ write_apprun() {
   rm -f -- "${APPDIR}/AppRun"
   render_template "${APPRUN_TEMPLATE}" "${APPDIR}/AppRun"
   chmod 0755 -- "${APPDIR}/AppRun"
+  cp -- "${LIB_DIR}/apprun-common.sh" "${APPDIR}/apprun-common.sh"
+  chmod 0644 -- "${APPDIR}/apprun-common.sh"
 }
 
 main() {

@@ -1,33 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
-resolve_appdir() {
-    local source="${BASH_SOURCE[0]}"
-    local dir
-    local max_links=20
-
-    while [ -L "$source" ] && [ "$max_links" -gt 0 ]; do
-        dir="$(cd -P -- "$(dirname -- "$source")" && pwd)"
-        source="$(readlink -- "$source")"
-        case "$source" in
-            /*) ;;
-            *) source="$dir/$source" ;;
-        esac
-        max_links=$((max_links - 1))
-    done
-    if [ "$max_links" -eq 0 ]; then echo "Too many symlink levels" >&2; exit 1; fi
-
-    cd -P -- "$(dirname -- "$source")" && pwd
-}
-
-resolved_appdir="$(resolve_appdir)"
-if [[ -n "${APPDIR:-}" ]]; then
-  appdir_canonical="$(cd -P -- "${APPDIR}" 2>/dev/null && pwd)" || appdir_canonical=""
-  [[ "${appdir_canonical}" = "${resolved_appdir}" ]] || APPDIR="${resolved_appdir}"
-else
-  APPDIR="${resolved_appdir}"
-fi
-export APPDIR
+# shellcheck disable=SC1091 # sourced file is followed only when shellcheck runs with -x
+# shellcheck source=../../lib/apprun-common.sh
+source "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/apprun-common.sh"
 
 # brew owns updates for this AppImage; block the app's own update channel the
 # same way the GitButler flatpak does. The flatpak compiles with the
