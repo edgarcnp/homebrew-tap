@@ -492,7 +492,7 @@ jobs:
           tag_prefix: ${{ inputs.tag_prefix }}
           asset_prefix: ${{ inputs.asset_prefix }}
           app_cask: ${{ inputs.app_cask }}
-          token: ${{ github.token }}
+          token: ${{ secrets.HOMEBREW_PAT }}
 
   repair-cask:
     needs: detect
@@ -515,4 +515,4 @@ jobs:
           tag_prefix: ${{ inputs.tag_prefix }}
           asset_prefix: ${{ inputs.asset_prefix }}
           app_cask: ${{ inputs.app_cask }}
-          token: ${{ github.token }}
+          token: ${{ secrets.HOMEBREW_PAT }}

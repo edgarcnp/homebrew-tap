@@ -59,3 +59,4 @@ jobs:
         uses: Homebrew/actions/git-try-push@a657b8b0cd35d0f65cce41fce9b24cf054b49869 # 2026.08.24.1
         with:
           branch: main
+          token: ${{ secrets.HOMEBREW_PAT }}
