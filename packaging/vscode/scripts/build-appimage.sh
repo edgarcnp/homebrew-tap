@@ -19,11 +19,13 @@ APPRUN_TEMPLATE="${PACKAGING_DIR}/templates/AppRun"
 DESKTOP_TEMPLATE="${PACKAGING_DIR}/templates/vscode.desktop"
 setup_work_dir "vscode-build"
 DIST_DIR="${DIST_DIR_OVERRIDE:-${REPO_DIR}/dist}"
-if [[ -n "${DIST_DIR_OVERRIDE:-}" ]]; then
+if [[ -n "${DIST_DIR_OVERRIDE:-}" ]]
+then
   validate_absolute_override "${DIST_DIR_OVERRIDE}" "DIST_DIR_OVERRIDE"
 fi
 APPDIR="$(resolve_appdir_override "${REPO_DIR}" "${DIST_DIR}")"
-if [[ -n "${WORK_DIR_OVERRIDE:-}" ]]; then
+if [[ -n "${WORK_DIR_OVERRIDE:-}" ]]
+then
   validate_absolute_override "${WORK_DIR_OVERRIDE}" "WORK_DIR_OVERRIDE"
 fi
 validate_package_version "${PACKAGE_VERSION:-}"
@@ -46,18 +48,7 @@ prepare_appdir() {
   # updater is disabled; updates come via Homebrew only.
   local product_json="${code_dir}/resources/app/product.json"
   ensure_file_exists "${product_json}" "vscode product.json"
-  node -e '
-    const fs = require("fs")
-    const p = process.argv[1]
-    const json = JSON.parse(fs.readFileSync(p, "utf8"))
-    if ("updateUrl" in json) {
-      delete json.updateUrl
-      fs.writeFileSync(p, JSON.stringify(json, null, "\t") + "\n")
-      console.error("[INFO] Removed updateUrl from product.json")
-    } else {
-      console.error("[INFO] product.json has no updateUrl; updater already disabled")
-    }
-  ' "${product_json}"
+  node "${SCRIPT_DIR}/disable-updater.js" "${product_json}"
 
   info "Preparing AppDir at ${APPDIR}"
   rm -rf -- "${APPDIR}"
@@ -89,10 +80,12 @@ verify_updater_neutralized() {
   local from="update.code.visualstudio.com"
   local matches
   matches="$(grep -rlaF -- "${from}" "${APPDIR}" 2>/dev/null || true)"
-  if [[ -n "${matches}" ]]; then
+  if [[ -n "${matches}" ]]
+  then
     error "updater endpoint patch incomplete: original endpoint still present in: ${matches}"
   fi
-  if grep -Fq -- '"updateUrl"' "${APPDIR}/opt/vscode/resources/app/product.json" 2>/dev/null; then
+  if grep -Fq -- '"updateUrl"' "${APPDIR}/opt/vscode/resources/app/product.json" 2>/dev/null
+  then
     error "updater endpoint patch incomplete: updateUrl still present in ${APPDIR}/opt/vscode/resources/app/product.json"
   fi
   info "Verified no file in APPDIR still references the upstream updater endpoint"
@@ -122,7 +115,8 @@ main() {
 
   local resolved_version
   resolved_version="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).version' "${metadata_path}")"
-  if [[ -n "${PACKAGE_VERSION}" ]]; then
+  if [[ -n "${PACKAGE_VERSION}" ]]
+  then
     [[ "${resolved_version}" = "${PACKAGE_VERSION}" ]] || error "Resolved upstream version ${resolved_version} does not match PACKAGE_VERSION ${PACKAGE_VERSION}"
   else
     PACKAGE_VERSION="${resolved_version}"

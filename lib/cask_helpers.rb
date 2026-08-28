@@ -60,6 +60,7 @@ module CaskHelpers
     applications_dir = "#{xdg_data_home}/applications"
     FileUtils.mkdir_p [icon_dir, applications_dir]
     raise "Icon source not found: #{icon_path}" unless icon_path.exist?
+
     FileUtils.cp icon_path, "#{icon_dir}/#{app_name}.png"
     FileUtils.rm_r(icon_path.parent)
     File.write("#{applications_dir}/#{app_name}.desktop", entry)

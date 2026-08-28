@@ -25,7 +25,8 @@ error() {
 setup_work_dir() {
   local prefix="$1"
   WORK_DIR="${WORK_DIR_OVERRIDE:-$(mktemp -d "${TMPDIR:-/tmp}/${prefix}.XXXXXX")}" || error "mktemp failed"
-  if [[ -z "${WORK_DIR_OVERRIDE:-}" ]]; then
+  if [[ -z "${WORK_DIR_OVERRIDE:-}" ]]
+  then
     # Clean up the temp dir we created; an explicit WORK_DIR_OVERRIDE is
     # caller-owned and left alone.
     trap 'rm -rf -- "${WORK_DIR}"' EXIT
@@ -48,7 +49,8 @@ resolve_appdir_override() {
   local repo_dir="$1"
   local dist_dir="$2"
   local override="${APPIMAGE_APPDIR_OVERRIDE:-}"
-  if [[ -n "${override}" ]]; then
+  if [[ -n "${override}" ]]
+  then
     [[ "${override}" == /* ]] || error "APPIMAGE_APPDIR_OVERRIDE must be absolute: ${override}"
     [[ "${override}" != "/" && "${override}" != "${repo_dir}" && "${override}" != "${dist_dir}" ]] || error "refusing to operate on suspicious APPIMAGE_APPDIR_OVERRIDE"
     printf '%s\n' "${override}"
@@ -79,18 +81,19 @@ sed_escape_replacement() {
 # sourcing script.
 map_arch() {
   case "${TARGET_ARCH}" in
-  amd64 | x86_64)
-    echo "amd64 x86_64"
-    ;;
-  arm64 | aarch64)
-    echo "arm64 aarch64"
-    ;;
-  *) error "Unsupported AppImage architecture: ${TARGET_ARCH} (upstream packages support amd64 and arm64 only)" ;;
+    amd64 | x86_64)
+      echo "amd64 x86_64"
+      ;;
+    arm64 | aarch64)
+      echo "arm64 aarch64"
+      ;;
+    *) error "Unsupported AppImage architecture: ${TARGET_ARCH} (upstream packages support amd64 and arm64 only)" ;;
   esac
 }
 
 resolve_appimagetool() {
-  if [[ -n "${APPIMAGETOOL:-}" ]]; then
+  if [[ -n "${APPIMAGETOOL:-}" ]]
+  then
     [[ -x "${APPIMAGETOOL}" ]] || error "APPIMAGETOOL is not executable: ${APPIMAGETOOL}"
     printf '%s\n' "${APPIMAGETOOL}"
     return 0
@@ -110,7 +113,8 @@ render_template() {
   local comment
   local version
 
-  for name in PACKAGE_NAME PACKAGE_DISPLAY_NAME PACKAGE_COMMENT PACKAGE_VERSION; do
+  for name in PACKAGE_NAME PACKAGE_DISPLAY_NAME PACKAGE_COMMENT PACKAGE_VERSION
+  do
     [[ -n "${!name:-}" ]] || error "render_template: ${name} is unset or empty"
   done
 
@@ -167,13 +171,15 @@ smoke_test_appimage() {
   local SMOKE_TIMEOUT="${SMOKE_TIMEOUT:-20}"
 
   info "Smoke testing: ${appimage}"
-  if command -v xvfb-run >/dev/null 2>&1; then
+  if command -v xvfb-run >/dev/null 2>&1
+  then
     output="$(APPIMAGE_EXTRACT_AND_RUN=1 xvfb-run -a timeout -k 5 "${SMOKE_TIMEOUT}" "${appimage}" --no-sandbox 2>&1 || true)"
   else
     output="$(APPIMAGE_EXTRACT_AND_RUN=1 timeout -k 5 "${SMOKE_TIMEOUT}" "${appimage}" --no-sandbox 2>&1 || true)"
   fi
 
-  if grep -Eq 'symbol lookup error|undefined symbol|error while loading shared libraries|cannot open shared object|Cannot mount AppImage|AppRun not found|Failed to execute dwarfsextract' <<<"${output}"; then
+  if grep -Eq 'symbol lookup error|undefined symbol|error while loading shared libraries|cannot open shared object|Cannot mount AppImage|AppRun not found|Failed to execute dwarfsextract' <<<"${output}"
+  then
     error "$(printf 'Smoke test failed: loader errors in %s\n%s' "${appimage}" "${output}")"
   fi
   info "Smoke test passed: ${appimage}"
