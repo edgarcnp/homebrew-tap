@@ -1,24 +1,96 @@
 #!/usr/bin/env node
 "use strict";
 
-// Removes the `updateUrl` field from VS Code's `product.json` so the
-// built-in updater is disabled (updates come via Homebrew only). Usage:
-//   node disable-updater.js <path-to-product.json>
-// Fails loudly if the file cannot be read or rewritten.
-
 const fs = require("node:fs");
+const path = require("node:path");
 
-const path = process.argv[2];
-if (!path) {
-  console.error("usage: disable-updater.js <product.json path>");
+const target = process.argv[2];
+if (!target) {
+  console.error("usage: disable-updater.js <product.json path or code directory>");
   process.exit(1);
 }
 
-const json = JSON.parse(fs.readFileSync(path, "utf8"));
-if ("updateUrl" in json) {
-  delete json.updateUrl;
-  fs.writeFileSync(path, JSON.stringify(json, null, "\t") + "\n");
-  console.error("[INFO] Removed updateUrl from product.json");
-} else {
-  console.error("[INFO] product.json has no updateUrl; updater already disabled");
+const stat = fs.statSync(target);
+
+if (stat.isFile()) {
+  // Legacy: single product.json file
+  const json = JSON.parse(fs.readFileSync(target, "utf8"));
+  if ("updateUrl" in json) {
+    delete json.updateUrl;
+    fs.writeFileSync(target, JSON.stringify(json, null, "\t") + "\n");
+    console.error("[INFO] Removed updateUrl from product.json");
+  } else {
+    console.error("[INFO] product.json has no updateUrl; updater already disabled");
+  }
+} else if (stat.isDirectory()) {
+  // Directory mode: patch product.json + replace hardcoded endpoint in all files
+  const productJsonPath = path.join(target, "resources", "app", "product.json");
+  if (fs.existsSync(productJsonPath)) {
+    const json = JSON.parse(fs.readFileSync(productJsonPath, "utf8"));
+    if ("updateUrl" in json) {
+      delete json.updateUrl;
+      fs.writeFileSync(productJsonPath, JSON.stringify(json, null, "\t") + "\n");
+      console.error("[INFO] Removed updateUrl from product.json");
+    }
+  }
+
+  // Replace hardcoded updater endpoint in all files under the directory.
+  // Text files get a short, inert hostname; binary files must get a
+  // same-length replacement or the ELF structure is corrupted.
+  const from = "update.code.visualstudio.com";
+  const toText = "update.invalid";                  // shorter -- safe for text
+  const toBinary = "update.invalidupdate.invalid";  // same length -- safe for ELF
+  if (from.length !== toBinary.length) {
+    console.error(
+      `[ERROR] endpoint patch length mismatch: ${from.length} vs ${toBinary.length}; refusing to corrupt ELF`,
+    );
+    process.exit(1);
+  }
+  const fromBuf = Buffer.from(from, "utf8");
+  const toTextBuf = Buffer.from(toText, "utf8");
+  const toBinaryBuf = Buffer.from(toBinary, "utf8");
+
+  let replacedCount = 0;
+
+  function walk(dir) {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name === "node_modules" || entry.name === ".git") continue;
+        walk(fullPath);
+      } else if (entry.isFile()) {
+        try {
+          const buf = fs.readFileSync(fullPath);
+          if (!buf.includes(fromBuf)) continue;
+
+          const isBinary = buf.includes(0);
+          const toBuf = isBinary ? toBinaryBuf : toTextBuf;
+
+          const chunks = [];
+          let last = 0;
+          let idx;
+          while ((idx = buf.indexOf(fromBuf, last)) !== -1) {
+            chunks.push(buf.subarray(last, idx));
+            chunks.push(toBuf);
+            last = idx + fromBuf.length;
+          }
+          chunks.push(buf.subarray(last));
+          const updated = Buffer.concat(chunks);
+          fs.writeFileSync(fullPath, updated);
+          replacedCount++;
+          console.error(`[INFO] Patched: ${fullPath}`);
+        } catch (err) {
+          console.error(`[WARN] Could not patch ${fullPath}: ${err.message}`);
+        }
+      }
+    }
+  }
+
+  walk(target);
+
+  if (replacedCount > 0) {
+    console.error(`[INFO] Patched ${replacedCount} file(s) with updated endpoint`);
+  } else {
+    console.error("[INFO] No files contained the updater endpoint");
+  }
 }
