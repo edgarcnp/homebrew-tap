@@ -18,8 +18,11 @@ on code.visualstudio.com, so the full verification chain applies:
    uruntime `appimagetool` (pkgforge fork; the `../scripts/appimagetool-uruntime.sh`
    shim keeps the upstream `appimagetool` invocation working). The built-in
    updater is disabled because brew owns updates: `scripts/disable-updater.js`
-   removes `updateUrl` from `product.json`, and the whole AppDir is scanned
-   for residual references to `update.code.visualstudio.com`
+   removes `updateUrl` from `product.json` and rewrites the hardcoded
+   `update.code.visualstudio.com` endpoint in the compiled bundles (a
+   same-length replacement for the `code-tunnel` ELF so it is not corrupted),
+   and the whole AppDir is scanned for residual references to
+   `update.code.visualstudio.com`
    (`verify_updater_neutralized`) so a second copy can never silently
    re-enable it.
 
