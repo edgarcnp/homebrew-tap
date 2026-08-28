@@ -10,45 +10,15 @@ const crypto = require("node:crypto");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const {
+  MAX_PAYLOAD_BYTES,
+  fetchWithRetry,
+  readPayload,
+  writeFileAtomic,
+} = require("./net-utils");
 
-const MAX_PAYLOAD_BYTES = 512 * 1024 * 1024;
 const MAX_RELEASE_AGE_DAYS = 14;
 const WARN_RELEASE_AGE_DAYS = 7;
-
-function writeFileAtomic(filePath, data) {
-  const tmp = filePath + ".tmp." + crypto.randomBytes(8).toString("hex");
-  fs.writeFileSync(tmp, data, { mode: 0o600, flag: "wx" });
-  try {
-    fs.renameSync(tmp, filePath);
-  } catch (error) {
-    try { fs.unlinkSync(tmp); } catch {}
-    throw error;
-  }
-}
-
-async function readPayload(response) {
-  if (!response.body) {
-    const bytes = Buffer.from(await response.arrayBuffer());
-    if (bytes.length > MAX_PAYLOAD_BYTES) {
-      throw new Error(`Payload too large (${bytes.length} bytes) for ${response.url}`);
-    }
-    return bytes;
-  }
-  const reader = response.body.getReader();
-  const chunks = [];
-  let total = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    total += value.length;
-    if (total > MAX_PAYLOAD_BYTES) {
-      await reader.cancel();
-      throw new Error(`Payload exceeds size cap (${MAX_PAYLOAD_BYTES} bytes) for ${response.url}`);
-    }
-    chunks.push(value);
-  }
-  return Buffer.concat(chunks);
-}
 
 function mapMachineArch(machine = os.arch()) {
   const normalized = String(machine).trim().toLowerCase();
@@ -217,47 +187,11 @@ function verifyIndexedFile(filePath, expected, label) {
   }
 }
 
-async function fetchWithRetry(url, timeoutMs) {
-  let lastError;
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    try {
-      const response = await fetch(url, { redirect: "follow", signal: AbortSignal.timeout(timeoutMs) });
-      if (response.status === 429 || (response.status >= 500 && response.status < 600)) {
-        const retryAfter = response.headers.get("retry-after");
-        let delayMs = Math.pow(2, attempt) * 1000;
-        if (retryAfter) {
-          const secs = Number(retryAfter);
-          if (Number.isFinite(secs)) delayMs = Math.max(delayMs, secs * 1000);
-          else {
-            const dateMs = Date.parse(retryAfter);
-            if (!Number.isNaN(dateMs)) delayMs = Math.max(delayMs, dateMs - Date.now());
-          }
-        }
-        delayMs = Math.min(delayMs, 30000);
-        lastError = new Error(`Download failed (${response.status}) for ${url}`);
-        if (attempt < 2) { await new Promise((r) => setTimeout(r, delayMs)); continue; }
-        throw lastError;
-      }
-      return response;
-    } catch (error) {
-      lastError = error;
-      if (error.name === "TimeoutError" || error.name === "AbortError") throw error;
-      if (attempt < 2) {
-        const delayMs = Math.pow(2, attempt) * 1000;
-        await new Promise((r) => setTimeout(r, delayMs));
-        continue;
-      }
-      throw lastError;
-    }
-  }
-  throw lastError;
-}
-
 async function download(url, destination, timeoutMs = 30000) {
   const requestUrl = new URL(url);
   if (requestUrl.protocol !== "https:") throw new Error(`URL must be https: ${url}`);
   const expectedHost = requestUrl.hostname;
-  const response = await fetchWithRetry(url, timeoutMs);
+  const response = await fetchWithRetry(url, { redirect: "follow", timeoutMs });
   if (!response.ok) throw new Error(`Download failed (${response.status}) for ${url}`);
   const finalUrl = new URL(response.url);
   if (finalUrl.protocol !== "https:") throw new Error(`Download redirected to non-HTTPS URL (${finalUrl.protocol}) for ${url}`);
