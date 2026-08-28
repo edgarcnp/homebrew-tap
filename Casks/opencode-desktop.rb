@@ -16,22 +16,9 @@ cask "opencode-desktop" do
   homepage "https://opencode.ai/"
 
   livecheck do
-    url "https://api.github.com/repos/edgarcnp/homebrew-tap/releases?per_page=100"
-    strategy :json do |json|
-      versions = json.filter_map do |release|
-        next if release["draft"] || release["prerelease"]
-
-        tag = release["tag_name"]
-        next unless tag&.start_with?("opencode-desktop-v")
-
-        candidate = tag.delete_prefix("opencode-desktop-v")
-        next if candidate.empty?
-        next unless candidate.match?(/\A\d+\.\d+\.\d+(?:[.-]\w+)*\z/)
-
-        candidate
-      end
-      versions.max_by { |candidate| Gem::Version.new(candidate) }
-    end
+    url "https://github.com/edgarcnp/homebrew-tap.git"
+    regex(/^opencode-desktop-v(\d+\.\d+\.\d+(?:[.-]\w+)*)$/)
+    strategy :git
   end
 
   auto_updates false
@@ -45,7 +32,7 @@ cask "opencode-desktop" do
     system(staged_path/"opencode-desktop-#{version}-#{arch}.AppImage", "--appimage-extract",
            chdir: staged_path) || odie("AppImage extraction failed")
 
-    icon_dir = "#{xdg_data_home}/icons/hicolor/128x128/apps" # 128x128 per upstream build-appimage.sh:58-59
+    icon_dir = "#{xdg_data_home}/icons/hicolor/128x128/apps" # 128x128 per upstream build-appimage.sh:52-53,83-85
     applications_dir = "#{xdg_data_home}/applications"
     FileUtils.mkdir_p [icon_dir, applications_dir]
 

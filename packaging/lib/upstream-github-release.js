@@ -38,6 +38,7 @@ async function fetchWithRetry(url, opts, retries = 3) {
           if (Number.isFinite(dateMs)) delayMs = Math.max(0, dateMs - Date.now());
         }
       }
+      delayMs = Math.min(delayMs, 30000);
       await new Promise((r) => setTimeout(r, delayMs));
       continue;
     }
@@ -149,7 +150,7 @@ async function downloadAndVerify(url, destination, expectedSha256, expectedSize,
   if (finalUrl.protocol !== "https:") {
     throw new Error(`Download redirected to non-HTTPS URL (${finalUrl.protocol}) for ${url}`);
   }
-  const final = new URL(response.url); if(!["github.com","objects.githubusercontent.com","github-releases.githubusercontent.com","release-assets.githubusercontent.com"].includes(final.hostname) && !final.hostname.endsWith(".githubusercontent.com")) throw new Error("unexpected download host");
+  const final = new URL(response.url); if(!["github.com","objects.githubusercontent.com","github-releases.githubusercontent.com","release-assets.githubusercontent.com"].includes(final.hostname)) throw new Error("unexpected download host");
   const len=Number(response.headers.get("content-length")||0); if(len>MAX_PAYLOAD_BYTES) throw new Error("payload too large");
   const bytes = await readPayload(response);
   if (bytes.length !== expectedSize) {
@@ -229,6 +230,9 @@ async function main() {
     }
     if (!args[i+1] || args[i+1].startsWith("--")) {
       throw new Error(`Missing value for ${args[i]}`);
+    }
+    if (Object.prototype.hasOwnProperty.call(values, args[i])) {
+      throw new Error(`Duplicate argument: ${args[i]}`);
     }
     values[args[i]] = args[i + 1];
     i += 2;

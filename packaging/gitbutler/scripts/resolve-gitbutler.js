@@ -3,8 +3,9 @@
 
 // Resolver for GitButler's Linux .deb releases: the app.gitbutler.com
 // redirect is the only version source (no signed apt repo or GitHub
-// release). The payload is hashed on download; --metadata-only resolves
-// the URL and version without downloading the .deb.
+// release). The payload is hashed on download; --metadata-only still
+// downloads the payload to compute the SHA-256 (the CDN publishes no
+// checksums) but discards the bytes instead of writing them to disk.
 
 const crypto = require("node:crypto");
 const fs = require("node:fs");
@@ -38,6 +39,7 @@ async function fetchWithRetry(url, opts, retries = 3) {
               if (!Number.isNaN(date)) delay = Math.max(0, date - Date.now());
             }
           }
+          delay = Math.min(delay, 30000);
           await new Promise((r) => setTimeout(r, delay));
           continue;
         }
@@ -170,16 +172,6 @@ async function resolveGitButlerPackage(options) {
     if (e.message.includes("Repository must be https") || e.message.includes("Repository must not contain") || e.message.includes("unexpected repository host")) throw e;
     throw new Error(`Invalid repository URL (${repository}): ${e.message}`);
   }
-  // Validate RESOLVE_BASE_URL if present - must be https to prevent downgrade via env override
-  if (process.env.RESOLVE_BASE_URL) {
-    try {
-      const base = new URL(process.env.RESOLVE_BASE_URL);
-      if (base.protocol !== "https:") throw new Error(`RESOLVE_BASE_URL must be https (got ${base.protocol}) for ${process.env.RESOLVE_BASE_URL}`);
-    } catch (e) {
-      if (e.message.includes("RESOLVE_BASE_URL must be https")) throw e;
-      throw new Error(`Invalid RESOLVE_BASE_URL (${process.env.RESOLVE_BASE_URL}): ${e.message}`);
-    }
-  }
   const outputDir = path.resolve(options.outputDir);
   fs.mkdirSync(outputDir, { recursive: true });
   const resolvedMeta = path.resolve(options.metadataPath);
@@ -247,6 +239,9 @@ async function main() {
     }
     if (!args[i].startsWith("--") || i + 1 >= args.length) {
       throw new Error(`Invalid argument: ${args[i]}`);
+    }
+    if (Object.prototype.hasOwnProperty.call(values, args[i])) {
+      throw new Error(`Duplicate argument: ${args[i]}`);
     }
     values[args[i]] = args[i + 1];
     i += 2;

@@ -320,29 +320,20 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libgdk-pixbuf2.0-bin glib-networking
       - name: Install appimagetool
         run: |
-          # pinned release, verified against its own BLAKE3 checksum;
-          # verifier: blake3 PyPI package; renovate bumps the version
+          # pinned release 0.3.3, verified via SHA256; hashes captured from
+          # the pkgforge 0.3.3 release assets; renovate customManagers were
+          # removed (regex manager cannot update per-arch digest lines), so
+          # version+hash bumps are manual PRs
           curl -fL --retry 5 --retry-all-errors --retry-delay 5 \
             -o /tmp/appimagetool-uruntime \
             "https://github.com/pkgforge-dev/appimagetool/releases/download/0.3.3/appimagetool-${{ matrix.appimage_arch }}-linux"
-          curl -fL --retry 5 --retry-all-errors --retry-delay 5 \
-            -o /tmp/appimagetool-uruntime.b3sum \
-            "https://github.com/pkgforge-dev/appimagetool/releases/download/0.3.3/appimagetool-${{ matrix.appimage_arch }}-linux.b3sum"
           test -s /tmp/appimagetool-uruntime
-          test -s /tmp/appimagetool-uruntime.b3sum
-          python3 -m pip --version >/dev/null 2>&1 || sudo apt-get install -y python3-pip
-          python3 -m pip install --quiet --user "blake3==1.0.9"
-          python3 - <<'PYEOF'
-          import blake3, pathlib, sys
-
-          binary = pathlib.Path("/tmp/appimagetool-uruntime").read_bytes()
-          expected = pathlib.Path("/tmp/appimagetool-uruntime.b3sum").read_text().split()[0]
-          got = blake3.blake3(binary).hexdigest()
-          if got != expected:
-              print(f"BLAKE3 mismatch: got {got}, expected {expected}", file=sys.stderr)
-              sys.exit(1)
-          print("BLAKE3 verified")
-          PYEOF
+          case "${{ matrix.appimage_arch }}" in
+            x86_64) expected="0d01a4e2628efc897be9663f0faeed6a171e1851270b4e1ce4c22434a36ecebd" ;;
+            aarch64) expected="298f5293c41f9b2b46290b246e6419783940824ce20b98775a5a153b18fe8422" ;;
+            *) echo "Unknown appimage_arch: ${{ matrix.appimage_arch }}" >&2; exit 1 ;;
+          esac
+          echo "${expected}  /tmp/appimagetool-uruntime" | sha256sum -c -
           chmod +x /tmp/appimagetool-uruntime
           sudo mv /tmp/appimagetool-uruntime /opt/appimagetool-uruntime
           sudo cp "${GITHUB_WORKSPACE}/tap/packaging/scripts/appimagetool-uruntime.sh" /usr/local/bin/appimagetool
@@ -352,7 +343,8 @@ jobs:
           # pinned continuous build (last-modified 2026-08-01), verified via SHA256;
           # hashes captured 2026-08-26 for the "continuous" tag (no versioned
           # releases for current builds), so we pin by SHA256 instead of tag.
-          # Renovate should bump the hashes via renovate.json customManagers.
+          # renovate customManagers were removed (regex manager cannot update
+          # per-arch digest lines), so version+hash bumps are manual PRs
           curl -fL --retry 5 --retry-all-errors --retry-delay 5 \
             -o /tmp/linuxdeploy \
             "https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-${{ matrix.appimage_arch }}.AppImage"
@@ -394,7 +386,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
+      attestations: write
       contents: write
+      id-token: write
     steps:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -439,6 +433,11 @@ jobs:
           files: assets/${{ inputs.asset_prefix }}-*.AppImage
           fail_on_unmatched_files: true
 
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: assets/${{ inputs.asset_prefix }}-*.AppImage
+
       - name: Retain only the 3 newest releases
         env:
           GH_TOKEN: ${{ github.token }}
@@ -471,6 +470,8 @@ jobs:
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - name: Update cask version and checksums
         env:
           PACKAGE_VERSION: ${{ needs.detect.outputs.version }}
@@ -480,6 +481,20 @@ jobs:
           APP_CASK: ${{ inputs.app_cask }}
         run: |
           [[ "$PACKAGE_VERSION" =~ ^[0-9A-Za-z._-]+$ ]] || { echo "invalid version: $PACKAGE_VERSION" >&2; exit 1; }
+          # Only trust release assets from a release this pipeline's own bot
+          # account published as a final (non-draft, non-prerelease) release;
+          # assets re-uploaded by anyone with contents:write have no
+          # provenance and must never be pinned into the cask.
+          release_meta="$(gh release view "${TAG_PREFIX}${PACKAGE_VERSION}" \
+            --repo "$GITHUB_REPOSITORY" --json author,isDraft,isPrerelease \
+            --jq '[.author.login, (.isDraft|tostring), (.isPrerelease|tostring)] | join(" ")')"
+          read -r release_author release_draft release_prerelease <<<"${release_meta}"
+          if [[ "${release_author}" != "github-actions[bot]" \
+            || "${release_draft}" == "true" \
+            || "${release_prerelease}" == "true" ]]; then
+            echo "warning: release ${TAG_PREFIX}${PACKAGE_VERSION} (author=${release_author}, draft=${release_draft}, prerelease=${release_prerelease}) is not a trusted bot release; not pinning cask, rebuild required" >&2
+            exit 1
+          fi
           # hash the released assets, not the run artifacts, so the cask
           # always matches what the release actually hosts
           gh release download "${TAG_PREFIX}${PACKAGE_VERSION}" \
@@ -559,6 +574,8 @@ jobs:
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - name: Catch cask up to existing release
         env:
           PACKAGE_VERSION: ${{ needs.detect.outputs.version }}
@@ -568,6 +585,20 @@ jobs:
           APP_CASK: ${{ inputs.app_cask }}
         run: |
           [[ "$PACKAGE_VERSION" =~ ^[0-9A-Za-z._-]+$ ]] || { echo "invalid version: $PACKAGE_VERSION" >&2; exit 1; }
+          # Only trust release assets from a release this pipeline's own bot
+          # account published as a final (non-draft, non-prerelease) release;
+          # assets re-uploaded by anyone with contents:write have no
+          # provenance and must never be pinned into the cask.
+          release_meta="$(gh release view "${TAG_PREFIX}${PACKAGE_VERSION}" \
+            --repo "$GITHUB_REPOSITORY" --json author,isDraft,isPrerelease \
+            --jq '[.author.login, (.isDraft|tostring), (.isPrerelease|tostring)] | join(" ")')"
+          read -r release_author release_draft release_prerelease <<<"${release_meta}"
+          if [[ "${release_author}" != "github-actions[bot]" \
+            || "${release_draft}" == "true" \
+            || "${release_prerelease}" == "true" ]]; then
+            echo "warning: release ${TAG_PREFIX}${PACKAGE_VERSION} (author=${release_author}, draft=${release_draft}, prerelease=${release_prerelease}) is not a trusted bot release; not pinning cask, rebuild required" >&2
+            exit 1
+          fi
           gh release download "${TAG_PREFIX}${PACKAGE_VERSION}" \
             --repo "$GITHUB_REPOSITORY" \
             --pattern "${ASSET_PREFIX}-*-x86_64.AppImage" \

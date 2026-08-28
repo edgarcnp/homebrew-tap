@@ -41,10 +41,13 @@ jobs:
         include:
           - container:
               image: ghcr.io/homebrew/brew:main@sha256:ae15a6ca4bd9079c89054e1adab6f076cb062db640df166a40a538ea99a1e5cc
-              options: --privileged
     runs-on: ${{ matrix.os }}
     timeout-minutes: 40
-    container: ${{ fromJSON(toJSON(matrix.container)) }}
+    container:
+      image: ${{ fromJSON(toJSON(matrix.container)).image }}
+      # --privileged only on trusted branches (push): fork PRs run untrusted
+      # cask Ruby via brew audit/test-bot, so they must run unprivileged
+      options: ${{ github.event_name != 'pull_request' && '--privileged' || '' }}
     permissions:
       actions: read
       checks: read
@@ -57,12 +60,22 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Cache Homebrew Bundler RubyGems
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - name: Restore Homebrew Bundler RubyGems
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ steps.set-up-homebrew.outputs.gems-path }}
           key: ${{ matrix.os }}-rubygems-${{ steps.set-up-homebrew.outputs.gems-hash }}
           restore-keys: ${{ matrix.os }}-rubygems-
+
+      - name: Save Homebrew Bundler RubyGems
+        # PR runs only restore the cache; saving is skipped so fork-PR runs
+        # can never write attacker-injected Ruby into a shared cache entry
+        # that main-branch runs would later restore (cache poisoning).
+        if: github.event_name != 'pull_request'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.set-up-homebrew.outputs.gems-path }}
+          key: ${{ matrix.os }}-rubygems-${{ steps.set-up-homebrew.outputs.gems-hash }}
 
       - name: Shellcheck packaging scripts
         env:

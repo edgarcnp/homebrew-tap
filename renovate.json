@@ -2,15 +2,13 @@
     "$schema": "https://docs.renovatebot.com/renovate-schema.json",
     "extends": [
         "config:recommended",
-        "helpers:pinGitHubActionDigests",
-        ":disableDependencyDashboard"
+        "helpers:pinGitHubActionDigests"
     ],
     "abandonmentThreshold": "1 year",
     "addLabels": [
         "renovate",
         "dependencies"
     ],
-    "assignAutomerge": true,
     "automerge": false,
     "keepUpdatedLabel": "renovate-keep-updated",
     "osvVulnerabilityAlerts": true,
@@ -42,36 +40,6 @@
                 "github-actions"
             ],
             "groupName": "GitHub Actions"
-        },
-        {
-            "matchManagers": [
-                "custom.regex"
-            ],
-            "groupName": "AppImage tooling"
-        }
-    ],
-    "customManagers": [
-        {
-            "customType": "regex",
-            "managerFilePatterns": [
-                ".github/workflows/.+\\.ya?ml$"
-            ],
-            "matchStrings": [
-                "https://github\\.com/pkgforge-dev/appimagetool/releases/download/(?<currentValue>[^/]+)/appimagetool-"
-            ],
-            "datasourceTemplate": "github-releases",
-            "depNameTemplate": "pkgforge-dev/appimagetool"
-        },
-        {
-            "customType": "regex",
-            "managerFilePatterns": [
-                ".github/workflows/.+\\.ya?ml$"
-            ],
-            "matchStrings": [
-                "https://github\\.com/linuxdeploy/linuxdeploy/releases/download/(?<currentValue>[^/]+)/linuxdeploy-"
-            ],
-            "datasourceTemplate": "github-releases",
-            "depNameTemplate": "linuxdeploy/linuxdeploy"
         }
     ]
 }

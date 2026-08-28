@@ -12,6 +12,8 @@ const os = require("node:os");
 const path = require("node:path");
 
 const MAX_PAYLOAD_BYTES = 512 * 1024 * 1024;
+const MAX_RELEASE_AGE_DAYS = 14;
+const WARN_RELEASE_AGE_DAYS = 7;
 
 function writeFileAtomic(filePath, data) {
   const tmp = filePath + ".tmp." + crypto.randomBytes(8).toString("hex");
@@ -231,6 +233,7 @@ async function fetchWithRetry(url, timeoutMs) {
             if (!Number.isNaN(dateMs)) delayMs = Math.max(delayMs, dateMs - Date.now());
           }
         }
+        delayMs = Math.min(delayMs, 30000);
         lastError = new Error(`Download failed (${response.status}) for ${url}`);
         if (attempt < 2) { await new Promise((r) => setTimeout(r, delayMs)); continue; }
         throw lastError;
@@ -292,6 +295,35 @@ function verifyInRelease(inReleasePath, keyPath, expectedFingerprint) {
   return extractClearSignedPayload(fs.readFileSync(inReleasePath, "utf8"));
 }
 
+function assertReleaseFreshness(payload) {
+  // Enforce apt-style freshness on the verified payload: a replayed old
+  // signed index must not silently downgrade the resolved package.
+  const fields = parseDeb822(payload)[0] ?? {};
+  const toTimestamp = (value, field) => {
+    if (value == null || value === "") return null;
+    const ms = Date.parse(String(value));
+    if (Number.isNaN(ms)) throw new Error(`Invalid ${field} in InRelease: ${value}`);
+    return ms;
+  };
+  const now = Date.now();
+  const validUntilMs = toTimestamp(fields["Valid-Until"], "Valid-Until");
+  if (validUntilMs != null) {
+    if (now > validUntilMs) {
+      throw new Error(`InRelease expired: Valid-Until ${fields["Valid-Until"]} is in the past`);
+    }
+    return;
+  }
+  const dateMs = toTimestamp(fields.Date, "Date");
+  if (dateMs == null) throw new Error("InRelease missing Date field; cannot verify freshness");
+  const ageDays = (now - dateMs) / (24 * 60 * 60 * 1000);
+  if (ageDays > MAX_RELEASE_AGE_DAYS) {
+    throw new Error(`InRelease too old: Date ${fields.Date} is more than ${MAX_RELEASE_AGE_DAYS} days old`);
+  }
+  if (ageDays > WARN_RELEASE_AGE_DAYS) {
+    console.warn(`InRelease is ${Math.floor(ageDays)} days old (Date ${fields.Date})`);
+  }
+}
+
 async function resolveUpstreamPackage(options) {
   if (!/^[a-z0-9][a-z0-9.+_-]*$/.test(options.packageName)) {
     throw new Error(`Unsafe package name: ${options.packageName}`);
@@ -332,6 +364,7 @@ async function resolveUpstreamPackage(options) {
   const inReleasePath = path.join(outputDir, "InRelease");
   await download(`${repository}/dists/stable/InRelease`, inReleasePath);
   const releasePayload = verifyInRelease(inReleasePath, keyPath, options.fingerprint);
+  assertReleaseFreshness(releasePayload);
   const releaseEntries = parseReleaseSha256(releasePayload);
   const packagesRelative = `main/binary-${architecture}/Packages`;
   const indexedPackages = releaseEntries.get(packagesRelative);
@@ -370,6 +403,9 @@ async function main() {
     if (!args[i].startsWith("--") || i + 1 >= args.length) {
       throw new Error(`Invalid argument: ${args[i]}`);
     }
+    if (Object.prototype.hasOwnProperty.call(values, args[i])) {
+      throw new Error(`Duplicate argument: ${args[i]}`);
+    }
     values[args[i]] = args[i + 1];
     i += 2;
   }
@@ -400,6 +436,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  assertReleaseFreshness,
   compareDebVersions,
   extractClearSignedPayload,
   mapMachineArch,

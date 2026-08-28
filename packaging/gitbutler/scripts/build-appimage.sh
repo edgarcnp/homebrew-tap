@@ -39,6 +39,10 @@ else
   [[ "${APPDIR#"${DIST_DIR}/"}" != "${APPDIR}" ]] || error "APPDIR must be inside DIST_DIR: ${APPDIR}"
   [[ "${APPDIR}" != "${REPO_DIR}" && "${APPDIR}" != "${DIST_DIR}" ]] || error "refusing to operate on suspicious APPDIR"
 fi
+if [[ -n "${WORK_DIR_OVERRIDE:-}" ]]; then
+  [[ "${WORK_DIR_OVERRIDE}" == /* ]] || error "WORK_DIR_OVERRIDE must be absolute: ${WORK_DIR_OVERRIDE}"
+  [[ "${WORK_DIR_OVERRIDE}" != "/" ]] || error "refusing WORK_DIR_OVERRIDE=/"
+fi
 [[ "${PACKAGE_VERSION:-}" != *[/\\]* ]] || error "PACKAGE_VERSION contains path separator"
 PACKAGE_NAME="${PACKAGE_NAME:-gitbutler}"
 [[ "${PACKAGE_NAME}" =~ ^[A-Za-z0-9._-]+$ ]] || error "invalid PACKAGE_NAME: ${PACKAGE_NAME}"
@@ -324,6 +328,7 @@ main() {
   else
     PACKAGE_VERSION="${resolved_version}"
     info "Derived PACKAGE_VERSION ${PACKAGE_VERSION} from upstream metadata"
+    [[ "${PACKAGE_VERSION}" != *[/\\]* ]] || error "PACKAGE_VERSION contains path separator"
   fi
 
   local payload_dir="${WORK_DIR}/deb-payload"

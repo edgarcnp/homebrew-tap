@@ -16,22 +16,9 @@ cask "gitbutler" do
   homepage "https://gitbutler.com/"
 
   livecheck do
-    url "https://api.github.com/repos/edgarcnp/homebrew-tap/releases?per_page=100"
-    strategy :json do |json|
-      versions = json.filter_map do |release|
-        next if release["draft"] || release["prerelease"]
-
-        tag = release["tag_name"]
-        next unless tag&.start_with?("gitbutler-v")
-
-        candidate = tag.delete_prefix("gitbutler-v")
-        next if candidate.empty?
-        next unless candidate.match?(/\A\d+\.\d+\.\d+(?:[.-]\w+)*\z/)
-
-        candidate
-      end
-      versions.max_by { |candidate| Gem::Version.new(candidate) }
-    end
+    url "https://github.com/edgarcnp/homebrew-tap.git"
+    regex(/^gitbutler-v(\d+\.\d+\.\d+(?:[.-]\w+)*)$/)
+    strategy :git
   end
 
   auto_updates false
@@ -46,7 +33,7 @@ cask "gitbutler" do
     system(staged_path/"gitbutler-#{version}-#{arch}.AppImage", "--appimage-extract",
            chdir: staged_path) || odie("AppImage extraction failed")
 
-    icon_dir = "#{xdg_data_home}/icons/hicolor/256x256/apps" # 256x256 per upstream build-appimage.sh
+    icon_dir = "#{xdg_data_home}/icons/hicolor/128x128/apps" # 128x128 per upstream build-appimage.sh
     applications_dir = "#{xdg_data_home}/applications"
     FileUtils.mkdir_p [icon_dir, applications_dir]
 
@@ -74,15 +61,17 @@ cask "gitbutler" do
 
   uninstall trash: [
     "#{xdg_data_home}/applications/gitbutler.desktop",
-    "#{xdg_data_home}/icons/hicolor/256x256/apps/gitbutler.png",
+    "#{xdg_data_home}/icons/hicolor/128x128/apps/gitbutler.png",
   ]
 
   zap trash: [
     "#{xdg_cache_home}/gitbutler",
+    "#{xdg_config_home}/com.gitbutler.app",
     "#{xdg_config_home}/gitbutler",
     "#{xdg_data_home}/applications/gitbutler.desktop",
+    "#{xdg_data_home}/com.gitbutler.app",
     "#{xdg_data_home}/gitbutler",
-    "#{xdg_data_home}/icons/hicolor/256x256/apps/gitbutler.png",
+    "#{xdg_data_home}/icons/hicolor/128x128/apps/gitbutler.png",
   ]
 
   caveats <<~EOS
