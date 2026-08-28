@@ -52,6 +52,16 @@ prepare_appdir() {
   ensure_file_exists "${executable}" "opencode desktop executable"
   ensure_file_exists "${icon}" "opencode desktop icon"
 
+  # Remove the electron-updater feed so the app never self-updates from
+  # upstream (anomalyco/opencode); updates come via Homebrew only.
+  if [[ -f "${app_dir}/resources/app-update.yml" ]]
+  then
+    rm -- "${app_dir}/resources/app-update.yml"
+    info "Removed embedded electron-updater feed: resources/app-update.yml"
+  else
+    warn "resources/app-update.yml already absent; embedded updater feed already disabled"
+  fi
+
   info "Preparing AppDir at ${APPDIR}"
   rm -rf -- "${APPDIR}"
   mkdir -p -- \
