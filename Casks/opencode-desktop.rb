@@ -42,8 +42,6 @@ cask "opencode-desktop" do
     )
   end
 
-  uninstall trash: CaskHelpers.desktop_files("opencode-desktop", icon_dir: "128x128")
-
   zap trash: [
     "#{CaskHelpers.xdg_cache_home}/ai.opencode.desktop",
     "#{CaskHelpers.xdg_config_home}/ai.opencode.desktop",
@@ -54,5 +52,8 @@ cask "opencode-desktop" do
   caveats <<~EOS
     This cask installs an AppImage that requires unprivileged user namespaces or FUSE.
     On some systems you may need to enable unprivileged_userns_clone or install FUSE3.
+    The desktop entry and icon are only removed by the zap stanza. If you uninstalled
+    without --zap, clean them up with:
+      brew uninstall --zap --force opencode-desktop
   EOS
 end
