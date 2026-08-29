@@ -79,39 +79,52 @@ runs:
             sys.exit(1)
         open(path, "w", encoding="utf-8").write(text)
         PY
+    - name: Import GPG signing key
+      id: import-gpg
+      shell: bash -xeuo pipefail {0}
+      env:
+        GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+      run: |
+        echo "${GPG_PRIVATE_KEY}" | gpg --batch --import
+        uid="$(gpg --list-secret-keys --keyid-format=long | awk '/^uid/ {print; exit}')"
+        key_id="$(gpg --list-secret-keys --keyid-format=long | awk '/^sec/ {print $2; exit}' | cut -d/ -f2)"
+        name="$(sed -E 's/^uid\s+\[[^]]*\]\s+//; s/\s*<[^>]+>\s*$//' <<<"${uid}")"
+        email="$(sed -E 's/.*<([^>]+)>.*/\1/' <<<"${uid}")"
+        {
+          echo "gpg_key_id=${key_id}"
+          echo "gpg_name=${name}"
+          echo "gpg_email=${email}"
+        } >> "$GITHUB_OUTPUT"
     - name: Commit and push cask update
       shell: bash -xeuo pipefail {0}
       env:
         PACKAGE_VERSION: ${{ inputs.package_version }}
         APP_CASK: ${{ inputs.app_cask }}
         GH_TOKEN: ${{ inputs.token }}
+        GPG_KEY_ID: ${{ steps.import-gpg.outputs.gpg_key_id }}
+        GPG_NAME: ${{ steps.import-gpg.outputs.gpg_name }}
+        GPG_EMAIL: ${{ steps.import-gpg.outputs.gpg_email }}
       run: |
-        # no author/committer fields: the token identity (github-actions[bot])
-        # becomes author/committer and GitHub auto-signs the commit
-        base="$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq .commit.sha)"
+        # commit locally so the change is GPG-signed; the committer identity is
+        # derived from the imported key so the email matches a verified address
+        gh auth setup-git
+        git config gpg.format openpgp
+        git config user.name "${GPG_NAME}"
+        git config user.email "${GPG_EMAIL}"
+        git config user.signingkey "${GPG_KEY_ID}"
+        git config commit.gpgsign true
+        git add "Casks/${APP_CASK}.rb"
+        git commit -S -m "chore(cask): update ${APP_CASK} to ${PACKAGE_VERSION}"
         for _ in 1 2 3 4 5; do
-          blob="$(gh api --method POST "repos/$GITHUB_REPOSITORY/git/blobs" \
-            -F encoding=utf-8 -F content=@"Casks/${APP_CASK}.rb" --jq .sha)"
-          base_tree="$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$base" --jq .tree.sha)"
-          tree="$(gh api --method POST "repos/$GITHUB_REPOSITORY/git/trees" \
-            -f base_tree="$base_tree" \
-            -f "tree[][path]=Casks/${APP_CASK}.rb" \
-            -f "tree[][mode]=100644" \
-            -f "tree[][type]=blob" \
-            -f "tree[][sha]=$blob" \
-            --jq .sha)"
-          commit="$(gh api --method POST "repos/$GITHUB_REPOSITORY/git/commits" \
-            -f message="chore(cask): update ${APP_CASK} to ${PACKAGE_VERSION}" \
-            -f tree="$tree" -f "parents[]=$base" --jq .sha)"
-          if gh api --method PATCH "repos/$GITHUB_REPOSITORY/git/refs/heads/main" \
-            -f sha="$commit" --silent; then
-            echo "pushed cask update ${commit}"
+          if git push origin HEAD:main; then
+            echo "pushed cask update $(git rev-parse HEAD)"
             exit 0
           fi
           # concurrent runs may advance the branch between read and write;
-          # rebase onto the new head and retry (422 fast-forward rejection)
+          # rebase onto the new head and retry (non-fast-forward rejection)
           sleep 10
-          base="$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq .commit.sha)"
+          git fetch origin main
+          git rebase FETCH_HEAD
         done
         echo "could not push cask update after 5 attempts" >&2
         exit 1
