@@ -20,11 +20,35 @@ on code.visualstudio.com, so the full verification chain applies:
    updater is disabled because brew owns updates: `scripts/disable-updater.js`
    removes `updateUrl` from `product.json` and rewrites the hardcoded
    `update.code.visualstudio.com` endpoint in the compiled bundles (a
-   same-length replacement for the `code-tunnel` ELF so it is not corrupted),
-   and the whole AppDir is scanned for residual references to
+   same-length replacement for ELF files so they are not corrupted), and the
+   whole AppDir is scanned for residual references to
    `update.code.visualstudio.com`
    (`verify_updater_neutralized`) so a second copy can never silently
-   re-enable it.
+   re-enable it. See [Updater neutralization](#updater-neutralization).
+
+## Updater neutralization
+
+The updater endpoint is compiled into `product.json` (the `updateUrl` field)
+and into the JS bundles and the `code-tunnel` ELF binary. To disable it:
+
+- `product.json`: the `updateUrl` key is deleted outright.
+- Text files (JS bundles): the endpoint string is replaced with the shorter,
+  inert `update.invalid`.
+- ELF binaries (e.g. `code-tunnel`): the replacement must be **the same byte
+  length** (`update.invalidupdate.invalid`), or shortening the string shifts
+  every byte after it and corrupts the file structure.
+
+Binary vs. text is decided by the first four bytes of the file: the **ELF
+magic number** `0x7f 0x45 0x4c 0x46` (ASCII `DEL` + `ELF`). Every ELF
+executable/shared library on Linux starts with exactly those bytes; text
+files never do. This replaced the older `buf.includes(0)` heuristic (any NUL
+byte = binary), which would have misclassified a NUL-free binary as text and
+corrupted it with the shorter replacement.
+
+After patching, `verify_updater_neutralized` (in `build-appimage.sh`) greps
+the whole AppDir for `update.code.visualstudio.com` and fails the build if
+any copy remains — so an endpoint embedded elsewhere (a helper `.so`, a
+second bundle) can never silently re-enable the updater.
 
 The cask version uses the upstream version (e.g. `1.133.0`), not the
 `.deb` build epoch suffix (e.g. `1.133.0-1786487972`), which differs between

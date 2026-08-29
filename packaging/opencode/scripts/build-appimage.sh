@@ -82,6 +82,21 @@ prepare_appdir() {
   chmod 0755 -- "${APPDIR}/opt/opencode-desktop/ai.opencode.desktop"
 }
 
+# The official .deb ships with electron-updater enabled. Removing
+# resources/app-update.yml neutralizes the feed, but if the Electron main
+# process ever hardcodes a feed URL as a fallback, this scan fails the build
+# loudly rather than shipping a build with the updater silently re-enabled.
+verify_updater_neutralized() {
+  local from="https://github.com/anomalyco/opencode/releases/download/"
+  local matches
+  matches="$(grep -rlaF -- "${from}" "${APPDIR}" 2>/dev/null || true)"
+  if [[ -n "${matches}" ]]
+  then
+    error "updater endpoint patch incomplete: original endpoint still present in: ${matches}"
+  fi
+  info "Verified no file in APPDIR still references the upstream updater endpoint"
+}
+
 main() {
   ensure_file_exists "${APPRUN_TEMPLATE}" "AppImage AppRun template"
   ensure_file_exists "${DESKTOP_TEMPLATE}" "AppImage desktop template"
@@ -123,6 +138,7 @@ main() {
   dpkg-deb -x "${deb_path}" "${payload_dir}"
 
   prepare_appdir "${payload_dir}"
+  verify_updater_neutralized
 
   local appimagetool
   appimagetool="$(resolve_appimagetool)"

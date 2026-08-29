@@ -47,6 +47,11 @@ on:
         required: false
         type: string
         default: ""
+      needs_webkit:
+        description: Whether the app build requires the webkit2gtk/GTK build dependencies (gitbutler only)
+        required: false
+        type: boolean
+        default: false
       resolve_script:
         description: Path (relative to the source checkout root) of the upstream-linux-package.js resolver the detect job runs
         required: false
@@ -315,7 +320,11 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y dpkg-dev gnupg rpm
+          sudo apt-get install -y gnupg
+      - name: Install webkit2gtk build dependencies
+        if: inputs.needs_webkit
+        run: |
+          sudo apt-get update
           # webkit2gtk runtime closure for the gitbutler AppImage build
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libgdk-pixbuf2.0-bin glib-networking
       - name: Install appimagetool

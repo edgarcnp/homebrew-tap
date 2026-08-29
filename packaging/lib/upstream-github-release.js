@@ -50,7 +50,9 @@ async function fetchJson(url, token) {
 }
 
 async function selectRelease(repository, assetPrefix, token) {
-  if(!/^https:\/\/api\.github\.com\/repos\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(String(repository).replace(/\/+$/,""))) throw new Error("invalid repository");
+  if (!/^https:\/\/api\.github\.com\/repos\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(String(repository).replace(/\/+$/, ""))) {
+    throw new Error("invalid repository");
+  }
   const releases = await fetchJson(`${repository}/releases?per_page=30`, token);
   if (!Array.isArray(releases)) throw new Error("GitHub API did not return a release list");
   for (const release of releases) {
@@ -83,8 +85,14 @@ async function downloadAndVerify(url, destination, expectedSha256, expectedSize,
   if (finalUrl.protocol !== "https:") {
     throw new Error(`Download redirected to non-HTTPS URL (${finalUrl.protocol}) for ${url}`);
   }
-  const final = new URL(response.url); if(!["github.com","objects.githubusercontent.com","github-releases.githubusercontent.com","release-assets.githubusercontent.com"].includes(final.hostname)) throw new Error("unexpected download host");
-  const len=Number(response.headers.get("content-length")||0); if(len>MAX_PAYLOAD_BYTES) throw new Error("payload too large");
+  const final = new URL(response.url);
+  if (!["github.com", "objects.githubusercontent.com", "github-releases.githubusercontent.com", "release-assets.githubusercontent.com"].includes(final.hostname)) {
+    throw new Error("unexpected download host");
+  }
+  const len = Number(response.headers.get("content-length") || 0);
+  if (len > MAX_PAYLOAD_BYTES) {
+    throw new Error("payload too large");
+  }
   const bytes = await readPayload(response);
   if (bytes.length !== expectedSize) {
     throw new Error(`${label} size mismatch: expected ${expectedSize}, got ${bytes.length}`);
@@ -112,7 +120,11 @@ async function resolveUpstreamRelease(options) {
   }
   const outputDir = path.resolve(options.outputDir);
   fs.mkdirSync(outputDir, { recursive: true });
-  const resolvedMeta = path.resolve(options.metadataPath); const resolvedOut = path.resolve(options.outputDir); if(!resolvedMeta.startsWith(resolvedOut+path.sep) && resolvedMeta!==resolvedOut) throw new Error("metadataPath must be inside outputDir");
+  const resolvedMeta = path.resolve(options.metadataPath);
+  const resolvedOut = path.resolve(options.outputDir);
+  if (!resolvedMeta.startsWith(resolvedOut + path.sep) && resolvedMeta !== resolvedOut) {
+    throw new Error("metadataPath must be inside outputDir");
+  }
 
   const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN || "";
   const { tag, selected } = await selectRelease(repository, options.assetPrefix, token);

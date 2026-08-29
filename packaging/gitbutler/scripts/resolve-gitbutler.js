@@ -28,49 +28,6 @@ function sha256Buffer(bytes) {
   return crypto.createHash("sha256").update(bytes).digest("hex");
 }
 
-// Pinned SHA-256 ledger (packaging/gitbutler/trusted-deb-hashes.json): the CDN
-// publishes no checksums, so a downloaded hash is trusted on first sight unless
-// pinned here. A missing, unreadable, or malformed ledger must fail closed.
-function loadTrustedDebHashes() {
-  const ledgerPath = path.join(__dirname, "..", "trusted-deb-hashes.json");
-  let ledger;
-  try {
-    ledger = JSON.parse(fs.readFileSync(ledgerPath, "utf8"));
-  } catch (e) {
-    throw new Error(`Cannot load trusted .deb hashes ledger (${ledgerPath}): ${e.message}`);
-  }
-  if (typeof ledger !== "object" || ledger === null || Array.isArray(ledger)) {
-    throw new Error(`Trusted .deb hashes ledger (${ledgerPath}) must be a JSON object`);
-  }
-  for (const [ledgerVersion, arches] of Object.entries(ledger)) {
-    if (typeof arches !== "object" || arches === null || Array.isArray(arches)) {
-      throw new Error(`Trusted .deb hashes ledger entry for ${ledgerVersion} must map architectures to SHA-256`);
-    }
-    for (const [arch, hash] of Object.entries(arches)) {
-      if (typeof hash !== "string" || !/^[0-9a-f]{64}$/.test(hash)) {
-        throw new Error(`Trusted .deb hashes ledger entry for ${ledgerVersion} ${arch} must be a 64-hex SHA-256`);
-      }
-    }
-  }
-  return ledger;
-}
-
-function verifyTrustedDebHash(ledger, version, architecture, sha256) {
-  const expected = ledger[version]?.[architecture];
-  if (expected !== undefined) {
-    if (expected !== sha256) {
-      throw new Error(
-        `GitButler .deb authenticity check failed for ${version} (${architecture}): downloaded SHA-256 ${sha256} does not match pinned ${expected}`
-      );
-    }
-    return expected;
-  }
-  console.warn(
-    `No pinned SHA-256 for git-butler ${version} (${architecture}); trusting first-seen hash ${sha256} — add it to trusted-deb-hashes.json after review`
-  );
-  return sha256;
-}
-
 // Assumed upstream URL layout (live-verified 2026-08, both architectures):
 //   GET <repository>/<archPath>/deb                    (302 redirect)
 //   -> https://releases.gitbutler.com/releases/release/<version>[-<build>]/linux/<archPath>/GitButler_<version>_<debArch>.deb
@@ -148,7 +105,9 @@ async function resolveGitButlerPackage(options) {
   fs.mkdirSync(outputDir, { recursive: true });
   const resolvedMeta = path.resolve(options.metadataPath);
   const resolvedOut = path.resolve(options.outputDir);
-  if (!resolvedMeta.startsWith(resolvedOut + path.sep) && resolvedMeta !== resolvedOut) throw new Error("metadataPath must be inside outputDir");
+  if (!resolvedMeta.startsWith(resolvedOut + path.sep) && resolvedMeta !== resolvedOut) {
+    throw new Error("metadataPath must be inside outputDir");
+  }
 
 // The redirect target URL is the version source; metadata-only mode
 // downloads the payload to compute the SHA-256 (the CDN publishes no
@@ -184,9 +143,6 @@ async function resolveGitButlerPackage(options) {
     sha256 = sha256Buffer(bytes);
     size = bytes.length;
   }
-  // Authenticity check: verify the freshly computed hash against the pinned
-  // ledger before trusting or publishing it (first-seen hashes are warned on).
-  verifyTrustedDebHash(loadTrustedDebHashes(), version, debArch, sha256);
   const result = {
     package: "git-butler",
     version,

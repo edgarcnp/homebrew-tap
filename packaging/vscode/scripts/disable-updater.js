@@ -35,7 +35,7 @@ if (stat.isFile()) {
   }
 
   // Replace hardcoded updater endpoint in all files under the directory.
-  // Text files get a short, inert hostname; binary files must get a
+  // Text files get a short, inert hostname; ELF binaries must get a
   // same-length replacement or the ELF structure is corrupted.
   const from = "update.code.visualstudio.com";
   const toText = "update.invalid";                  // shorter -- safe for text
@@ -49,6 +49,11 @@ if (stat.isFile()) {
   const fromBuf = Buffer.from(from, "utf8");
   const toTextBuf = Buffer.from(toText, "utf8");
   const toBinaryBuf = Buffer.from(toBinary, "utf8");
+  // ELF magic number (0x7f 'E' 'L' 'F'): every ELF executable/shared library
+  // starts with these 4 bytes. Detected by offset rather than the older
+  // "any NUL byte = binary" heuristic, which misclassified NUL-free binaries
+  // as text and corrupted them with the short replacement.
+  const ELF_MAGIC = Buffer.from([0x7f, 0x45, 0x4c, 0x46]);
 
   let replacedCount = 0;
 
@@ -63,7 +68,7 @@ if (stat.isFile()) {
           const buf = fs.readFileSync(fullPath);
           if (!buf.includes(fromBuf)) continue;
 
-          const isBinary = buf.includes(0);
+          const isBinary = buf.indexOf(ELF_MAGIC) === 0;
           const toBuf = isBinary ? toBinaryBuf : toTextBuf;
 
           const chunks = [];
