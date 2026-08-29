@@ -21,6 +21,9 @@ inputs:
   token:
     description: GitHub token with contents:write on the default branch
     required: true
+  gpg_private_key:
+    description: GPG private key used to sign the cask update commit
+    required: true
 runs:
   using: composite
   steps:
@@ -83,7 +86,7 @@ runs:
       id: import-gpg
       shell: bash -xeuo pipefail {0}
       env:
-        GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        GPG_PRIVATE_KEY: ${{ inputs.gpg_private_key }}
       run: |
         echo "${GPG_PRIVATE_KEY}" | gpg --batch --import
         uid="$(gpg --list-secret-keys --keyid-format=long | awk '/^uid/ {print; exit}')"
