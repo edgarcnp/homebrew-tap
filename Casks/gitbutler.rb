@@ -4,8 +4,8 @@ cask "gitbutler" do
   arch arm: "aarch64", intel: "x86_64"
 
   version "0.22.3"
-  sha256 arm64_linux:  "53d4fb04c01cb1003e1bb78f04c6023469de0f3a329bcb4ef8d3b72c787198ff",
-         x86_64_linux: "d2bb755ee596d32096cdfeed4be63c6c4272dc7c7ba2e7555e18f8eb19fc84ee"
+  sha256 arm64_linux:  "9e87cd633e27f13fdbd93a49822a9ef23376aec643b89cb72ebe022bfd3cd5a1",
+         x86_64_linux: "161214ca2cbc4383343a82b8acbc1bec5725d2fc5a1b3146e39b8346328d2cbf"
 
   url "https://github.com/edgarcnp/homebrew-tap/releases/download/gitbutler-v#{version}/gitbutler-#{version}-#{arch}.AppImage",
       verified: "github.com/edgarcnp/homebrew-tap"
