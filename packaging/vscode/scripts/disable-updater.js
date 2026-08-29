@@ -15,22 +15,38 @@ const stat = fs.statSync(target);
 if (stat.isFile()) {
   // Legacy: single product.json file
   const json = JSON.parse(fs.readFileSync(target, "utf8"));
+  let changed = false;
   if ("updateUrl" in json) {
     delete json.updateUrl;
+    changed = true;
+  }
+  if ("checksums" in json) {
+    delete json.checksums;
+    changed = true;
+  }
+  if (changed) {
     fs.writeFileSync(target, JSON.stringify(json, null, "\t") + "\n");
-    console.error("[INFO] Removed updateUrl from product.json");
+    console.error("[INFO] Removed updateUrl/checksums from product.json");
   } else {
-    console.error("[INFO] product.json has no updateUrl; updater already disabled");
+    console.error("[INFO] product.json has no updateUrl or checksums; updater already disabled");
   }
 } else if (stat.isDirectory()) {
   // Directory mode: patch product.json + replace hardcoded endpoint in all files
   const productJsonPath = path.join(target, "resources", "app", "product.json");
   if (fs.existsSync(productJsonPath)) {
     const json = JSON.parse(fs.readFileSync(productJsonPath, "utf8"));
+    let changed = false;
     if ("updateUrl" in json) {
       delete json.updateUrl;
+      changed = true;
+    }
+    if ("checksums" in json) {
+      delete json.checksums;
+      changed = true;
+    }
+    if (changed) {
       fs.writeFileSync(productJsonPath, JSON.stringify(json, null, "\t") + "\n");
-      console.error("[INFO] Removed updateUrl from product.json");
+      console.error("[INFO] Removed updateUrl/checksums from product.json");
     }
   }
 
