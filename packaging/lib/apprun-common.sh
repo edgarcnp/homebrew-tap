@@ -28,15 +28,26 @@ resolve_appdir() {
     exit 1
   fi
 
-  cd -P -- "$(dirname -- "${source}")" && pwd
+  # dirname(1) is an external command; substitute parameter expansion for
+  # the hot path. Empty (source="/AppRun") maps to "/", no slash to ".".
+  local source_dir
+  if [[ "${source}" == */* ]]
+  then
+    source_dir="${source%/*}"
+    [[ -n "${source_dir}" ]] || source_dir="/"
+  else
+    source_dir="."
+  fi
+  cd -P -- "${source_dir}" && pwd
 }
 
 resolved_appdir="$(resolve_appdir)"
-if [[ -n "${APPDIR:-}" ]]
+if [[ -n "${APPDIR:-}" ]] && [[ "${APPDIR}" != "${resolved_appdir}" ]]
 then
   appdir_canonical="$(cd -P -- "${APPDIR}" 2>/dev/null && pwd)" || appdir_canonical=""
   [[ "${appdir_canonical}" = "${resolved_appdir}" ]] || APPDIR="${resolved_appdir}"
-else
+elif [[ -z "${APPDIR:-}" ]]
+then
   APPDIR="${resolved_appdir}"
 fi
 export APPDIR

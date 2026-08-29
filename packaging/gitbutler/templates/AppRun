@@ -1,9 +1,12 @@
 #!/bin/bash
 set -euo pipefail
 
-# shellcheck disable=SC1091 # sourced file is followed only when shellcheck runs with -x
 # shellcheck source=../../lib/apprun-common.sh
-source "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/apprun-common.sh"
+__src="${BASH_SOURCE[0]}"
+[[ "${__src}" = /* ]] || __src="${PWD}/${__src}"
+[[ -L "${__src}" ]] && __src="$(readlink -f -- "${__src}")"
+# shellcheck disable=SC1091 # sourced file is followed only when shellcheck runs with -x
+source "${__src%/*}/apprun-common.sh"
 
 # brew owns updates for this AppImage; block the app's own update channel the
 # same way the GitButler flatpak does. The flatpak compiles with the
@@ -26,7 +29,14 @@ prevent_autoupdate() {
         return 0
     fi
 
-    # Key already present: force it to 0 (no-op when already 0).
+    # Key already present with value 0: nothing to do. This is the steady
+    # state after the first run, so the sed rewrite below (whole-file
+    # rewrite + rename) is skipped on every launch.
+    if grep -Eq '"checkForUpdatesIntervalInSeconds"[[:space:]]*:[[:space:]]*0([^0-9]|$)' "${config_file}" 2>/dev/null; then
+        return 0
+    fi
+
+    # Key present with a non-zero value: force it to 0.
     if grep -q '"checkForUpdatesIntervalInSeconds"' "${config_file}" 2>/dev/null; then
         LC_ALL=C sed -i -E \
             's/"checkForUpdatesIntervalInSeconds"[[:space:]]*:[[:space:]]*[0-9]+/"checkForUpdatesIntervalInSeconds": 0/' \
