@@ -3,9 +3,9 @@ require_relative File.join(__dir__, "..", "lib", "cask_helpers")
 cask "gitbutler" do
   arch arm: "aarch64", intel: "x86_64"
 
-  version "0.22.1"
-  sha256 arm64_linux:  "2c6a1d1397dd35b8c939a1b6cd78f578fc76c16e9e0991f644b7225226c9c575",
-         x86_64_linux: "fc391f953526ea2722f6c4c2b9e9f2403fd19978272518c58a34eca56dfac1fc"
+  version "0.22.2"
+  sha256 arm64_linux:  "4eeee9cefd5d905d7f5b776d586701c2cac8d7a6ebc49f753aa91a44c1168744",
+         x86_64_linux: "255f3ed08ab7505e2d60c81508755837ea89dc3e19d334607425bf36cfc33020"
 
   url "https://github.com/edgarcnp/homebrew-tap/releases/download/gitbutler-v#{version}/gitbutler-#{version}-#{arch}.AppImage",
       verified: "github.com/edgarcnp/homebrew-tap"
