@@ -502,6 +502,7 @@ jobs:
           asset_prefix: ${{ inputs.asset_prefix }}
           app_cask: ${{ inputs.app_cask }}
           token: ${{ secrets.HOMEBREW_PAT }}
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
 
   repair-cask:
     needs: detect
@@ -525,3 +526,4 @@ jobs:
           asset_prefix: ${{ inputs.asset_prefix }}
           app_cask: ${{ inputs.app_cask }}
           token: ${{ secrets.HOMEBREW_PAT }}
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
