@@ -66,7 +66,7 @@ brew install --cask edgarcnp/tap/vscode
 - The AppImage, copied into the configured AppImage directory (default `~/Applications`; override with `brew install --cask --appimagedir=<dir>`).
 - A launcher binary on your PATH and a desktop entry in `~/.local/share/applications/`, with its icon in `~/.local/share/icons/`.
 
-Uninstall with:
+## Uninstall
 
 ```sh
 brew uninstall --cask <cask>
@@ -78,13 +78,11 @@ Add `--zap` to also remove the desktop entry and icon:
 brew uninstall --cask --zap <cask>
 ```
 
-### How the AppImages run
+If you already uninstalled without `--zap`, use `--force` (needed because the cask is no longer installed):
 
-The uruntime first tries to **mount** the embedded filesystem via FUSE3; if FUSE is unavailable, it falls back to **extract-and-run** (extracting the image to a temp dir and running from there). So the AppImages work even on systems without FUSE.
-
-### Sandboxing
-
-AppImage builds never add `--no-sandbox`. If your distribution disables unprivileged user namespaces, use the `.deb`/`.rpm` packages instead.
+```sh
+brew uninstall --cask --zap --force <cask>
+```
 
 ## How these AppImages differ from the official ones
 
@@ -95,6 +93,14 @@ Official AppImages are usually built with AppImageKit's `appimagetool`: squashfs
 - A single Rust binary with no Python/C++ toolchain dependencies.
 
 The binaries inside are the official upstream releases; only the packaging toolchain differs.
+
+### How the AppImages run
+
+The uruntime first tries to **mount** the embedded filesystem via FUSE3; if FUSE is unavailable, it falls back to **extract-and-run** (extracting the image to a temp dir and running from there). So the AppImages work even on systems without FUSE.
+
+### Sandboxing
+
+AppImage builds never add `--no-sandbox`. If your distribution disables unprivileged user namespaces, use the `.deb`/`.rpm` packages instead.
 
 ## Documentation
 

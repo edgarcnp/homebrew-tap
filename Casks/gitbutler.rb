@@ -43,8 +43,6 @@ cask "gitbutler" do
     )
   end
 
-  uninstall trash: CaskHelpers.desktop_files("gitbutler", icon_dir: "128x128")
-
   zap trash: [
     "#{CaskHelpers.xdg_cache_home}/gitbutler",
     "#{CaskHelpers.xdg_config_home}/com.gitbutler.app",
@@ -57,5 +55,8 @@ cask "gitbutler" do
   caveats <<~EOS
     This cask installs an AppImage that requires unprivileged user namespaces or FUSE.
     On some systems you may need to enable unprivileged_userns_clone or install FUSE3.
+    The desktop entry and icon are only removed by the zap stanza. If you uninstalled
+    without --zap, clean them up with:
+      brew uninstall --zap --force gitbutler
   EOS
 end
