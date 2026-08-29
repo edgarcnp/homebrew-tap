@@ -31,7 +31,7 @@ jobs:
         # os: [ macos-26 ]
         include:
           - container:
-              image: ghcr.io/homebrew/brew:main@sha256:ae15a6ca4bd9079c89054e1adab6f076cb062db640df166a40a538ea99a1e5cc
+              image: ghcr.io/homebrew/brew:latest@sha256:0768ca04889d866f1dfbb60db8d331855491941f7aab620616d2808024aa868b
     runs-on: ${{ matrix.os }}
     timeout-minutes: 40
     container:
