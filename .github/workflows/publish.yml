@@ -40,11 +40,30 @@ jobs:
         id: git_setup
         uses: Homebrew/actions/git-user-config@a657b8b0cd35d0f65cce41fce9b24cf054b49869 # 2026.08.24.1
 
+      - name: Import GPG signing key
+        id: import-gpg
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        run: |
+          echo "${GPG_PRIVATE_KEY}" | gpg --batch --import
+          uid="$(gpg --list-secret-keys --keyid-format=long | awk '/^uid/ {print; exit}')"
+          key_id="$(gpg --list-secret-keys --keyid-format=long | awk '/^sec/ {print $2; exit}' | cut -d/ -f2)"
+          name="$(sed -E 's/^uid\s+\[[^]]*\]\s+//; s/\s*<[^>]+>\s*$//' <<<"${uid}")"
+          email="$(sed -E 's/.*<([^>]+)>.*/\1/' <<<"${uid}")"
+          git config --global gpg.format openpgp
+          git config --global user.signingkey "${key_id}"
+          git config --global commit.gpgsign true
+          {
+            echo "gpg_key_id=${key_id}"
+            echo "gpg_name=${name}"
+            echo "gpg_email=${email}"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Pull bottles
         env:
           HOMEBREW_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          HOMEBREW_GIT_COMMITTER_NAME: ${{ steps.git_setup.outputs.name }}
-          HOMEBREW_GIT_COMMITTER_EMAIL: ${{ steps.git_setup.outputs.email }}
+          HOMEBREW_GIT_COMMITTER_NAME: ${{ steps.import-gpg.outputs.gpg_name }}
+          HOMEBREW_GIT_COMMITTER_EMAIL: ${{ steps.import-gpg.outputs.gpg_email }}
           HEAD_SHA: ${{ inputs.head_sha }}
           PULL_REQUEST: ${{ inputs.pull_request }}
         run: |
