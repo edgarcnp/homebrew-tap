@@ -34,4 +34,5 @@ jobs:
       resolve_script: packaging/gitbutler/scripts/resolve-gitbutler.js
       resolve_args: ""
       source_dir: packaging/gitbutler
+      needs_webkit: true
       build_command: ./scripts/build-appimage.sh

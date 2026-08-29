@@ -27,5 +27,11 @@ Per-app packagings provide the pinned key, the templates, and a thin
 `scripts/build-appimage.sh` that drives the two shared components. The
 reusable workflow (`build-appimage.yml`) runs the resolver from the source
 checkout root (`resolve_script` input) and the build command from
-`source_dir`.
+`source_dir`. The `needs_webkit` input (default `false`) gates the
+webkit2gtk/GTK build-dependency install step: only the gitbutler packaging
+sets it, because it bundles the webkit runtime closure (and its build deps)
+into the AppImage — vscode and opencode-desktop are Electron and don't need
+them. The other build deps (`gnupg`) are installed for every app; `rpm` and
+`dpkg-dev` were removed after an audit found nothing invoked them (`dpkg-deb`
+for extraction ships in the base `dpkg` package).
 

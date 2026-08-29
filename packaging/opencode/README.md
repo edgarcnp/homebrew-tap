@@ -13,7 +13,13 @@ and verified against the release's SHA-256 asset digests.
    electron-updater feed (`resources/app-update.yml`) so the app never
    self-updates from upstream (updates come via Homebrew only), stages an
    AppDir (AppRun, desktop entry, icon) and builds the AppImage with the
-   FUSE3-native uruntime `appimagetool` (pkgforge fork).
+   FUSE3-native uruntime `appimagetool` (pkgforge fork). After staging, the
+   whole AppDir is scanned for a hardcoded fallback feed URL
+   (`verify_updater_neutralized`, checking for
+   `https://github.com/anomalyco/opencode/releases/download/`): electron-updater
+   can fall back to a hardcoded feed when `app-update.yml` is missing, so the
+   build fails loudly if a future release embeds one, instead of shipping a
+   build with the updater silently re-enabled.
 3. `../lib/package-common.sh` — shared bash helpers sourced by the build script.
 
 The cask version uses the upstream version (e.g. `1.18.25`).

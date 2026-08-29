@@ -273,7 +273,10 @@ async function resolveUpstreamPackage(options) {
   }
   const outputDir = path.resolve(options.outputDir);
   fs.mkdirSync(outputDir, { recursive: true });
-  if (!path.resolve(options.metadataPath).startsWith(path.resolve(options.outputDir) + path.sep) && path.resolve(options.metadataPath) !== path.resolve(options.outputDir)) throw new Error("metadataPath must be inside outputDir");
+  const resolvedMeta = path.resolve(options.metadataPath);
+  if (!resolvedMeta.startsWith(outputDir + path.sep) && resolvedMeta !== outputDir) {
+    throw new Error("metadataPath must be inside outputDir");
+  }
   if (options.keyBase64Path) {
     const resolvedKey = path.resolve(options.keyBase64Path);
     const resolvedOut = path.resolve(options.outputDir);

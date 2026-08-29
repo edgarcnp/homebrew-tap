@@ -5,10 +5,9 @@ from GitButler's Linux `.deb`, located through the `app.gitbutler.com`
 download redirect. GitButler publishes no signed apt repository and no
 release assets on GitHub, so there is no GPG verification chain: the trust
 model is HTTPS + GitButler's CDN, with the `.deb` SHA-256 computed by the
-resolver and cross-checked against the pinned ledger
-`trusted-deb-hashes.json` (see below). The cask's `sha256` starts as zero
-placeholders and is filled by the publish pipeline on the first release, so
-the final AppImage is pinned at install.
+resolver and trusted on first sight (the CDN publishes no checksums). The
+cask's `sha256` starts as zero placeholders and is filled by the publish
+pipeline on the first release, so the final AppImage is pinned at install.
 
 1. `scripts/resolve-gitbutler.js` — resolver: follows the CDN redirect to
    the latest release, downloads the `.deb` and hashes it. Version
@@ -33,11 +32,7 @@ the final AppImage is pinned at install.
    `ui.checkForUpdatesIntervalInSeconds: 0` to disable the in-app
    auto-update checker (mirroring the `disable-auto-updates` Cargo
    feature the GitButler flatpak ships with).
-3. `trusted-deb-hashes.json` — pinned SHA-256 ledger for GitButler `.deb`
-   payloads (the CDN publishes no checksums). The resolver fails the build on
-   a mismatch against a pinned version and only warns for first-seen
-   versions; add the hash to the ledger after review to pin it.
-4. `../lib/package-common.sh` — shared bash helpers sourced by the build script.
+3. `../lib/package-common.sh` — shared bash helpers sourced by the build script.
 
 The cask version uses the upstream `version` string (e.g. `0.22.1`), not
 the redirect's build suffix (e.g. `0.22.1-3215`).
