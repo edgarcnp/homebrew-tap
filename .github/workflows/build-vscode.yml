@@ -4,6 +4,8 @@ on:
   schedule:
     - cron: '0 0 * * *'
   workflow_dispatch:
+  repository_dispatch:
+    types: [trigger-build]
 
 concurrency:
   group: vscode-build
@@ -13,6 +15,7 @@ permissions: {}
 
 jobs:
   build:
+    if: github.event_name != 'repository_dispatch' || github.event.client_payload.app == 'vscode'
     permissions:
       attestations: write
       contents: write
