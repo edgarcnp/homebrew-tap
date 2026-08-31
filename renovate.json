@@ -12,6 +12,9 @@
     "automerge": false,
     "dependencyDashboard": false,
     "keepUpdatedLabel": "renovate-keep-updated",
+    "lockFileMaintenance": {
+        "enabled": false
+    },
     "osvVulnerabilityAlerts": true,
     "pruneBranchAfterAutomerge": true,
     "reviewers": [
