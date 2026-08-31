@@ -7,9 +7,6 @@ on:
       - main
     paths:
       - .github/workflows/autobump.yml
-  schedule:
-    # Every day at 22:15 UTC
-    - cron: 15 22 * * *
 
 concurrency:
   group: autobump
