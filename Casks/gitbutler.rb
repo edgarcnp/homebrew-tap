@@ -7,8 +7,7 @@ cask "gitbutler" do
   sha256 arm64_linux:  "9e87cd633e27f13fdbd93a49822a9ef23376aec643b89cb72ebe022bfd3cd5a1",
          x86_64_linux: "161214ca2cbc4383343a82b8acbc1bec5725d2fc5a1b3146e39b8346328d2cbf"
 
-  url "https://github.com/edgarcnp/homebrew-tap/releases/download/gitbutler-v#{version}/gitbutler-#{version}-#{arch}.AppImage",
-      verified: "github.com/edgarcnp/homebrew-tap"
+  url "https://github.com/edgarcnp/homebrew-tap/releases/download/gitbutler-v#{version}/gitbutler-#{version}-#{arch}.AppImage"
   name "GitButler"
   desc "Git, finally designed for humans"
   homepage "https://gitbutler.com/"
