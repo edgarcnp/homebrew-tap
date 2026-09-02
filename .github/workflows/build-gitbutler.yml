@@ -34,4 +34,7 @@ jobs:
       resolve_args: ""
       source_dir: packaging/gitbutler
       needs_webkit: true
+      # webkit2gtk app: bundle debloated mesa for the GPU-accelerated
+      # webkit rendering path
+      debloat_args: --add-mesa --prefer-nano
       build_command: ./scripts/build-appimage.sh

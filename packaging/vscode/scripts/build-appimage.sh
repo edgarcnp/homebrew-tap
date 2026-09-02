@@ -1,103 +1,29 @@
 #!/bin/bash
 set -Eeuo pipefail
 
-# Build the vscode AppImage from Microsoft's signed APT
-# repository, pinned to fingerprint BC528686B50D79E339D3721CEB3E94ADBE1229CF.
-# Dist output lands in <tap>/dist for the CI workflow.
-
 SCRIPT_DIR="$(cd "$(dirname -- "${BASH_SOURCE[0]:-$0}")" && pwd)"
 PACKAGING_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 REPO_DIR="$(cd "${PACKAGING_DIR}/../.." && pwd)"
 LIB_DIR="$(cd "${PACKAGING_DIR}/../lib" && pwd)"
 
-# shellcheck disable=SC1091 # sourced file is followed only when shellcheck runs with -x
-# shellcheck source=../../lib/package-common.sh
 . "${LIB_DIR}/package-common.sh"
 
 KEY_FILE="${PACKAGING_DIR}/assets/microsoft-vscode-repository-key.gpg.base64"
-APPRUN_TEMPLATE="${PACKAGING_DIR}/templates/AppRun"
 DESKTOP_TEMPLATE="${PACKAGING_DIR}/templates/vscode.desktop"
 setup_work_dir "vscode-build"
 DIST_DIR="${DIST_DIR_OVERRIDE:-${REPO_DIR}/dist}"
-if [[ -n "${DIST_DIR_OVERRIDE:-}" ]]
-then
-  validate_absolute_override "${DIST_DIR_OVERRIDE}" "DIST_DIR_OVERRIDE"
-fi
+[[ -z "${DIST_DIR_OVERRIDE:-}" ]] || validate_absolute_override "${DIST_DIR_OVERRIDE}" "DIST_DIR_OVERRIDE"
 APPDIR="$(resolve_appdir_override "${REPO_DIR}" "${DIST_DIR}")"
-if [[ -n "${WORK_DIR_OVERRIDE:-}" ]]
-then
-  validate_absolute_override "${WORK_DIR_OVERRIDE}" "WORK_DIR_OVERRIDE"
-fi
+[[ -z "${WORK_DIR_OVERRIDE:-}" ]] || validate_absolute_override "${WORK_DIR_OVERRIDE}" "WORK_DIR_OVERRIDE"
 validate_package_version "${PACKAGE_VERSION:-}"
 PACKAGE_NAME="${PACKAGE_NAME:-vscode}"
-[[ "${PACKAGE_NAME}" =~ ^[A-Za-z0-9._-]+$ ]] || error "invalid PACKAGE_NAME: ${PACKAGE_NAME}"
+[[ "${PACKAGE_NAME}" =~ ^[A-Za-z0-9._-]+$ ]] || error "invalid PACKAGE_NAME"
 PACKAGE_DISPLAY_NAME="${PACKAGE_DISPLAY_NAME:-Visual Studio Code}"
 PACKAGE_COMMENT="${PACKAGE_COMMENT:-Code Editing. Redefined.}"
-PACKAGE_VERSION="${PACKAGE_VERSION:-}"
 TARGET_ARCH="${TARGET_ARCH:-$(uname -m)}"
-
-prepare_appdir() {
-  local payload_dir="$1"
-  local code_dir="${payload_dir}/usr/share/code"
-  local icon="${payload_dir}/usr/share/pixmaps/vscode.png"
-
-  ensure_file_exists "${code_dir}/code" "code runtime"
-  ensure_file_exists "${icon}" "vscode icon"
-
-  # Remove the update service URL from product.json and neutralize the
-  # hardcoded updater endpoint in the compiled bundles so VS Code's built-in
-  # updater is disabled; updates come via Homebrew only.
-  ensure_file_exists "${code_dir}/resources/app/product.json" "vscode product.json"
-  node "${SCRIPT_DIR}/disable-updater.js" "${code_dir}"
-
-  info "Preparing AppDir at ${APPDIR}"
-  rm -rf -- "${APPDIR}"
-  mkdir -p -- \
-    "${APPDIR}/opt" \
-    "${APPDIR}/usr/share/applications" \
-    "${APPDIR}/usr/share/icons/hicolor/256x256/apps"
-
-  cp -aT -- "${code_dir}" "${APPDIR}/opt/vscode"
-
-  render_template "${APPRUN_TEMPLATE}" "${APPDIR}/AppRun"
-  chmod 0755 -- "${APPDIR}/AppRun"
-  cp -- "${LIB_DIR}/apprun-common.sh" "${APPDIR}/apprun-common.sh"
-  chmod 0644 -- "${APPDIR}/apprun-common.sh"
-
-  render_template "${DESKTOP_TEMPLATE}" "${APPDIR}/${PACKAGE_NAME}.desktop"
-  chmod 0644 -- "${APPDIR}/${PACKAGE_NAME}.desktop"
-  cp -- "${APPDIR}/${PACKAGE_NAME}.desktop" "${APPDIR}/usr/share/applications/${PACKAGE_NAME}.desktop"
-
-  cp -- "${icon}" "${APPDIR}/${PACKAGE_NAME}.png"
-  cp -- "${icon}" "${APPDIR}/.DirIcon"
-  cp -- "${icon}" "${APPDIR}/usr/share/icons/hicolor/256x256/apps/${PACKAGE_NAME}.png"
-
-  normalize_package_payload_permissions "${APPDIR}"
-  chmod 0755 -- "${APPDIR}/opt/vscode/bin/code"
-}
-
-verify_updater_neutralized() {
-  local from="update.code.visualstudio.com"
-  local matches
-  matches="$(grep -rlaF -- "${from}" "${APPDIR}" 2>/dev/null || true)"
-  if [[ -n "${matches}" ]]
-  then
-    error "updater endpoint patch incomplete: original endpoint still present in: ${matches}"
-  fi
-  if grep -Fq -- '"updateUrl"' "${APPDIR}/opt/vscode/resources/app/product.json" 2>/dev/null
-  then
-    error "updater endpoint patch incomplete: updateUrl still present in ${APPDIR}/opt/vscode/resources/app/product.json"
-  fi
-  if grep -Fq -- '"checksums"' "${APPDIR}/opt/vscode/resources/app/product.json" 2>/dev/null
-  then
-    error "integrity patch incomplete: checksums still present in ${APPDIR}/opt/vscode/resources/app/product.json"
-  fi
-  info "Verified no file in APPDIR still references the upstream updater endpoint"
-}
 
 main() {
   ensure_file_exists "${KEY_FILE}" "pinned repository signing key"
-  ensure_file_exists "${APPRUN_TEMPLATE}" "AppImage AppRun template"
   ensure_file_exists "${DESKTOP_TEMPLATE}" "AppImage desktop template"
 
   local arch_line deb_arch appimage_arch
@@ -107,7 +33,6 @@ main() {
 
   local deb_path metadata_path
   info "Resolving code package for ${deb_arch}"
-  # shellcheck disable=SC2154 # WORK_DIR is set by setup_work_dir from package-common.sh
   metadata_path="${WORK_DIR}/metadata.json"
   deb_path="$(node "${LIB_DIR}/upstream-linux-package.js" \
     --output-dir "${WORK_DIR}" \
@@ -120,35 +45,72 @@ main() {
 
   local resolved_version
   resolved_version="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).version' "${metadata_path}")"
-  if [[ -n "${PACKAGE_VERSION}" ]]
-  then
-    [[ "${resolved_version}" = "${PACKAGE_VERSION}" ]] || error "Resolved upstream version ${resolved_version} does not match PACKAGE_VERSION ${PACKAGE_VERSION}"
+  if [[ -n "${PACKAGE_VERSION}" ]]; then
+    [[ "${resolved_version}" = "${PACKAGE_VERSION}" ]] || error "Resolved version ${resolved_version} != PACKAGE_VERSION ${PACKAGE_VERSION}"
   else
     PACKAGE_VERSION="${resolved_version}"
-    info "Derived PACKAGE_VERSION ${PACKAGE_VERSION} from upstream metadata"
     validate_package_version "${PACKAGE_VERSION}"
   fi
 
   local deb_arch_actual
   deb_arch_actual="$(dpkg-deb -f "${deb_path}" Architecture)"
-  [[ "${deb_arch_actual}" = "${deb_arch}" ]] || error "Downloaded package architecture ${deb_arch_actual} does not match requested ${deb_arch}"
+  [[ "${deb_arch_actual}" = "${deb_arch}" ]] || error "Package arch ${deb_arch_actual} != requested ${deb_arch}"
 
   local payload_dir="${WORK_DIR}/deb-payload"
   mkdir -p -- "${payload_dir}"
-  info "Extracting package: ${deb_path}"
   dpkg-deb -x "${deb_path}" "${payload_dir}"
 
-  prepare_appdir "${payload_dir}"
+  rm -rf -- "${APPDIR}"
+  mkdir -p -- "${APPDIR}/bin" "${APPDIR}/share/applications" "${APPDIR}/share/icons/hicolor/256x256/apps"
 
-  local appimagetool
-  appimagetool="$(resolve_appimagetool)"
-  verify_updater_neutralized
+  # Stage the entire /usr/share/code payload into bin/ (pkgforge pattern)
+  cp -aT -- "${payload_dir}/usr/share/code" "${APPDIR}/bin"
+
+  # Remove the update service URL from product.json and neutralize the
+  # hardcoded updater endpoint in the compiled bundles
+  node "${SCRIPT_DIR}/disable-updater.js" "${APPDIR}/bin"
+
+  # Fail loudly if any residual copy of the updater endpoint remains
+  local from="update.code.visualstudio.com"
+  local matches
+  matches="$(grep -rlaF -- "${from}" "${APPDIR}" 2>/dev/null || true)"
+  if [[ -n "${matches}" ]]; then
+    error "updater endpoint patch incomplete: original endpoint still present in: ${matches}"
+  fi
+  if grep -Fq -- '"updateUrl"' "${APPDIR}/bin/resources/app/product.json" 2>/dev/null; then
+    error "updater endpoint patch incomplete: updateUrl still present in ${APPDIR}/bin/resources/app/product.json"
+  fi
+  if grep -Fq -- '"checksums"' "${APPDIR}/bin/resources/app/product.json" 2>/dev/null; then
+    error "integrity patch incomplete: checksums still present in ${APPDIR}/bin/resources/app/product.json"
+  fi
+  info "Verified no file in APPDIR still references the upstream updater endpoint"
+
+  render_template "${DESKTOP_TEMPLATE}" "${APPDIR}/${PACKAGE_NAME}.desktop"
+  chmod 0644 -- "${APPDIR}/${PACKAGE_NAME}.desktop"
+  cp -- "${APPDIR}/${PACKAGE_NAME}.desktop" "${APPDIR}/share/applications/${PACKAGE_NAME}.desktop"
+
+  cp -- "${payload_dir}/usr/share/pixmaps/vscode.png" "${APPDIR}/${PACKAGE_NAME}.png"
+  cp -- "${APPDIR}/${PACKAGE_NAME}.png" "${APPDIR}/share/icons/hicolor/256x256/apps/${PACKAGE_NAME}.png"
+
+  normalize_package_payload_permissions "${APPDIR}"
+
+  export DESKTOP="${APPDIR}/${PACKAGE_NAME}.desktop"
+  export ICON="${APPDIR}/${PACKAGE_NAME}.png"
+  export APPDIR
+  export OUTPATH="${DIST_DIR}"
+  export OUTNAME="${PACKAGE_NAME}-${PACKAGE_VERSION}-${appimage_arch}.AppImage"
+  export ARCH="${appimage_arch}"
+  export VERSION="${PACKAGE_VERSION}"
   mkdir -p -- "${DIST_DIR}"
-  local output_file="${DIST_DIR}/vscode-${PACKAGE_VERSION}-${appimage_arch}.AppImage"
-  rm -f -- "${output_file}"
-  info "Building AppImage: ${output_file}"
-  ARCH="${appimage_arch}" VERSION="${PACKAGE_VERSION}" \
-    "${appimagetool}" --no-appstream "${APPDIR}" "${output_file}" >&2
+
+  quick-sharun "${APPDIR}/bin/"*
+
+  if ! "${APPIMAGETOOL}"; then
+    error "appimagetool failed"
+  fi
+
+  local output_file="${DIST_DIR}/${OUTNAME}"
+  ensure_file_exists "${output_file}" "AppImage output"
   chmod 0755 -- "${output_file}"
   smoke_test_appimage "${output_file}"
   info "Built AppImage: ${output_file}"

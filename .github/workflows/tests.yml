@@ -80,13 +80,6 @@ jobs:
           # directory, not under GITHUB_WORKSPACE
           cd "$(brew --repository "$TAP_REPO")"
           shellcheck packaging/scripts/*.sh packaging/lib/*.sh packaging/vscode/scripts/*.sh packaging/opencode/scripts/*.sh packaging/gitbutler/scripts/*.sh
-          for apprun in packaging/vscode/templates/AppRun packaging/opencode/templates/AppRun packaging/gitbutler/templates/AppRun; do
-            if grep -q '^#!' "$apprun"; then
-              shellcheck "$apprun"
-            else
-              echo "$apprun has no shebang; skipping shellcheck" >&2
-            fi
-          done
 
       - name: Actionlint workflow lint
         env:
