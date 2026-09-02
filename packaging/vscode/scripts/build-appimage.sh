@@ -35,6 +35,7 @@ main() {
 
   local deb_path metadata_path
   info "Resolving code package for ${deb_arch}"
+  # shellcheck disable=SC2154 # WORK_DIR is set by setup_work_dir from package-common.sh
   metadata_path="${WORK_DIR}/metadata.json"
   deb_path="$(node "${LIB_DIR}/upstream-linux-package.js" \
     --output-dir "${WORK_DIR}" \
@@ -47,7 +48,8 @@ main() {
 
   local resolved_version
   resolved_version="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).version' "${metadata_path}")"
-  if [[ -n "${PACKAGE_VERSION}" ]]; then
+  if [[ -n "${PACKAGE_VERSION}" ]]
+  then
     [[ "${resolved_version}" = "${PACKAGE_VERSION}" ]] || error "Resolved version ${resolved_version} != PACKAGE_VERSION ${PACKAGE_VERSION}"
   else
     PACKAGE_VERSION="${resolved_version}"
@@ -76,13 +78,16 @@ main() {
   local from="update.code.visualstudio.com"
   local matches
   matches="$(grep -rlaF -- "${from}" "${APPDIR}" 2>/dev/null || true)"
-  if [[ -n "${matches}" ]]; then
+  if [[ -n "${matches}" ]]
+  then
     error "updater endpoint patch incomplete: original endpoint still present in: ${matches}"
   fi
-  if grep -Fq -- '"updateUrl"' "${APPDIR}/bin/resources/app/product.json" 2>/dev/null; then
+  if grep -Fq -- '"updateUrl"' "${APPDIR}/bin/resources/app/product.json" 2>/dev/null
+  then
     error "updater endpoint patch incomplete: updateUrl still present in ${APPDIR}/bin/resources/app/product.json"
   fi
-  if grep -Fq -- '"checksums"' "${APPDIR}/bin/resources/app/product.json" 2>/dev/null; then
+  if grep -Fq -- '"checksums"' "${APPDIR}/bin/resources/app/product.json" 2>/dev/null
+  then
     error "integrity patch incomplete: checksums still present in ${APPDIR}/bin/resources/app/product.json"
   fi
   info "Verified no file in APPDIR still references the upstream updater endpoint"
@@ -107,7 +112,9 @@ main() {
 
   quick-sharun "${APPDIR}/bin/"*
 
-  if ! "${APPIMAGETOOL}"; then
+  # shellcheck disable=SC2154 # APPIMAGETOOL is set by the workflow env
+  if ! "${APPIMAGETOOL}"
+  then
     error "appimagetool failed"
   fi
 

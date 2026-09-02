@@ -1,0 +1,33 @@
+#!/bin/sh
+
+# Runtime hook sourced by the generated AppRun.sh on every launch (sharun
+# sources $APPDIR/bin/*.hook). Seeds ~/.config/gitbutler/settings.json with
+# ui.checkForUpdatesIntervalInSeconds: 0 so the Tauri built-in updater's
+# periodic check never runs; the build-time endpoint patch (x.invalid.invalid)
+# already makes updates impossible, this just keeps the app's menu/check state
+# consistent (mirrors the disable-auto-updates feature of the GitButler flatpak).
+
+_prevent_autoupdate() {
+  local config_dir="${XDG_CONFIG_HOME:-${HOME}/.config}/gitbutler"
+  local config_file="${config_dir}/settings.json"
+  [[ ! -L "${config_dir}" ]] || return 0
+  [[ ! -L "${config_file}" ]] || return 0
+  mkdir -p -- "${config_dir}" || return 0
+  if [[ ! -s "${config_file}" ]]
+  then
+    printf '%s\n' '{"ui":{"checkForUpdatesIntervalInSeconds":0}}' > "${config_file}" 2>/dev/null || return 0
+    return 0
+  fi
+  grep -Eq '"checkForUpdatesIntervalInSeconds"[[:space:]]*:[[:space:]]*0([^0-9]|$)' "${config_file}" 2>/dev/null && return 0
+  grep -q '"checkForUpdatesIntervalInSeconds"' "${config_file}" 2>/dev/null && {
+    LC_ALL=C sed -i -E 's/"checkForUpdatesIntervalInSeconds"[[:space:]]*:[[:space:]]*[0-9]+/"checkForUpdatesIntervalInSeconds": 0/' "${config_file}" 2>/dev/null || true
+    return 0
+  }
+  if grep -q '^[[:space:]]*"ui"[[:space:]]*:[[:space:]]*{$' "${config_file}" 2>/dev/null
+  then
+    LC_ALL=C sed -i '/^[[:space:]]*"ui"[[:space:]]*:[[:space:]]*{/a\    "checkForUpdatesIntervalInSeconds": 0,' "${config_file}" 2>/dev/null || true
+  else
+    LC_ALL=C sed -i -E '$ s/\}[[:space:]]*$/,"ui":{"checkForUpdatesIntervalInSeconds":0}}/' "${config_file}" 2>/dev/null || true
+  fi
+}
+_prevent_autoupdate
