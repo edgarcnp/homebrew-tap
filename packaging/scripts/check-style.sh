@@ -23,6 +23,13 @@ echo "=== brew style ==="
 brew style edgarcnp/tap
 echo "brew style: OK"
 
+echo "=== brew audit ==="
+for cask in "${TAP_DIR}"/Casks/*.rb
+do
+  brew audit --cask "edgarcnp/tap/$(basename "${cask}" .rb)"
+done
+echo "brew audit: OK"
+
 echo "=== actionlint ==="
 if command -v actionlint >/dev/null 2>&1
 then

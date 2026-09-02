@@ -7,8 +7,7 @@ cask "vscode" do
   sha256 arm64_linux:  "864e0e338d3cd3878ba3bdc77d03025bd8b9109348c6212a71a90441dd08fed9",
          x86_64_linux: "0681e106e6fb2bfe05d63d54bdb9692eee20e80bf72a1c1ad3c8027f2c281bc6"
 
-  url "https://github.com/edgarcnp/homebrew-tap/releases/download/vscode-v#{version}/vscode-#{version}-#{arch}.AppImage",
-      verified: "github.com/edgarcnp/homebrew-tap"
+  url "https://github.com/edgarcnp/homebrew-tap/releases/download/vscode-v#{version}/vscode-#{version}-#{arch}.AppImage"
   name "Visual Studio Code"
   desc "Repackage of Visual Studio Code as an AppImage"
   homepage "https://code.visualstudio.com/"

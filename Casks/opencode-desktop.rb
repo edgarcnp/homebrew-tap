@@ -7,8 +7,7 @@ cask "opencode-desktop" do
   sha256 arm64_linux:  "20beffc2f2b65f52d0670ed15619400688696c376fd1d7f059c4362761655023",
          x86_64_linux: "fcbc14e660884fbc933c8a77ccd17a705f7d986f10532df37512932a70aa09ea"
 
-  url "https://github.com/edgarcnp/homebrew-tap/releases/download/opencode-desktop-v#{version}/opencode-desktop-#{version}-#{arch}.AppImage",
-      verified: "github.com/edgarcnp/homebrew-tap"
+  url "https://github.com/edgarcnp/homebrew-tap/releases/download/opencode-desktop-v#{version}/opencode-desktop-#{version}-#{arch}.AppImage"
   name "OpenCode Desktop"
   desc "Open source AI coding agent"
   homepage "https://opencode.ai/"
