@@ -44,7 +44,9 @@ mesa without LLVM, and other size optimizations.
 The workflow installs the webkit2gtk/GTK deps only when the `needs_webkit`
 input is set (gitbutler only) — vscode and opencode-desktop are Electron and
 ship their own webkit. The other build deps (`nodejs`, `gnupg`, `dpkg`,
-`patchelf`, `xorg-server-xvfb`) are installed for every app. The pinned
+`patchelf`, `xorg-server-xvfb`) are installed for every app; `nss` is too,
+because quick-sharun aborts if an Electron binary's `ldd` closure is missing
+the NSS libraries (libnss3, libnspr4, ...) it bundles into the AppImage. The pinned
 pkgforge `appimagetool` (uruntime/DWARFS) is invoked by quick-sharun through
 the `APPIMAGETOOL` env var with no CLI args; it reads
 `APPDIR/OUTPATH/OUTNAME/ARCH/VERSION` from the environment.
