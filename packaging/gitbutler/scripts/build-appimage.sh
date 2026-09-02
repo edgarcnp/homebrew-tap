@@ -114,7 +114,7 @@ Install the Anylinux tools (install-anylinux-tools.sh) or add it to PATH."
   # Pre-place settings-seeding hook (sourced by AppRun.sh at runtime)
   if [[ -d "${APPDIR}/bin" ]]
   then
-    cp -- "${PACKAGING_DIR}/templates/02-prevent-autoupdate.hook" "${APPDIR}/bin/"
+    cp -- "${PACKAGING_DIR}/templates/prevent-autoupdate.hook" "${APPDIR}/bin/"
     info "Pre-placed settings-seeding hook"
   fi
 
