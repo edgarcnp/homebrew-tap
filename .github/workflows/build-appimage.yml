@@ -342,6 +342,7 @@ jobs:
             gnupg \
             jq \
             nodejs \
+            nss \
             patchelf \
             unzip \
             wget \
