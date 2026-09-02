@@ -36,6 +36,7 @@ main() {
 
   local deb_path metadata_path
   info "Resolving git-butler package for ${deb_arch}"
+  # shellcheck disable=SC2154 # WORK_DIR is set by setup_work_dir from package-common.sh
   metadata_path="${WORK_DIR}/metadata.json"
   deb_path="$(node "${RESOLVE_SCRIPT}" \
     --output-dir "${WORK_DIR}" \
@@ -45,7 +46,8 @@ main() {
 
   local resolved_version
   resolved_version="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).version' "${metadata_path}")"
-  if [[ -n "${PACKAGE_VERSION}" ]]; then
+  if [[ -n "${PACKAGE_VERSION}" ]]
+  then
     [[ "${resolved_version}" = "${PACKAGE_VERSION}" ]] || error "Resolved version ${resolved_version} != PACKAGE_VERSION ${PACKAGE_VERSION}"
   else
     PACKAGE_VERSION="${resolved_version}"
@@ -70,7 +72,8 @@ main() {
   [[ "${#from}" -eq "${#to}" ]] || error "updater endpoint patch length mismatch: ${#from} vs ${#to}"
   LC_ALL=C sed -i "s|${from}|${to}|g" "${binary}"
   strings "${binary}" | grep -F -q -- "${to}" || error "updater patch verification failed: ${to} not found"
-  if strings "${binary}" | grep -F -q -- "${from}"; then
+  if strings "${binary}" | grep -F -q -- "${from}"
+  then
     error "updater endpoint patch verification failed: original still present"
   fi
   info "Updater endpoint neutralized"
@@ -78,7 +81,8 @@ main() {
   # Fail loudly if any other file in the AppDir embeds the original endpoint
   local matches
   matches="$(grep -rlaF -- "${from}" "${APPDIR}" 2>/dev/null || true)"
-  if [[ -n "${matches}" ]]; then
+  if [[ -n "${matches}" ]]
+  then
     error "updater endpoint patch incomplete: original endpoint still present in: ${matches}"
   fi
   info "Verified no file in APPDIR still references the upstream updater endpoint"
@@ -102,42 +106,20 @@ main() {
 
   command -v quick-sharun >/dev/null 2>&1 || error "quick-sharun is required.
 Install the Anylinux tools (install-anylinux-tools.sh) or add it to PATH."
+  # shellcheck disable=SC2154 # APPIMAGETOOL is set by the workflow env
   [[ -x "${APPIMAGETOOL}" ]] || error "APPIMAGETOOL is not executable: ${APPIMAGETOOL}"
 
   quick-sharun "${APPDIR}/bin/gitbutler-tauri" "${APPDIR}/bin/gitbutler-git-askpass" "${APPDIR}/bin/but"
 
   # Pre-place settings-seeding hook (sourced by AppRun.sh at runtime)
-  hooks_dir="${APPDIR}/bin"
-  if [[ -d "${hooks_dir}" ]]; then
-    cat >"${hooks_dir}/02-prevent-autoupdate.hook" <<-'HOOK'
-_prevent_autoupdate() {
-  local config_dir="${XDG_CONFIG_HOME:-${HOME}/.config}/gitbutler"
-  local config_file="${config_dir}/settings.json"
-  [[ ! -L "${config_dir}" ]] || return 0
-  [[ ! -L "${config_file}" ]] || return 0
-  mkdir -p -- "${config_dir}" || return 0
-  if [[ ! -s "${config_file}" ]]; then
-    printf '%s\n' '{"ui":{"checkForUpdatesIntervalInSeconds":0}}' > "${config_file}" 2>/dev/null || return 0
-    return 0
-  fi
-  grep -Eq '"checkForUpdatesIntervalInSeconds"[[:space:]]*:[[:space:]]*0([^0-9]|$)' "${config_file}" 2>/dev/null && return 0
-  grep -q '"checkForUpdatesIntervalInSeconds"' "${config_file}" 2>/dev/null && {
-    LC_ALL=C sed -i -E 's/"checkForUpdatesIntervalInSeconds"[[:space:]]*:[[:space:]]*[0-9]+/"checkForUpdatesIntervalInSeconds": 0/' "${config_file}" 2>/dev/null || true
-    return 0
-  }
-  if grep -q '^[[:space:]]*"ui"[[:space:]]*:[[:space:]]*{$' "${config_file}" 2>/dev/null; then
-    LC_ALL=C sed -i '/^[[:space:]]*"ui"[[:space:]]*:[[:space:]]*{/a\    "checkForUpdatesIntervalInSeconds": 0,' "${config_file}" 2>/dev/null || true
-  else
-    LC_ALL=C sed -i -E '$ s/\}[[:space:]]*$/,"ui":{"checkForUpdatesIntervalInSeconds":0}}/' "${config_file}" 2>/dev/null || true
-  fi
-}
-_prevent_autoupdate
-HOOK
-    chmod 0644 -- "${hooks_dir}/02-prevent-autoupdate.hook"
+  if [[ -d "${APPDIR}/bin" ]]
+  then
+    cp -- "${PACKAGING_DIR}/templates/02-prevent-autoupdate.hook" "${APPDIR}/bin/"
     info "Pre-placed settings-seeding hook"
   fi
 
-  if ! "${APPIMAGETOOL}"; then
+  if ! "${APPIMAGETOOL}"
+  then
     error "appimagetool failed"
   fi
 

@@ -33,6 +33,7 @@ main() {
 
   local deb_path metadata_path
   info "Resolving opencode-desktop package for ${deb_arch}"
+  # shellcheck disable=SC2154 # WORK_DIR is set by setup_work_dir from package-common.sh
   metadata_path="${WORK_DIR}/metadata.json"
   deb_path="$(node "${LIB_DIR}/upstream-github-release.js" \
     --output-dir "${WORK_DIR}" \
@@ -43,7 +44,8 @@ main() {
 
   local resolved_version
   resolved_version="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).version' "${metadata_path}")"
-  if [[ -n "${PACKAGE_VERSION}" ]]; then
+  if [[ -n "${PACKAGE_VERSION}" ]]
+  then
     [[ "${resolved_version}" = "${PACKAGE_VERSION}" ]] || error "Resolved version ${resolved_version} != PACKAGE_VERSION ${PACKAGE_VERSION}"
   else
     PACKAGE_VERSION="${resolved_version}"
@@ -65,7 +67,8 @@ main() {
   cp -aT -- "${payload_dir}/opt/OpenCode" "${APPDIR}/bin"
 
   # Remove the electron-updater feed
-  if [[ -f "${APPDIR}/bin/resources/app-update.yml" ]]; then
+  if [[ -f "${APPDIR}/bin/resources/app-update.yml" ]]
+  then
     rm -- "${APPDIR}/bin/resources/app-update.yml"
     info "Removed app-update.yml"
   fi
@@ -74,7 +77,8 @@ main() {
   local from="https://github.com/anomalyco/opencode/releases/download/"
   local matches
   matches="$(grep -rlaF -- "${from}" "${APPDIR}" 2>/dev/null || true)"
-  if [[ -n "${matches}" ]]; then
+  if [[ -n "${matches}" ]]
+  then
     error "updater endpoint patch incomplete: original endpoint still present in: ${matches}"
   fi
   info "Verified no file in APPDIR still references the upstream updater endpoint"
@@ -104,7 +108,9 @@ main() {
   # Disable the app's own update channel; updates come via Homebrew only
   echo 'OPENCODE_DISABLE_AUTOUPDATE=1' >>"${APPDIR}/.env"
 
-  if ! "${APPIMAGETOOL}"; then
+  # shellcheck disable=SC2154 # APPIMAGETOOL is set by the workflow env
+  if ! "${APPIMAGETOOL}"
+  then
     error "appimagetool failed"
   fi
 

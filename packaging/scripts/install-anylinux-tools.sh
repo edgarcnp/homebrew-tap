@@ -27,13 +27,15 @@ mkdir -p -- "${ANYLINUX_TOOLS_DIR}"
 tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/anylinux-tools.XXXXXX")"
 trap 'rm -rf -- "${tmp_dir}"' EXIT
 
-for name in "${!TOOLS[@]}"; do
+for name in "${!TOOLS[@]}"
+do
   expected="${TOOLS[${name}]}"
   dest="${tmp_dir}/${name}"
   info "Downloading ${name} from pinned commit ${PINNED_COMMIT}"
   curl -fL --retry 5 --retry-all-errors --retry-delay 5 -o "${dest}" "${BASE_URL}/${name}.sh"
   actual="$(sha256sum "${dest}" | awk '{print $1}')"
-  if [[ "${actual}" != "${expected}" ]]; then
+  if [[ "${actual}" != "${expected}" ]]
+  then
     error "SHA256 mismatch for ${name}: expected ${expected}, got ${actual}"
   fi
   chmod 0755 -- "${dest}"
