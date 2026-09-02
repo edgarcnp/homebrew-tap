@@ -15,27 +15,23 @@ pipeline on the first release, so the final AppImage is pinned at install.
    (`../lib/upstream-linux-package.js`). In `--metadata-only` mode (used by
    the workflow's detect job) the payload is downloaded to compute the
    SHA-256 but discarded instead of written to disk.
-2. `scripts/build-appimage.sh` — extracts the `.deb`, stages an AppDir
-   (desktop entry, icon, `gitbutler-tauri` + `gitbutler-git-askpass`),
-   runs `linuxdeploy` to bundle the shared library closure, then
-   binary-patches the hardcoded webkit helper-process paths in the .so to
-   relative paths (the `././` prefix trick) and bundles the helper
-   processes, GLib schemas, GIO modules, and GDK pixbuf loaders so the
-   AppImage runs on hosts without webkit. The updater endpoint in the binary
-   is rewritten to a never-resolving host (`x.invalid.invalid`,
-   same-length patch) so the Tauri built-in updater can never find or install
-   an update — both the auto-check (already disabled via settings seeding)
-   and the manual "Check for updates…" menu item are neutered. AppRun
-   preserves argv[0] with `exec -a "${ARGV0:-$0}"` so `gitbutler-tauri` can
-   still pick between the `but` CLI and the GUI by name, and seeds
+2. `scripts/build-appimage.sh` — extracts the `.deb`, stages
+   `gitbutler-tauri` (main GUI binary) + `gitbutler-git-askpass` + the `but`
+   CLI symlink into `AppDir/bin`, then runs `quick-sharun` (sharun-based:
+   bundles libc, ld-linux and the whole runtime closure so the AppImage has
+   no host-libc dependency — the webkit2gtk/GTK libs are bundled from the
+   Arch build container). The updater endpoint in the binary is rewritten to
+   a never-resolving host (`x.invalid.invalid`, same-length patch) so the
+   Tauri built-in updater can never find or install an update, and a custom
+   `.hook` (sourced by the generated AppRun at runtime) seeds
    `~/.config/gitbutler/settings.json` with
    `ui.checkForUpdatesIntervalInSeconds: 0` to disable the in-app
-   auto-update checker (mirroring the `disable-auto-updates` Cargo
-   feature the GitButler flatpak ships with).
+   auto-update checker (mirroring the `disable-auto-updates` Cargo feature
+   the GitButler flatpak ships with).
 3. `../lib/package-common.sh` — shared bash helpers sourced by the build script.
 
-The cask version uses the upstream `version` string (e.g. `0.22.1`), not
-the redirect's build suffix (e.g. `0.22.1-3215`).
+The cask version uses the upstream `version` string (e.g. `0.22.3`), not
+the redirect's build suffix (e.g. `0.22.3-3215`).
 
 ## Local run (verification only)
 
@@ -47,7 +43,6 @@ TARGET_ARCH=amd64 ./scripts/build-appimage.sh
 metadata the resolver writes; when set, the build fails if the resolved
 upstream version differs (CI always sets it).
 
-Requires `node`, `dpkg-deb`, `linuxdeploy`, the uruntime `appimagetool`
-(or `APPIMAGETOOL`/`LINUXDEPLOY`), and the webkit/GTK build dependencies
-(`libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, `libgdk-pixbuf2.0-bin`,
-`glib-networking`). Output lands in `<tap>/dist/`.
+Requires an Arch Linux system (or the `ghcr.io/pkgforge-dev/archlinux`
+container), `node`, `dpkg-deb`, `quick-sharun` in PATH and `APPIMAGETOOL`
+pointing at the uruntime `appimagetool`. Output lands in `<tap>/dist/`.

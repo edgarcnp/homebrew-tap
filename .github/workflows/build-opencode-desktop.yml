@@ -30,4 +30,5 @@ jobs:
       resolve_script: packaging/lib/upstream-github-release.js
       resolve_args: --asset-prefix opencode-desktop-linux
       source_dir: packaging/opencode
+      debloat_args: --add-common --prefer-nano ffmpeg-mini
       build_command: ./scripts/build-appimage.sh

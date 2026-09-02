@@ -52,6 +52,11 @@ on:
         required: false
         type: boolean
         default: false
+      debloat_args:
+        description: Flags passed to get-debloated-pkgs --add-common etc. (e.g. --add-mesa --prefer-nano)
+        required: false
+        type: string
+        default: --add-common --prefer-nano
       resolve_script:
         description: Path (relative to the source checkout root) of the upstream-linux-package.js resolver the detect job runs
         required: false
@@ -307,6 +312,13 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: read
+    # Builds run inside pkgforge's Arch Linux container: AppImages are built
+    # with sharun/quick-sharun, which bundle the app + libc + everything else
+    # from the build system, so the build OS must be Arch for correct 32-bit
+    # lib layout and access to pkgforge's debloated packages via pacman.
+    # Pinned image tag; pacman -Syu runs on every build anyway.
+    container:
+      image: ghcr.io/pkgforge-dev/archlinux:v2026.09.02
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -317,67 +329,80 @@ jobs:
         with:
           path: tap
           persist-credentials: false
-      - name: Install build dependencies
+      - name: Prepare Arch container
         run: |
-          sudo apt-get update
-          sudo apt-get install -y gnupg
+          pacman-key --init
+          pacman -Syy --noconfirm archlinux-keyring
+          pacman -Syu --noconfirm \
+            7zip \
+            base-devel \
+            curl \
+            dpkg \
+            git \
+            gnupg \
+            jq \
+            nodejs \
+            patchelf \
+            unzip \
+            wget \
+            xorg-server-xvfb \
+            zsync
       - name: Install webkit2gtk build dependencies
         if: inputs.needs_webkit
         run: |
-          sudo apt-get update
-          # webkit2gtk runtime closure for the gitbutler AppImage build
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libgdk-pixbuf2.0-bin glib-networking
+          # webkit2gtk runtime closure for the gitbutler AppImage build;
+          # sharun bundles these libs into the AppImage from this system
+          pacman -S --noconfirm \
+            gdk-pixbuf2 \
+            glib-networking \
+            gtk3 \
+            webkit2gtk-4.1
       - name: Install appimagetool
         run: |
-          # pinned release 0.3.3, verified via SHA256; hashes captured from
-          # the pkgforge 0.3.3 release assets; renovate customManagers were
+          # pinned release 0.3.6, verified via SHA256; hashes captured from
+          # the pkgforge 0.3.6 release assets; renovate customManagers were
           # removed (regex manager cannot update per-arch digest lines), so
-          # version+hash bumps are manual PRs
+          # version+hash bumps are manual PRs. quick-sharun invokes this
+          # binary via the APPIMAGETOOL env var with no CLI args; it reads
+          # APPDIR/OUTPATH/OUTNAME/ARCH/VERSION from the environment.
           curl -fL --retry 5 --retry-all-errors --retry-delay 5 \
             -o /tmp/appimagetool-uruntime \
-            "https://github.com/pkgforge-dev/appimagetool/releases/download/0.3.3/appimagetool-${{ matrix.appimage_arch }}-linux"
+            "https://github.com/pkgforge-dev/appimagetool/releases/download/0.3.6/appimagetool-${{ matrix.appimage_arch }}-linux"
           test -s /tmp/appimagetool-uruntime
           case "${{ matrix.appimage_arch }}" in
-            x86_64) expected="0d01a4e2628efc897be9663f0faeed6a171e1851270b4e1ce4c22434a36ecebd" ;;
-            aarch64) expected="298f5293c41f9b2b46290b246e6419783940824ce20b98775a5a153b18fe8422" ;;
+            x86_64) expected="ca381e473175b451ac5bfe397c572663fe1bf7d0a8f62fd31197bad37438c1ca" ;;
+            aarch64) expected="ffcb14443de4f19b0cd5246bd8a3893344e1a538589cbfeb24400efa9a424542" ;;
             *) echo "Unknown appimage_arch: ${{ matrix.appimage_arch }}" >&2; exit 1 ;;
           esac
           echo "${expected}  /tmp/appimagetool-uruntime" | sha256sum -c -
           chmod +x /tmp/appimagetool-uruntime
-          sudo mv /tmp/appimagetool-uruntime /opt/appimagetool-uruntime
-          sudo cp "${GITHUB_WORKSPACE}/tap/packaging/scripts/appimagetool-uruntime.sh" /usr/local/bin/appimagetool
-          sudo chmod 0755 /usr/local/bin/appimagetool
-      - name: Install linuxdeploy
+          mv /tmp/appimagetool-uruntime /opt/appimagetool-uruntime
+      - name: Install Anylinux build tools
         run: |
-          # pinned continuous build (last-modified 2026-08-01), verified via SHA256;
-          # hashes captured 2026-08-26 for the "continuous" tag (no versioned
-          # releases for current builds), so we pin by SHA256 instead of tag.
-          # renovate customManagers were removed (regex manager cannot update
-          # per-arch digest lines), so version+hash bumps are manual PRs
-          curl -fL --retry 5 --retry-all-errors --retry-delay 5 \
-            -o /tmp/linuxdeploy \
-            "https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-${{ matrix.appimage_arch }}.AppImage"
-          test -s /tmp/linuxdeploy
-          case "${{ matrix.appimage_arch }}" in
-            x86_64) expected="421ca71d5c69ea97c6309276232990d43df1dcece0edfaa26bbf926ff96ed12e" ;;
-            aarch64) expected="9f04c4c2a8b69c392c4bbcc1a88bdd4d0a8ac03f587cf5242814cb7ae47b78e5" ;;
-            *) echo "Unknown appimage_arch: ${{ matrix.appimage_arch }}" >&2; exit 1 ;;
-          esac
-          actual="$(sha256sum /tmp/linuxdeploy | awk '{print $1}')"
-          if [ "$actual" != "$expected" ]; then
-            echo "SHA256 mismatch for linuxdeploy (${{ matrix.appimage_arch }}): expected $expected, got $actual" >&2
-            exit 1
-          fi
-          echo "SHA256 verified for linuxdeploy (${{ matrix.appimage_arch }}): $actual"
-          chmod +x /tmp/linuxdeploy
-          sudo mv /tmp/linuxdeploy /opt/linuxdeploy
-          sudo ln -sf /opt/linuxdeploy /usr/local/bin/linuxdeploy
+          # quick-sharun + get-debloated-pkgs, pinned to a commit of
+          # pkgforge-dev/Anylinux-AppImages and SHA-256 verified; bumps are
+          # manual PRs (see install-anylinux-tools.sh)
+          "${GITHUB_WORKSPACE}/tap/packaging/scripts/install-anylinux-tools.sh"
+      - name: Install debloated packages
+        run: |
+          # Debloated Arch packages (mesa without LLVM, stripped libicudata,
+          # ffmpeg-mini, etc.) shrink the final AppImages; per-app flags via
+          # the debloat_args input
+          get-debloated-pkgs ${{ inputs.debloat_args }}
       - name: Build AppImage
         env:
           TARGET_ARCH: ${{ matrix.architecture }}
           PACKAGE_VERSION: ${{ needs.detect.outputs.version }}
           SOURCE_DIR: ${{ inputs.source_dir }}
           BUILD_COMMAND: ${{ inputs.build_command }}
+          # quick-sharun drives the pkgforge appimagetool via env vars,
+          # not CLI args
+          APPIMAGETOOL: /opt/appimagetool-uruntime
+          # pin hooks to the same Anylinux-AppImages commit as the tools
+          HOOKSRC: https://raw.githubusercontent.com/pkgforge-dev/Anylinux-AppImages/3201fb3e48a35d76d750560e11f96bca2f3b6fe0/useful-tools/hooks
+          # brew owns updates; block appimagetool from embedding zsync/update
+          # info auto-derived from GITHUB_REPOSITORY
+          UPINFO: ""
         run: |
           cd source
           [ -z "${SOURCE_DIR}" ] || cd "${SOURCE_DIR}"

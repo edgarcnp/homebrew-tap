@@ -13,18 +13,16 @@ on code.visualstudio.com, so the full verification chain applies:
    `Packages` (checked against the SHA-256 from the signed `InRelease`),
    picks the newest `code` entry per architecture, and finally downloads
    the `.deb` and checks its SHA-256/size from the verified index.
-3. `scripts/build-appimage.sh` — extracts the `.deb`, stages an AppDir
-   (AppRun, desktop entry, icon) and builds the AppImage with the FUSE3-native
-   uruntime `appimagetool` (pkgforge fork; the `../scripts/appimagetool-uruntime.sh`
-   shim keeps the upstream `appimagetool` invocation working). The built-in
+3. `scripts/build-appimage.sh` — extracts the `.deb`, stages the whole
+   `usr/share/code` payload into `AppDir/bin`, renders the desktop entry and
+   icon, then runs `quick-sharun` (sharun-based, bundles libc + ld-linux so
+   the AppImage has no host-libc dependency) and builds the AppImage with
+   the uruntime `appimagetool` via the `APPIMAGETOOL` env var. The built-in
    updater is disabled because brew owns updates: `scripts/disable-updater.js`
    removes `updateUrl` from `product.json` and rewrites the hardcoded
    `update.code.visualstudio.com` endpoint in the compiled bundles (a
-   same-length replacement for ELF files so they are not corrupted), and the
-   whole AppDir is scanned for residual references to
-   `update.code.visualstudio.com`
-   (`verify_updater_neutralized`) so a second copy can never silently
-   re-enable it. See [Updater neutralization](#updater-neutralization).
+   same-length replacement for ELF files so they are not corrupted). See
+   [Updater neutralization](#updater-neutralization).
 
 ## Updater neutralization
 
@@ -45,10 +43,10 @@ files never do. This replaced the older `buf.includes(0)` heuristic (any NUL
 byte = binary), which would have misclassified a NUL-free binary as text and
 corrupted it with the shorter replacement.
 
-After patching, `verify_updater_neutralized` (in `build-appimage.sh`) greps
-the whole AppDir for `update.code.visualstudio.com` and fails the build if
-any copy remains — so an endpoint embedded elsewhere (a helper `.so`, a
-second bundle) can never silently re-enable the updater.
+After patching, the build scans the whole AppDir for
+`update.code.visualstudio.com` and fails if any copy remains — so an
+endpoint embedded elsewhere (a helper `.so`, a second bundle) can never
+silently re-enable the updater.
 
 The cask version uses the upstream version (e.g. `1.133.0`), not the
 `.deb` build epoch suffix (e.g. `1.133.0-1786487972`), which differs between
@@ -60,5 +58,7 @@ amd64 and arm64 for the same release.
 TARGET_ARCH=amd64 PACKAGE_VERSION=1.133.0 ./scripts/build-appimage.sh
 ```
 
-Requires `node`, `gpgv`, `dpkg-deb` and the uruntime `appimagetool` (or `APPIMAGETOOL`).
-Output lands in `<tap>/dist/`.
+Requires an Arch Linux system (or the `ghcr.io/pkgforge-dev/archlinux`
+container), `node`, `gpgv`, `dpkg-deb`, `quick-sharun` in PATH and
+`APPIMAGETOOL` pointing at the uruntime `appimagetool`. Output lands in
+`<tap>/dist/`.
