@@ -101,8 +101,6 @@ main() {
 
   normalize_package_payload_permissions "${APPDIR}"
 
-  export DESKTOP="${APPDIR}/${PACKAGE_NAME}.desktop"
-  export ICON="${APPDIR}/${PACKAGE_NAME}.png"
   export APPDIR
   export OUTPATH="${DIST_DIR}"
   export OUTNAME="${PACKAGE_NAME}-${PACKAGE_VERSION}-${appimage_arch}.AppImage"
