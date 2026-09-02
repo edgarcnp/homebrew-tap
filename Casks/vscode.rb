@@ -3,9 +3,9 @@ require_relative File.join(__dir__, "..", "lib", "cask_helpers")
 cask "vscode" do
   arch arm: "aarch64", intel: "x86_64"
 
-  version "1.135.0"
-  sha256 arm64_linux:  "864e0e338d3cd3878ba3bdc77d03025bd8b9109348c6212a71a90441dd08fed9",
-         x86_64_linux: "0681e106e6fb2bfe05d63d54bdb9692eee20e80bf72a1c1ad3c8027f2c281bc6"
+  version "1.136.0"
+  sha256 arm64_linux:  "8f2c16ac265d71c02a253c86d028033b4b0121f187f990f8dbf8721e2eb1515c",
+         x86_64_linux: "5d03d8e64d245fc19df2394219397f339023bc677253a4cc26f5190c48745e12"
 
   url "https://github.com/edgarcnp/homebrew-tap/releases/download/vscode-v#{version}/vscode-#{version}-#{arch}.AppImage"
   name "Visual Studio Code"
