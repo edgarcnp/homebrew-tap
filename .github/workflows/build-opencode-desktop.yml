@@ -2,8 +2,7 @@ name: Build and publish OpenCode Desktop AppImage
 
 on:
   workflow_dispatch:
-  repository_dispatch:
-    types: [trigger-build]
+  workflow_call:
 
 concurrency:
   group: opencode-desktop-build
@@ -13,7 +12,6 @@ permissions: {}
 
 jobs:
   build:
-    if: github.event_name != 'repository_dispatch' || github.event.client_payload.app == 'opencode-desktop'
     permissions:
       attestations: write
       contents: write

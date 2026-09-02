@@ -2,8 +2,7 @@ name: Build and publish GitButler AppImage
 
 on:
   workflow_dispatch:
-  repository_dispatch:
-    types: [trigger-build]
+  workflow_call:
 
 concurrency:
   group: gitbutler-build
@@ -13,7 +12,6 @@ permissions: {}
 
 jobs:
   build:
-    if: github.event_name != 'repository_dispatch' || github.event.client_payload.app == 'gitbutler'
     permissions:
       attestations: write
       contents: write
