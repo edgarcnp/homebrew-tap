@@ -32,7 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     container:
-      image: ghcr.io/homebrew/brew:latest@sha256:0768ca04889d866f1dfbb60db8d331855491941f7aab620616d2808024aa868b
+      image: ghcr.io/homebrew/brew:latest@sha256:a0f1fec427628adb27b67c954ac69f367f974f01d5d02510f43f8f5faa9b7ddb
       options: --privileged
     steps:
       - name: Set up Homebrew
