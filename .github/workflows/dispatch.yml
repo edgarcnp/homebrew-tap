@@ -1,0 +1,26 @@
+name: Dispatch build
+
+# Sole repository_dispatch subscriber: a single trigger-build event fans out
+# to the matching per-app workflow here instead of waking every build workflow.
+
+on:
+  repository_dispatch:
+    types: [trigger-build]
+
+permissions: {}
+
+jobs:
+  build-gitbutler:
+    if: github.event.client_payload.app == 'gitbutler'
+    uses: ./.github/workflows/build-gitbutler.yml
+    secrets: inherit
+
+  build-vscode:
+    if: github.event.client_payload.app == 'vscode'
+    uses: ./.github/workflows/build-vscode.yml
+    secrets: inherit
+
+  build-opencode-desktop:
+    if: github.event.client_payload.app == 'opencode-desktop'
+    uses: ./.github/workflows/build-opencode-desktop.yml
+    secrets: inherit
