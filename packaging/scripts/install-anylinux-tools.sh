@@ -19,8 +19,8 @@ ANYLINUX_TOOLS_DIR="${ANYLINUX_TOOLS_DIR:-/usr/local/bin}"
 PINNED_COMMIT="3201fb3e48a35d76d750560e11f96bca2f3b6fe0"
 BASE_URL="https://raw.githubusercontent.com/pkgforge-dev/Anylinux-AppImages/${PINNED_COMMIT}/useful-tools"
 declare -A TOOLS=(
-  [quick - sharun]=564f686f9eb8d08676fe1bfd5ef49049e362576ccc0bb04c0538d595b7fd1bc9
-  [get - debloated - pkgs]=946cfc8c40b518bad9d9b5597869f46394bb4111a4ac40acdccf17c8bb46fc1f
+  [quick-sharun]=564f686f9eb8d08676fe1bfd5ef49049e362576ccc0bb04c0538d595b7fd1bc9
+  [get-debloated-pkgs]=946cfc8c40b518bad9d9b5597869f46394bb4111a4ac40acdccf17c8bb46fc1f
 )
 
 mkdir -p -- "${ANYLINUX_TOOLS_DIR}"
