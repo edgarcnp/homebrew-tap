@@ -6,6 +6,8 @@ PACKAGING_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 REPO_DIR="$(cd "${PACKAGING_DIR}/../.." && pwd)"
 LIB_DIR="$(cd "${PACKAGING_DIR}/../lib" && pwd)"
 
+# shellcheck disable=SC1091 # sourced file is followed only when shellcheck runs with -x
+# shellcheck source=../../lib/package-common.sh
 . "${LIB_DIR}/package-common.sh"
 
 KEY_FILE="${PACKAGING_DIR}/assets/microsoft-vscode-repository-key.gpg.base64"
