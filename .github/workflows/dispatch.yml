@@ -12,15 +12,27 @@ permissions: {}
 jobs:
   build-gitbutler:
     if: github.event.client_payload.app == 'gitbutler'
+    permissions:
+      attestations: write
+      contents: write
+      id-token: write
     uses: ./.github/workflows/build-gitbutler.yml
     secrets: inherit
 
   build-vscode:
     if: github.event.client_payload.app == 'vscode'
+    permissions:
+      attestations: write
+      contents: write
+      id-token: write
     uses: ./.github/workflows/build-vscode.yml
     secrets: inherit
 
   build-opencode-desktop:
     if: github.event.client_payload.app == 'opencode-desktop'
+    permissions:
+      attestations: write
+      contents: write
+      id-token: write
     uses: ./.github/workflows/build-opencode-desktop.yml
     secrets: inherit
