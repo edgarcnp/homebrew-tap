@@ -3,9 +3,9 @@ require_relative File.join(__dir__, "..", "lib", "cask_helpers")
 cask "opencode-desktop" do
   arch arm: "aarch64", intel: "x86_64"
 
-  version "1.18.28"
-  sha256 arm64_linux:  "51321000926c076b05808b22574e5b29f4878093af4616899788de7a1b0dbf41",
-         x86_64_linux: "2ccd93e5e0648d1cf075c0484a420979dfe85a171416b0dde6f72bea3b56b3c2"
+  version "1.18.29"
+  sha256 arm64_linux:  "ea7f49615a8f3a252421ad1bd15d3392cfd00e691093889b53d82b243ee0a534",
+         x86_64_linux: "ea593f9283743ad0e15eb7fae6bd0859e6513832afeb5764d5ff5ec2a345252d"
 
   url "https://github.com/edgarcnp/homebrew-tap/releases/download/opencode-desktop-v#{version}/opencode-desktop-#{version}-#{arch}.AppImage"
   name "OpenCode Desktop"
