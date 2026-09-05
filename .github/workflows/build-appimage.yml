@@ -243,22 +243,35 @@ jobs:
             fi
             return 1
           }
+          is_newer() {
+            local cask_v="$1" upstream_v="$2"
+            case "$cask_v" in
+              ''|[!0-9]*)
+                echo "true" ;;
+              *)
+                if [ "$cask_v" != "$upstream_v" ] && printf '%s\n%s\n' "$cask_v" "$upstream_v" | sort -V -C; then
+                  echo "true"
+                else
+                  echo "false"
+                fi ;;
+            esac
+          }
           cask_version="$(sed -n 's/^[[:space:]]*version "\([^"]*\)".*/\1/p' "tap/Casks/${APP_CASK}.rb" | head -n1)"
           version="${{ steps.resolve.outputs.version }}"
-          newer="false"
-          case "$cask_version" in
-            ''|[!0-9]*)
-              newer="true" ;;
-            *)
-              if printf '%s\n%s\n' "$cask_version" "$version" | sort -V -C; then
-                if [ "$cask_version" != "$version" ]; then
-                  newer="true"
-                fi
-              fi ;;
-          esac
+          newer="$(is_newer "$cask_version" "$version")"
           release_exists="false"
           if gh release view "${TAG_PREFIX}${version}" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             release_exists="true"
+          fi
+          if [ "$newer" = "true" ] && [ "$release_exists" = "true" ]; then
+            # A queued duplicate runs detect pinned to a stale sha after the
+            # first run already published the release and pushed the cask
+            # update; re-read from origin/main so it skips instead of repairing.
+            if git -C tap fetch --quiet origin main; then
+              git -C tap reset --hard --quiet FETCH_HEAD
+              cask_version="$(sed -n 's/^[[:space:]]*version "\([^"]*\)".*/\1/p' "tap/Casks/${APP_CASK}.rb" | head -n1)"
+              newer="$(is_newer "$cask_version" "$version")"
+            fi
           fi
           skipped="false"
           repair="false"
