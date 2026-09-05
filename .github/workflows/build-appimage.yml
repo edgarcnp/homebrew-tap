@@ -318,7 +318,7 @@ jobs:
     # lib layout and access to pkgforge's debloated packages via pacman.
     # Pinned image tag; pacman -Syu runs on every build anyway.
     container:
-      image: ghcr.io/pkgforge-dev/archlinux:v2026.09.03
+      image: ghcr.io/pkgforge-dev/archlinux:v2026.09.05
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
