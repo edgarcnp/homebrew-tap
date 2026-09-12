@@ -1,9 +1,9 @@
-// Plumbing every oracle shares: output-directory preparation, metadata path
-// containment, and the GitHub token handling rules.
+// Plumbing every oracle shares: output-directory preparation and metadata path
+// containment.
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { assertInside, assertSingleLine } from "../guards.ts";
+import { assertInside } from "../guards.ts";
 import type { Architecture } from "../types.ts";
 
 export interface ResolveRequest {
@@ -27,11 +27,4 @@ export function prepareOutput(request: ResolveRequest): ResolvedOutput {
     outputDir,
     metadataPath: assertInside(request.metadataPath, outputDir, "metadataPath"),
   };
-}
-
-export function githubTokenFromEnv(env: NodeJS.ProcessEnv = process.env): string {
-  const token = env["GITHUB_TOKEN"] ?? env["GH_TOKEN"] ?? "";
-  if (token === "") return "";
-  // A token with a newline would be a header-injection attempt.
-  return assertSingleLine(token, "GitHub token");
 }

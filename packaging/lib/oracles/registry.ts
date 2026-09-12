@@ -23,12 +23,6 @@ export const ORACLE_RESOLVERS: Registry = {
   "cdn-redirect": resolveWithCdnRedirect,
 };
 
-export const ORACLE_KINDS = Object.keys(ORACLE_RESOLVERS) as OracleKind[];
-
-export function isOracleKind(value: unknown): value is OracleKind {
-  return typeof value === "string" && (ORACLE_KINDS as string[]).includes(value);
-}
-
 export function resolveWith(oracle: Oracle, request: ResolveRequest): Promise<Metadata> {
   switch (oracle.kind) {
     case "apt":
