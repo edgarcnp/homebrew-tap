@@ -1,0 +1,48 @@
+{
+  "id": "vscode",
+  "appName": "Visual Studio Code",
+  "displayName": "Visual Studio Code",
+  "comment": "Code Editing. Redefined.",
+  "cask": "vscode",
+  "assetPrefix": "vscode",
+  "tagPrefix": "vscode-v",
+  "sourceRepo": "edgarcnp/homebrew-tap",
+  "sourceOwner": "edgarcnp",
+  "sourceDir": "packaging/apps/vscode",
+  "buildCommand": "./build.sh",
+  "debloatArgs": "--add-common --prefer-nano ffmpeg-mini",
+  "needsWebkit": false,
+  "binaryTargets": ["code"],
+  "oracle": {
+    "kind": "apt",
+    "repository": "https://packages.microsoft.com/repos/code",
+    "packageName": "code",
+    "fingerprint": "BC528686B50D79E339D3721CEB3E94ADBE1229CF",
+    "keyBase64Path": "packaging/apps/vscode/assets/microsoft-vscode-repository-key.gpg.base64"
+  },
+  "payload": {
+    "kind": "deb-tree",
+    "tree": "usr/share/code"
+  },
+  "icon": {
+    "source": "usr/share/pixmaps/vscode.png",
+    "size": "256x256"
+  },
+  "desktopTemplate": "templates/vscode.desktop",
+  "updater": {
+    "removeJsonKeys": {
+      "file": "bin/resources/app/product.json",
+      "keys": ["updateUrl", "checksums"]
+    },
+    "patchEndpoint": {
+      "from": "update.code.visualstudio.com",
+      "textReplacement": "update.invalid",
+      "binaryReplacement": "update.invalidupdate.invalid",
+      "targets": "all"
+    },
+    "residualScan": {
+      "patterns": ["update.code.visualstudio.com"],
+      "severity": "error"
+    }
+  }
+}

@@ -6,7 +6,7 @@ on:
       - main
     paths:
       - "Casks/**"
-      - "lib/**"
+      - "packaging/**"
       - ".github/workflows/**"
   schedule:
     # Every Monday, after the daily AppImage build workflows (00:00 UTC) have
@@ -40,17 +40,28 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24.21.0
+
       - name: Install all casks and verify declared binaries
         env:
           TAP_REPO: ${{ github.repository }}
         run: |
           tap_dir="$(brew --repository "$TAP_REPO")"
-          for cask in "$tap_dir"/Casks/*.rb; do
-            name="$(basename "$cask" .rb)"
+          cd "$tap_dir"
+          # Iterate descriptors (app id -> cask token), not filenames: the two
+          # differ (freebuff -> freebuff-desktop).
+          for app in $(node packaging/bin/fbr.ts list-apps); do
+            name="$(node packaging/bin/fbr.ts descriptor --app "$app" --field cask)"
+            cask="Casks/${name}.rb"
             # Casks with a placeholder sha256 can't be installed until their
             # first release is published; skip them unless the asset exists.
-            if grep -qE '"[0]{64}"' "$cask"; then
-              version="$(sed -n 's/^  version "\(.*\)"$/\1/p' "$cask")"
+            # The cask is read through the shared parser rather than grep.
+            cask_json="$(node packaging/bin/fbr.ts cask --action read --app "$app")"
+            if [[ "$(jq -r '.sha256.amd64' <<<"$cask_json")" = "$(printf '0%.0s' {1..64})" ]]; then
+              version="$(jq -r '.version' <<<"$cask_json")"
               case "$(uname -m)" in
                 aarch64|arm64) arch="aarch64" ;;
                 *) arch="x86_64" ;;

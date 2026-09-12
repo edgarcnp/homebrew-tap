@@ -6,8 +6,10 @@ on:
     paths:
       - "Casks/**"
       - "Formula/**"
-      - ".github/workflows/**"
+      - ".github/**"
       - "packaging/**"
+      - "package.json"
+      - "tsconfig.json"
       - "renovate.json"
 
 concurrency:
@@ -26,8 +28,9 @@ jobs:
       matrix:
         os: [ ubuntu-latest ]
         # macOS: all casks are Linux-only (depends_on :linux); the Ubuntu
-        # container leg below runs shellcheck, actionlint, brew style/audit
-        # and the test-bot tap-syntax check.
+        # container leg below runs shellcheck, actionlint, the TypeScript
+        # typecheck and unit tests, brew style/audit and the test-bot
+        # tap-syntax check.
         # os: [ macos-26 ]
         include:
           - container:
@@ -65,6 +68,44 @@ jobs:
           path: ${{ steps.set-up-homebrew.outputs.gems-path }}
           key: ${{ matrix.os }}-rubygems-${{ steps.set-up-homebrew.outputs.gems-hash }}
 
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24.21.0
+          cache: npm
+
+      - name: Install packaging dev dependencies
+        env:
+          TAP_REPO: ${{ github.repository }}
+        run: |
+          # in the brew container the tap checkout lives in the tap
+          # directory, not under GITHUB_WORKSPACE
+          cd "$(brew --repository "$TAP_REPO")"
+          npm ci --ignore-scripts
+
+      - name: Typecheck the packaging toolchain
+        env:
+          TAP_REPO: ${{ github.repository }}
+        run: |
+          cd "$(brew --repository "$TAP_REPO")"
+          npm run typecheck
+
+      - name: Unit-test the packaging toolchain
+        env:
+          TAP_REPO: ${{ github.repository }}
+        run: |
+          cd "$(brew --repository "$TAP_REPO")"
+          npm test
+
+      - name: Check casks against their app descriptors
+        env:
+          TAP_REPO: ${{ github.repository }}
+        run: |
+          # one parser for Casks/*.rb, shared with the publish pipeline; it
+          # fails when a cask drifts from packaging/apps/<app>/app.json
+          cd "$(brew --repository "$TAP_REPO")"
+          node packaging/bin/fbr.ts cask --action check
+
       - name: Shellcheck packaging scripts
         env:
           TAP_REPO: ${{ github.repository }}
@@ -76,10 +117,10 @@ jobs:
             apt-get update
             apt-get install -y shellcheck
           fi
-          # in the brew container the tap checkout lives in the tap
-          # directory, not under GITHUB_WORKSPACE
           cd "$(brew --repository "$TAP_REPO")"
-          shellcheck packaging/scripts/*.sh packaging/lib/*.sh packaging/vscode/scripts/*.sh packaging/opencode/scripts/*.sh packaging/gitbutler/scripts/*.sh packaging/freebuff/scripts/*.sh
+          # globbed, so a new script is linted without editing this file; -x
+          # follows the sourced pipeline libraries
+          find packaging -name '*.sh' -print0 | xargs -0 shellcheck -x -P packaging
 
       - name: Actionlint workflow lint
         env:
@@ -95,7 +136,9 @@ jobs:
           echo "${ACTIONLINT_SHA256}  /tmp/actionlint.tar.gz" | sha256sum -c -
           tar -C /tmp -xzf /tmp/actionlint.tar.gz actionlint
           cd "$(brew --repository "$TAP_REPO")"
-          /tmp/actionlint -color .github/workflows/build-appimage.yml .github/workflows/build-vscode.yml .github/workflows/build-gitbutler.yml .github/workflows/build-opencode-desktop.yml .github/workflows/build-freebuff-desktop.yml .github/workflows/cask-smoke.yml .github/workflows/tests.yml .github/workflows/autobump.yml .github/workflows/publish.yml
+          # no arguments: actionlint discovers .github/workflows/*.yml itself,
+          # so a new workflow is covered without editing this file
+          /tmp/actionlint -color
 
       - name: Style and audit casks
         env:

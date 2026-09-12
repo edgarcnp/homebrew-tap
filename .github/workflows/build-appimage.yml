@@ -1,81 +1,15 @@
 name: AppImage build
 
+# Reusable pipeline for one app. Everything app specific (resolver, repository
+# pins, staging, updater neutralization, debloat flags) comes from
+# packaging/apps/<app>/app.json, so adding an app means adding a descriptor
+# and a template directory - not a fork of this file.
+
 on:
   workflow_call:
     inputs:
-      app_cask:
-        description: Cask filename stem this pipeline updates (e.g. my-app)
-        required: true
-        type: string
-      app_name:
-        description: Human-readable app name used in the release title (e.g. My App)
-        required: true
-        type: string
-      asset_prefix:
-        description: Release asset filename prefix (e.g. my-app)
-        required: true
-        type: string
-      tag_prefix:
-        description: Release tag prefix, including trailing dash (e.g. my-app-v)
-        required: true
-        type: string
-      source_owner:
-        description: Owner of the fallback fork, used only when upstream_repo is unreachable (e.g. myorg)
-        required: true
-        type: string
-      upstream_repo:
-        description: Upstream packaging repository (owner/repo) to build from when available (e.g. myorg/my-app-linux)
-        required: true
-        type: string
-      repository_url:
-        description: >-
-          Source URL passed to the resolver as --repository: the signed apt
-          repository URL the app's .deb packages come from
-          (e.g. https://packages.microsoft.com/repos/code), the GitHub API
-          repository base (e.g. https://api.github.com/repos/myorg/my-app),
-          or an upstream version-oracle endpoint the resolver follows
-          (e.g. https://example.com/api/desktop/updates)
-        required: true
-        type: string
-      resolve_kind:
-        description: >-
-          Resolver backend; apt for signed apt repositories, github for
-          GitHub release assets with sha256 asset digests
-        required: false
-        type: string
-        default: apt
-      key_path:
-        description: Path to the pinned repository signing key (base64-encoded keyring) within the source checkout (e.g. assets/my-app-repository-key.gpg.base64)
-        required: false
-        type: string
-        default: ""
-      needs_webkit:
-        description: Whether the app build requires the webkit2gtk/GTK build dependencies (gitbutler only)
-        required: false
-        type: boolean
-        default: false
-      debloat_args:
-        description: Flags passed to get-debloated-pkgs --add-common etc. (e.g. --add-mesa --prefer-nano)
-        required: false
-        type: string
-        default: --add-common --prefer-nano
-      resolve_script:
-        description: Path (relative to the source checkout root) of the upstream-linux-package.js resolver the detect job runs
-        required: false
-        type: string
-        default: scripts/lib/upstream-linux-package.js
-      resolve_args:
-        description: Extra flags passed to the resolver (e.g. --package code --fingerprint <40 hex>); empty when the resolver hardcodes its package
-        required: false
-        type: string
-        default: ""
-      source_dir:
-        description: Subdirectory of the source checkout holding the packaging scripts and assets; empty for the checkout root
-        required: false
-        type: string
-        default: ""
-      build_command:
-        description: Shell command run in the source dir to produce dist/<asset_prefix>-<version>-<appimage_arch>.AppImage; env TARGET_ARCH (amd64|arm64) and PACKAGE_VERSION are set
+      app:
+        description: App id; a directory under packaging/apps holding app.json (e.g. vscode)
         required: true
         type: string
 
@@ -85,6 +19,10 @@ defaults:
 
 permissions: {}
 
+concurrency:
+  group: appimage-build-${{ inputs.app }}
+  cancel-in-progress: false
+
 jobs:
   detect:
     runs-on: ubuntu-latest
@@ -92,33 +30,22 @@ jobs:
     permissions:
       contents: read
     outputs:
+      app_id: ${{ steps.app.outputs.id }}
+      app_name: ${{ steps.app.outputs.name }}
+      app_cask: ${{ steps.app.outputs.cask }}
+      asset_prefix: ${{ steps.app.outputs.asset_prefix }}
+      tag_prefix: ${{ steps.app.outputs.tag_prefix }}
+      needs_webkit: ${{ steps.app.outputs.needs_webkit }}
       version: ${{ steps.resolve.outputs.version }}
       skipped: ${{ steps.gate.outputs.skipped }}
+      repair_cask: ${{ steps.gate.outputs.repair_cask }}
+      cask_version: ${{ steps.gate.outputs.cask_version }}
       source: ${{ steps.source.outputs.repo }}
       upstream_sha256_amd64: ${{ steps.resolve.outputs.upstream_sha256_amd64 }}
       upstream_sha256_arm64: ${{ steps.resolve.outputs.upstream_sha256_arm64 }}
       upstream_url_amd64: ${{ steps.resolve.outputs.upstream_url_amd64 }}
       upstream_url_arm64: ${{ steps.resolve.outputs.upstream_url_arm64 }}
-      cask_version: ${{ steps.gate.outputs.cask_version }}
-      repair_cask: ${{ steps.gate.outputs.repair_cask }}
     steps:
-      - name: Select source repository
-        id: source
-        env:
-          SOURCE_REPO_OWNER: ${{ inputs.source_owner }}
-          UPSTREAM_REPO: ${{ inputs.upstream_repo }}
-        run: |
-          UPSTREAM_REPO_NAME="${UPSTREAM_REPO#*/}"
-          if git ls-remote --exit-code "https://github.com/${UPSTREAM_REPO}.git" HEAD >/dev/null 2>&1; then
-            echo "repo=${UPSTREAM_REPO}" >> "$GITHUB_OUTPUT"
-          else
-            echo "repo=${SOURCE_REPO_OWNER}/${UPSTREAM_REPO_NAME}" >> "$GITHUB_OUTPUT"
-          fi
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          repository: ${{ steps.source.outputs.repo }}
-          path: source
-          persist-credentials: false
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           path: tap
@@ -126,189 +53,127 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 24.21.0
+      - name: Load app descriptor
+        id: app
+        env:
+          APP: ${{ inputs.app }}
+        run: |
+          # descriptor-env validates the descriptor and emits the pipeline's
+          # variables: uppercase for shell steps ($GITHUB_ENV) and lowercase
+          # for job outputs, which cannot read the env context.
+          node tap/packaging/bin/fbr.ts descriptor-env --app "${APP}" >> "${GITHUB_ENV}"
+          node tap/packaging/bin/fbr.ts descriptor-env --app "${APP}" --format output >> "${GITHUB_OUTPUT}"
+      - name: Select source repository
+        id: source
+        run: |
+          # Build from the upstream repository when it is reachable; otherwise
+          # fall back to this owner's fork of it.
+          upstream="${SOURCE_REPO}"
+          if git ls-remote --exit-code "https://github.com/${upstream}.git" HEAD >/dev/null 2>&1; then
+            echo "repo=${upstream}" >> "${GITHUB_OUTPUT}"
+          else
+            echo "repo=${SOURCE_OWNER}/${upstream#*/}" >> "${GITHUB_OUTPUT}"
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: ${{ steps.source.outputs.repo }}
+          path: source
+          persist-credentials: false
       - name: Resolve upstream version
         id: resolve
         env:
-          # resolve_args passes via env so input metacharacters can never be
-          # interpolated into the script; apt callers use
-          # --package <name> --fingerprint <40 hex>, github callers use
-          # --asset-prefix <prefix>, each tokenized by read -ra
-          RESOLVE_ARGS: ${{ inputs.resolve_args }}
           GH_TOKEN: ${{ github.token }}
-          RESOLVE_KIND: ${{ inputs.resolve_kind }}
-          KEY_PATH: ${{ inputs.key_path }}
-          RESOLVE_SCRIPT: ${{ inputs.resolve_script }}
-          REPOSITORY_URL: ${{ inputs.repository_url }}
         run: |
-          sudo apt-get update
-          if [[ "${RESOLVE_KIND}" == "apt" ]]; then
-            # only the apt resolver needs gnupg for InRelease verification
+          # Only the apt resolver verifies a signed index with gpg.
+          if [[ "$(node source/packaging/bin/fbr.ts descriptor --app "${APP_ID}" --field oracle.kind)" == "apt" ]]; then
+            sudo apt-get update
             sudo apt-get install -y gnupg
           fi
           cd source
-          # shellcheck disable=SC2153 # RESOLVE_ARGS is injected via the step env block above
-          read -ra resolve_args <<<"$RESOLVE_ARGS"
-          key_args=()
-          if [[ -n "${KEY_PATH}" ]]; then
-            key_args+=(--key-base64 "${KEY_PATH}")
-          fi
-          node "${RESOLVE_SCRIPT}" \
-            --metadata-only \
-            --output-dir upstream \
-            --metadata upstream/metadata.json \
-            "${key_args[@]}" \
-            --repository "${REPOSITORY_URL}" \
-            "${resolve_args[@]}" \
-            --arch amd64
-          node "${RESOLVE_SCRIPT}" \
-            --metadata-only \
-            --output-dir upstream \
-            --metadata upstream/metadata-arm64.json \
-            "${key_args[@]}" \
-            --repository "${REPOSITORY_URL}" \
-            "${resolve_args[@]}" \
-            --arch arm64
+          node packaging/bin/fbr.ts resolve \
+            --app "${APP_ID}" --arch amd64 --metadata-only \
+            --output-dir upstream --metadata upstream/metadata.json
+          node packaging/bin/fbr.ts resolve \
+            --app "${APP_ID}" --arch arm64 --metadata-only \
+            --output-dir upstream --metadata upstream/metadata-arm64.json
           amd64_metadata="upstream/metadata.json"
           arm64_metadata="upstream/metadata-arm64.json"
-          version="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).version' "$amd64_metadata")"
-          arm64_version="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).version' "$arm64_metadata")"
-          [ "$version" = "$arm64_version" ] || { echo "amd64/arm64 upstream version mismatch" >&2; exit 1; }
-          [[ "$version" =~ ^[0-9A-Za-z._-]+$ ]] || { echo "invalid upstream version: $version" >&2; exit 1; }
+          version="$(jq -r '.version' "${amd64_metadata}")"
+          arm64_version="$(jq -r '.version' "${arm64_metadata}")"
+          [ "${version}" = "${arm64_version}" ] || { echo "amd64/arm64 upstream version mismatch" >&2; exit 1; }
+          [[ "${version}" =~ ^[0-9A-Za-z._-]+$ ]] || { echo "invalid upstream version: ${version}" >&2; exit 1; }
           version="${version//[^0-9A-Za-z._-]/_}"
           {
-            echo "upstream_sha256_amd64=$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).sha256' "$amd64_metadata")"
-            echo "upstream_sha256_arm64=$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).sha256' "$arm64_metadata")"
-            echo "upstream_url_amd64=$(node -p 'const m = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); m.repository + "/" + m.repositoryPath' "$amd64_metadata")"
-            echo "upstream_url_arm64=$(node -p 'const m = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); m.repository + "/" + m.repositoryPath' "$arm64_metadata")"
+            echo "upstream_sha256_amd64=$(jq -r '.sha256' "${amd64_metadata}")"
+            echo "upstream_sha256_arm64=$(jq -r '.sha256' "${arm64_metadata}")"
+            echo "upstream_url_amd64=$(jq -r '.repository + "/" + .repositoryPath' "${amd64_metadata}")"
+            echo "upstream_url_arm64=$(jq -r '.repository + "/" + .repositoryPath' "${arm64_metadata}")"
             echo "version=${version}"
-          } >> "$GITHUB_OUTPUT"
+          } >> "${GITHUB_OUTPUT}"
       - name: Gate on upstream version vs cask version
         id: gate
         env:
           GH_TOKEN: ${{ github.token }}
-          APP_CASK: ${{ inputs.app_cask }}
-          TAG_PREFIX: ${{ inputs.tag_prefix }}
-          ASSET_PREFIX: ${{ inputs.asset_prefix }}
         run: |
-          # Download the release assets for TAG_PREFIX$version and compare
-          # their SHA-256 against the cask's pinned values. A rebuilt release
-          # (DWARFS images are not byte-reproducible) can change checksums
-          # without a version bump; detect that so the cask is caught up to
-          # the actual assets instead of silently skipping.
-          verify_release_assets() {
-            local version="$1"
-            local tmp_dir
+          # The gate decision itself is a unit-tested pure function; this step
+          # only gathers its inputs (cask pin, release existence, and whether
+          # the published assets still match the cask's checksums - DWARFS
+          # images are not byte reproducible, so a rebuild can change them
+          # without a version bump).
+          cask_json="$(node tap/packaging/bin/fbr.ts cask --action read --app "${APP_ID}" --tap "${GITHUB_WORKSPACE}/tap")"
+          cask_version="$(jq -r '.version' <<<"${cask_json}")"
+          version="${{ steps.resolve.outputs.version }}"
+
+          release_exists=false
+          if gh release view "${TAG_PREFIX}${version}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            release_exists=true
+          fi
+
+          matches=""
+          if [[ "${release_exists}" = "true" && "${cask_version}" = "${version}" ]]; then
             tmp_dir="$(mktemp -d)"
-
-            local nullglob_state
-            nullglob_state="$(shopt -p nullglob)"
-
-            local ok="false"
-            local cask_x86_64 cask_arm64
-            cask_x86_64="$(sed -n 's/^.*x86_64_linux:[[:space:]]*"\([0-9a-f]\{64\}\)".*$/\1/p' "tap/Casks/${APP_CASK}.rb" | head -n1)"
-            cask_arm64="$(sed -n 's/^.*arm64_linux:[[:space:]]*"\([0-9a-f]\{64\}\)".*$/\1/p' "tap/Casks/${APP_CASK}.rb" | head -n1)"
-            if [[ -z "${cask_x86_64}" || -z "${cask_arm64}" ]]; then
-              echo "could not parse pinned checksums from tap/Casks/${APP_CASK}.rb" >&2
-            elif timeout 60 gh release download "${TAG_PREFIX}${version}" \
-              --repo "$GITHUB_REPOSITORY" \
+            if timeout 60 gh release download "${TAG_PREFIX}${version}" \
+              --repo "${GITHUB_REPOSITORY}" \
               --pattern "${ASSET_PREFIX}-*-x86_64.AppImage" \
               --pattern "${ASSET_PREFIX}-*-aarch64.AppImage" \
               --dir "${tmp_dir}" --clobber
             then
               shopt -s nullglob
-              local x86_files arm_files
-              x86_files=("${tmp_dir}"/"${ASSET_PREFIX}"-*-x86_64.AppImage)
-              arm_files=("${tmp_dir}"/"${ASSET_PREFIX}"-*-aarch64.AppImage)
-              if [[ "${#x86_files[@]}" -ne 1 || "${#arm_files[@]}" -ne 1 ]]; then
-                echo "expected exactly one asset per architecture in release ${TAG_PREFIX}${version}" >&2
-              else
-                local released_x86_64 released_arm64
-                released_x86_64="$(sha256sum "${x86_files[0]}" | awk '{print $1}')"
-                released_arm64="$(sha256sum "${arm_files[0]}" | awk '{print $1}')"
-                if [[ "${released_x86_64}" = "${cask_x86_64}" && "${released_arm64}" = "${cask_arm64}" ]]; then
-                  echo "release assets match cask checksums"
-                  ok="true"
-                else
-                  echo "release assets differ from cask checksums:" >&2
-                  echo "  x86_64: cask ${cask_x86_64} vs release ${released_x86_64}" >&2
-                  echo "  arm64:  cask ${cask_arm64} vs release ${released_arm64}" >&2
+              x86_files=("${tmp_dir}/${ASSET_PREFIX}"-*-x86_64.AppImage)
+              arm_files=("${tmp_dir}/${ASSET_PREFIX}"-*-aarch64.AppImage)
+              if [[ "${#x86_files[@]}" -eq 1 && "${#arm_files[@]}" -eq 1 ]]; then
+                matches=false
+                if [[ "$(sha256sum "${x86_files[0]}" | awk '{print $1}')" = "$(jq -r '.sha256.amd64' <<<"${cask_json}")" \
+                  && "$(sha256sum "${arm_files[0]}" | awk '{print $1}')" = "$(jq -r '.sha256.arm64' <<<"${cask_json}")" ]]
+                then
+                  matches=true
                 fi
+              else
+                echo "expected exactly one asset per architecture in release ${TAG_PREFIX}${version}" >&2
               fi
             else
               echo "failed to download release ${TAG_PREFIX}${version}" >&2
             fi
-
             rm -rf -- "${tmp_dir}"
-            eval "${nullglob_state}"
-            if [[ "${ok}" = "true" ]]; then
-              return 0
-            fi
-            return 1
-          }
-          is_newer() {
-            local cask_v="$1" upstream_v="$2"
-            case "$cask_v" in
-              ''|[!0-9]*)
-                echo "true" ;;
-              *)
-                if [ "$cask_v" != "$upstream_v" ] && printf '%s\n%s\n' "$cask_v" "$upstream_v" | sort -V -C; then
-                  echo "true"
-                else
-                  echo "false"
-                fi ;;
-            esac
-          }
-          cask_version="$(sed -n 's/^[[:space:]]*version "\([^"]*\)".*/\1/p' "tap/Casks/${APP_CASK}.rb" | head -n1)"
-          version="${{ steps.resolve.outputs.version }}"
-          newer="$(is_newer "$cask_version" "$version")"
-          release_exists="false"
-          if gh release view "${TAG_PREFIX}${version}" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            release_exists="true"
           fi
-          if [ "$newer" = "true" ] && [ "$release_exists" = "true" ]; then
-            # A queued duplicate runs detect pinned to a stale sha after the
-            # first run already published the release and pushed the cask
-            # update; re-read from origin/main so it skips instead of repairing.
+
+          if [[ "${release_exists}" = "true" && "${cask_version}" != "${version}" ]]; then
+            # A queued duplicate run may have been queued against a stale
+            # branch; re-read the cask from origin/main before deciding.
             if git -C tap fetch --quiet origin main; then
               git -C tap reset --hard --quiet FETCH_HEAD
-              cask_version="$(sed -n 's/^[[:space:]]*version "\([^"]*\)".*/\1/p' "tap/Casks/${APP_CASK}.rb" | head -n1)"
-              newer="$(is_newer "$cask_version" "$version")"
+              cask_version="$(node tap/packaging/bin/fbr.ts cask --action read --app "${APP_ID}" --tap "${GITHUB_WORKSPACE}/tap" | jq -r '.version')"
             fi
           fi
-          skipped="false"
-          repair="false"
-          if [ "$newer" = "true" ]; then
-            if [ "$release_exists" = "true" ]; then
-              echo "Upstream ${version} is newer than cask ${cask_version}; release already published, catching cask up"
-              repair="true"
-            else
-              echo "Upstream ${version} is newer than cask ${cask_version}; building"
-            fi
-          else
-            if [ "$release_exists" = "true" ]; then
-              if [ "$cask_version" = "$version" ]; then
-                if verify_release_assets "$version"; then
-                  echo "Cask ${cask_version} already at upstream ${version}; skipping"
-                  skipped="true"
-                else
-                  echo "Cask ${cask_version} at upstream version but release assets differ; catching cask up"
-                  repair="true"
-                fi
-              else
-                echo "Cask ${cask_version} is ahead of upstream ${version}; skipping"
-                skipped="true"
-              fi
-            else
-              echo "Cask ${cask_version} references a version with no release; (re)building"
-            fi
+
+          gate_args=(--app "${APP_ID}" --tap "${GITHUB_WORKSPACE}/tap" --upstream-version "${version}")
+          if [[ "${release_exists}" = "true" ]]; then
+            gate_args+=(--release-exists)
           fi
-          {
-            echo "cask_version=${cask_version}"
-            echo "newer=${newer}"
-            echo "release_exists=${release_exists}"
-            echo "repair_cask=${repair}"
-            echo "skipped=${skipped}"
-          } >> "$GITHUB_OUTPUT"
+          if [[ -n "${matches}" ]]; then
+            gate_args+=(--release-matches-cask "${matches}")
+          fi
+          node tap/packaging/bin/fbr.ts gate "${gate_args[@]}" | tee -a "${GITHUB_OUTPUT}"
 
   build:
     needs: detect
@@ -344,6 +209,16 @@ jobs:
         with:
           path: tap
           persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24.21.0
+      - name: Load app descriptor
+        env:
+          APP: ${{ inputs.app }}
+        run: |
+          # The tap is the pipeline's source of truth for the build flags; the
+          # build script itself reads the descriptor from the source checkout.
+          node "${GITHUB_WORKSPACE}/tap/packaging/bin/fbr.ts" descriptor-env --app "${APP}" >> "${GITHUB_ENV}"
       - name: Prepare Arch container
         run: |
           pacman-key --init
@@ -364,7 +239,7 @@ jobs:
             xorg-server-xvfb \
             zsync
       - name: Install webkit2gtk build dependencies
-        if: inputs.needs_webkit
+        if: needs.detect.outputs.needs_webkit == 'true'
         run: |
           # webkit2gtk runtime closure for the gitbutler AppImage build;
           # sharun bundles these libs into the AppImage from this system
@@ -400,20 +275,19 @@ jobs:
         run: |
           # quick-sharun + get-debloated-pkgs, pinned to a commit of
           # pkgforge-dev/Anylinux-AppImages and SHA-256 verified; bumps are
-          # manual PRs (see install-anylinux-tools.sh)
+          # manual PRs (see packaging/scripts/install-anylinux-tools.sh)
           "${GITHUB_WORKSPACE}/tap/packaging/scripts/install-anylinux-tools.sh"
       - name: Install debloated packages
         run: |
           # Debloated Arch packages (mesa without LLVM, stripped libicudata,
-          # ffmpeg-mini, etc.) shrink the final AppImages; per-app flags via
-          # the debloat_args input
-          get-debloated-pkgs ${{ inputs.debloat_args }}
+          # ffmpeg-mini, etc.) shrink the final AppImages; per-app flags come
+          # from the app descriptor.
+          read -r -a flags <<<"${DEBLOAT_ARGS}"
+          get-debloated-pkgs "${flags[@]}"
       - name: Build AppImage
         env:
           TARGET_ARCH: ${{ matrix.architecture }}
           PACKAGE_VERSION: ${{ needs.detect.outputs.version }}
-          SOURCE_DIR: ${{ inputs.source_dir }}
-          BUILD_COMMAND: ${{ inputs.build_command }}
           # quick-sharun drives the pkgforge appimagetool via env vars,
           # not CLI args
           APPIMAGETOOL: /opt/appimagetool-uruntime
@@ -423,11 +297,11 @@ jobs:
         run: |
           cd source
           [ -z "${SOURCE_DIR}" ] || cd "${SOURCE_DIR}"
-          bash -c "$BUILD_COMMAND"
+          bash -c "${BUILD_COMMAND}"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: ${{ inputs.asset_prefix }}-${{ matrix.appimage_arch }}
-          path: source/dist/${{ inputs.asset_prefix }}-${{ needs.detect.outputs.version }}-${{ matrix.appimage_arch }}.AppImage
+          name: ${{ needs.detect.outputs.asset_prefix }}-${{ matrix.appimage_arch }}
+          path: source/dist/${{ needs.detect.outputs.asset_prefix }}-${{ needs.detect.outputs.version }}-${{ matrix.appimage_arch }}.AppImage
           if-no-files-found: error
           retention-days: 7
 
@@ -443,7 +317,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          pattern: ${{ inputs.asset_prefix }}-*
+          pattern: ${{ needs.detect.outputs.asset_prefix }}-*
           merge-multiple: true
           path: assets
       - name: Generate release notes
@@ -453,8 +327,8 @@ jobs:
           UPSTREAM_SHA_ARM64: ${{ needs.detect.outputs.upstream_sha256_arm64 }}
           UPSTREAM_URL_AMD64: ${{ needs.detect.outputs.upstream_url_amd64 }}
           UPSTREAM_URL_ARM64: ${{ needs.detect.outputs.upstream_url_arm64 }}
-          APP_CASK: ${{ inputs.app_cask }}
-          ASSET_PREFIX: ${{ inputs.asset_prefix }}
+          APP_CASK: ${{ needs.detect.outputs.app_cask }}
+          ASSET_PREFIX: ${{ needs.detect.outputs.asset_prefix }}
         run: |
           # shellcheck disable=SC2016 # printf format strings and GitHub Actions templates are intentional
           {
@@ -479,10 +353,10 @@ jobs:
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG_PREFIX: ${{ inputs.tag_prefix }}
+          TAG_PREFIX: ${{ needs.detect.outputs.tag_prefix }}
           PACKAGE_VERSION: ${{ needs.detect.outputs.version }}
-          APP_NAME: ${{ inputs.app_name }}
-          ASSET_PREFIX: ${{ inputs.asset_prefix }}
+          APP_NAME: ${{ needs.detect.outputs.app_name }}
+          ASSET_PREFIX: ${{ needs.detect.outputs.asset_prefix }}
         run: |
           TAG="${TAG_PREFIX}${PACKAGE_VERSION}"
           shopt -s nullglob
@@ -500,12 +374,12 @@ jobs:
       - name: Attest build provenance
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
-          subject-path: assets/${{ inputs.asset_prefix }}-*.AppImage
+          subject-path: assets/${{ needs.detect.outputs.asset_prefix }}-*.AppImage
 
       - name: Retain only the 3 newest releases
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG_PREFIX: ${{ inputs.tag_prefix }}
+          TAG_PREFIX: ${{ needs.detect.outputs.tag_prefix }}
         run: |
           matches="$(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName --jq '.[].tagName' | grep "^${TAG_PREFIX}" | sort -V || true)"
           if [[ -z "$matches" ]]; then
@@ -536,13 +410,16 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24.21.0
       - name: Pin cask to published release
         uses: ./.github/actions/update-cask
         with:
+          app: ${{ needs.detect.outputs.app_id }}
           package_version: ${{ needs.detect.outputs.version }}
-          tag_prefix: ${{ inputs.tag_prefix }}
-          asset_prefix: ${{ inputs.asset_prefix }}
-          app_cask: ${{ inputs.app_cask }}
+          tag_prefix: ${{ needs.detect.outputs.tag_prefix }}
+          asset_prefix: ${{ needs.detect.outputs.asset_prefix }}
           token: ${{ secrets.HOMEBREW_PAT }}
           gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
 
@@ -560,12 +437,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24.21.0
       - name: Pin cask to published release
         uses: ./.github/actions/update-cask
         with:
+          app: ${{ needs.detect.outputs.app_id }}
           package_version: ${{ needs.detect.outputs.version }}
-          tag_prefix: ${{ inputs.tag_prefix }}
-          asset_prefix: ${{ inputs.asset_prefix }}
-          app_cask: ${{ inputs.app_cask }}
+          tag_prefix: ${{ needs.detect.outputs.tag_prefix }}
+          asset_prefix: ${{ needs.detect.outputs.asset_prefix }}
           token: ${{ secrets.HOMEBREW_PAT }}
           gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}

@@ -1,0 +1,45 @@
+{
+  "id": "gitbutler",
+  "appName": "GitButler",
+  "displayName": "GitButler",
+  "comment": "Git, finally designed for humans",
+  "cask": "gitbutler",
+  "assetPrefix": "gitbutler",
+  "tagPrefix": "gitbutler-v",
+  "sourceRepo": "edgarcnp/homebrew-tap",
+  "sourceOwner": "edgarcnp",
+  "sourceDir": "packaging/apps/gitbutler",
+  "buildCommand": "./build.sh",
+  "debloatArgs": "--add-mesa --prefer-nano",
+  "needsWebkit": true,
+  "binaryTargets": ["gitbutler-tauri", "but"],
+  "oracle": {
+    "kind": "cdn-redirect",
+    "repository": "https://app.gitbutler.com/downloads/release/linux",
+    "redirectHosts": ["releases.gitbutler.com"],
+    "packageName": "git-butler",
+    "debName": "git-butler"
+  },
+  "payload": {
+    "kind": "deb-files",
+    "files": ["usr/bin/gitbutler-tauri", "usr/bin/gitbutler-git-askpass", "usr/bin/but"]
+  },
+  "icon": {
+    "source": "usr/share/icons/hicolor/128x128/apps/gitbutler-tauri.png",
+    "size": "128x128"
+  },
+  "desktopTemplate": "templates/gitbutler.desktop",
+  "updater": {
+    "patchEndpoint": {
+      "from": "https://app.gitbutler.com/releases/release/",
+      "textReplacement": "https://x.invalid.invalid/releases/release/",
+      "binaryReplacement": "https://x.invalid.invalid/releases/release/",
+      "targets": ["bin/gitbutler-tauri"]
+    },
+    "hook": "templates/prevent-autoupdate.hook",
+    "residualScan": {
+      "patterns": ["https://app.gitbutler.com/releases/release/"],
+      "severity": "warning"
+    }
+  }
+}

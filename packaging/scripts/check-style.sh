@@ -1,5 +1,5 @@
 #!/bin/bash
-# Local style gate: runs the same checks as the CI test-bot workflow.
+# Local gate: runs the same checks as the CI test-bot workflow.
 # Install as a pre-push hook:
 #   ln -sf ../../packaging/scripts/check-style.sh .git/hooks/pre-push
 # Or run manually before pushing:
@@ -12,13 +12,29 @@ TAP_DIR="$(brew --repository "${TAP_REPO}")"
 cd "${TAP_DIR}"
 
 echo "=== shellcheck ==="
-shellcheck packaging/scripts/install-anylinux-tools.sh \
-  packaging/lib/package-common.sh \
-  packaging/gitbutler/scripts/build-appimage.sh \
-  packaging/opencode/scripts/build-appimage.sh \
-  packaging/vscode/scripts/build-appimage.sh \
-  packaging/freebuff/scripts/build-appimage.sh
+# globbed so a new script is covered automatically; -x follows the sourced
+# pipeline libraries from packaging/
+find packaging -name '*.sh' -print0 | xargs -0 shellcheck -x -P packaging
 echo "shellcheck: OK"
+
+echo "=== packaging dev dependencies ==="
+if [[ ! -d node_modules ]]
+then
+  npm ci --ignore-scripts
+fi
+echo "dev dependencies: OK"
+
+echo "=== typecheck ==="
+npm run typecheck
+echo "typecheck: OK"
+
+echo "=== unit tests ==="
+npm test
+echo "unit tests: OK"
+
+echo "=== cask vs app descriptor ==="
+node packaging/bin/fbr.ts cask --action check
+echo "cask check: OK"
 
 echo "=== brew style ==="
 brew style edgarcnp/tap
@@ -34,19 +50,11 @@ echo "brew audit: OK"
 echo "=== actionlint ==="
 if command -v actionlint >/dev/null 2>&1
 then
-  actionlint \
-    .github/workflows/build-appimage.yml \
-    .github/workflows/build-gitbutler.yml \
-    .github/workflows/build-freebuff-desktop.yml \
-    .github/workflows/build-opencode-desktop.yml \
-    .github/workflows/build-vscode.yml \
-    .github/workflows/cask-smoke.yml \
-    .github/workflows/tests.yml \
-    .github/workflows/autobump.yml \
-    .github/workflows/publish.yml
+  # no arguments: actionlint discovers .github/workflows/*.yml itself
+  actionlint
   echo "actionlint: OK"
 else
   echo "actionlint: not installed; skipping (CI still runs it)"
 fi
 
-echo "--- all style gates passed ---"
+echo "--- all gates passed ---"

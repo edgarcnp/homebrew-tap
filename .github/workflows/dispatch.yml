@@ -1,7 +1,8 @@
 name: Dispatch build
 
-# Sole repository_dispatch subscriber: a single trigger-build event fans out
-# to the matching per-app workflow here instead of waking every build workflow.
+# Sole repository_dispatch subscriber: a trigger-build event names the app to
+# build (or "all"). Routing lives in the build workflow's plan job, so an
+# unknown or missing app fails loudly instead of matching no job at all.
 
 on:
   repository_dispatch:
@@ -10,38 +11,12 @@ on:
 permissions: {}
 
 jobs:
-  build-gitbutler:
-    if: github.event.client_payload.app == 'gitbutler'
+  build:
     permissions:
       attestations: write
       contents: write
       id-token: write
-    uses: ./.github/workflows/build-gitbutler.yml
+    uses: ./.github/workflows/build.yml
     secrets: inherit
-
-  build-vscode:
-    if: github.event.client_payload.app == 'vscode'
-    permissions:
-      attestations: write
-      contents: write
-      id-token: write
-    uses: ./.github/workflows/build-vscode.yml
-    secrets: inherit
-
-  build-opencode-desktop:
-    if: github.event.client_payload.app == 'opencode-desktop'
-    permissions:
-      attestations: write
-      contents: write
-      id-token: write
-    uses: ./.github/workflows/build-opencode-desktop.yml
-    secrets: inherit
-
-  build-freebuff-desktop:
-    if: github.event.client_payload.app == 'freebuff-desktop'
-    permissions:
-      attestations: write
-      contents: write
-      id-token: write
-    uses: ./.github/workflows/build-freebuff-desktop.yml
-    secrets: inherit
+    with:
+      app: ${{ github.event.client_payload.app }}

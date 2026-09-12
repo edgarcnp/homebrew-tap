@@ -5,7 +5,7 @@ Homebrew tap with Linux desktop apps, repackaged as AppImages and built automati
 ## Supported platforms
 
 > [!Note]
-> All casks are supported on Wayland. Casks prefer Wayland when available; they fall back to X11 otherwise.
+> All casks work on both Wayland and X11. Nothing in the casks forces a backend: the bundled apps' own toolkits (Electron, Tauri) detect Wayland and fall back to X11 themselves.
 
 Casks should work on any Linux distro with Homebrew, but this tap is mainly supported on Fedora Linux, including the Atomic flavor. All casks ship AppImages and rely on unprivileged user namespaces (enabled by default on Fedora) for the Chromium sandbox.
 
@@ -111,6 +111,9 @@ The uruntime first tries to **mount** the embedded filesystem via FUSE3; if FUSE
 AppImage builds never add `--no-sandbox`. If your distribution disables unprivileged user namespaces, use the `.deb`/`.rpm` packages instead.
 
 ## Documentation
+
+How the AppImages are built (pipeline layout, app descriptors, verification
+model and how to add an app): [`packaging/README.md`](packaging/README.md).
 
 `brew help`, `man brew` or check [Homebrew's documentation](https://docs.brew.sh).
 
