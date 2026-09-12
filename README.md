@@ -43,6 +43,14 @@ brew install --cask edgarcnp/tap/gitbutler
 
 Shares the standard GitButler profile and the `but://` URL scheme with the app.
 
+### freebuff-desktop
+
+Repackage of [Freebuff](https://freebuff.com/) (the community desktop app from [Codebuff](https://codebuff.com/)) as an AppImage. Upstream publishes Linux builds only as an electron-builder AppImage built on the classic runtime, which needs FUSE 2 (`libfuse.so.2`); this cask rebuilds it from the AppImage published through the [CodebuffAI/codebuff-community](https://github.com/CodebuffAI/codebuff-community) GitHub releases, verified against the release's SHA-256 asset digests, on the FUSE 3-compatible uruntime with an extract-and-run fallback. The embedded auto-updater feed is removed; the app launches sandboxed via user namespaces, with its own preflight re-exec fallback where those are blocked.
+
+```sh
+brew install --cask edgarcnp/tap/freebuff-desktop
+```
+
 ### opencode-desktop
 
 Repackage of [OpenCode Desktop](https://opencode.ai/) as an AppImage, built from the `.deb` published on the [anomalyco/opencode](https://github.com/anomalyco/opencode) GitHub releases and verified against the release's SHA-256 asset digests.

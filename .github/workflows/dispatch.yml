@@ -36,3 +36,12 @@ jobs:
       id-token: write
     uses: ./.github/workflows/build-opencode-desktop.yml
     secrets: inherit
+
+  build-freebuff-desktop:
+    if: github.event.client_payload.app == 'freebuff-desktop'
+    permissions:
+      attestations: write
+      contents: write
+      id-token: write
+    uses: ./.github/workflows/build-freebuff-desktop.yml
+    secrets: inherit
