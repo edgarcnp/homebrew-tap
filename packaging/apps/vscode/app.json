@@ -4,6 +4,11 @@
   "displayName": "Visual Studio Code",
   "comment": "Code Editing. Redefined.",
   "cask": "vscode",
+  "watch": {
+    "feedUrl": "https://github.com/microsoft/vscode/releases.atom",
+    "versionPattern": "^(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
+    "repo": "microsoft/vscode"
+  },
   "assetPrefix": "vscode",
   "tagPrefix": "vscode-v",
   "sourceRepo": "edgarcnp/homebrew-tap",

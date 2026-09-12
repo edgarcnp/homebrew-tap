@@ -158,6 +158,18 @@ export interface IconConfig {
   size: string;
 }
 
+// Release-watch block: where the API's release watcher looks for this app's
+// upstream versions. The pattern is matched against the atom entry *title*
+// (the GitHub release name, not the tag) and capture group 1 is the version.
+export interface WatchConfig {
+  feedUrl: string;
+  versionPattern: string;
+  // Entries whose title matches are skipped, e.g. Gitbutler's "nightly/".
+  skipPattern?: string;
+  // Upstream repo (owner/repo), carried as the informational trigger_repo.
+  repo?: string;
+}
+
 export interface AppDescriptor {
   id: string;
   // Human-readable app name used in release titles.
@@ -168,6 +180,9 @@ export interface AppDescriptor {
   comment: string;
   // Cask token: Casks/<cask>.rb.
   cask: string;
+  // Optional release-watch block polled by the API's watcher; absent means the
+  // app ships but is not watched for new upstream versions.
+  watch?: WatchConfig;
   // Release asset filename prefix.
   assetPrefix: string;
   // Release tag prefix; the tag is <tagPrefix><version>.

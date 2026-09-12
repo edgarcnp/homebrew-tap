@@ -14,6 +14,7 @@ import type {
   Payload,
   ResidualScan,
   UpdaterConfig,
+  WatchConfig,
 } from "./types.ts";
 
 const SAFE_ENV_KEY = /^[A-Z][A-Z0-9_]*$/;
@@ -283,12 +284,41 @@ function validateIcon(raw: unknown, label: string): IconConfig {
   };
 }
 
+// The release watcher compiles these as RegExp when it polls, so a malformed
+// pattern must fail the descriptor here instead of silently leaving the app
+// unwatched (the watcher drops an invalid block and reports it skipped).
+function compiledPattern(value: string, label: string): string {
+  try {
+    new RegExp(value);
+  } catch {
+    fail(`${label} must be a valid regular expression: ${value}`);
+  }
+  return value;
+}
+
+function validateWatch(raw: unknown, label: string): WatchConfig | undefined {
+  if (raw === undefined) return undefined;
+  const source = asObject(raw, label);
+  const watch: WatchConfig = {
+    feedUrl: str(source, "feedUrl", label),
+    versionPattern: compiledPattern(str(source, "versionPattern", label), `${label}.versionPattern`),
+  };
+  const skipPattern = optionalStr(source, "skipPattern", label);
+  if (skipPattern !== undefined) {
+    watch.skipPattern = compiledPattern(skipPattern, `${label}.skipPattern`);
+  }
+  const repo = optionalStr(source, "repo", label);
+  if (repo !== undefined) watch.repo = repo;
+  return watch;
+}
+
 export function validateDescriptor(raw: unknown, expectedId: string): AppDescriptor {
   const label = `apps/${expectedId}/app.json`;
   const source = asObject(raw, label);
   const id = str(source, "id", label);
   if (id !== expectedId) fail(`${label}: id ${id} does not match directory ${expectedId}`);
 
+  const watch = validateWatch(source["watch"], `${label}.watch`);
   const descriptor: AppDescriptor = {
     id,
     appName: str(source, "appName", label),
@@ -311,6 +341,7 @@ export function validateDescriptor(raw: unknown, expectedId: string): AppDescrip
     desktopTemplate: relativePath(str(source, "desktopTemplate", label), `${label}.desktopTemplate`),
     updater: validateUpdater(source["updater"], `${label}.updater`),
   };
+  if (watch !== undefined) descriptor.watch = watch;
 
   for (const [field, value] of [
     ["cask", descriptor.cask],
@@ -354,6 +385,8 @@ export interface DescriptorExport {
   id: string;
   name: string;
   cask: string;
+  // The release-watch block as compact JSON, or "" when the app has none.
+  watch: string;
   asset_prefix: string;
   tag_prefix: string;
   source_repo: string;
@@ -370,6 +403,7 @@ export function descriptorExport(descriptor: AppDescriptor): DescriptorExport {
     id: descriptor.id,
     name: descriptor.appName,
     cask: descriptor.cask,
+    watch: descriptor.watch === undefined ? "" : JSON.stringify(descriptor.watch),
     asset_prefix: descriptor.assetPrefix,
     tag_prefix: descriptor.tagPrefix,
     source_repo: descriptor.sourceRepo,
@@ -397,6 +431,7 @@ export function descriptorLines(
     `APP_ID=${values.id}`,
     `APP_NAME=${values.name}`,
     `APP_CASK=${values.cask}`,
+    `WATCH=${values.watch}`,
     `ASSET_PREFIX=${values.asset_prefix}`,
     `TAG_PREFIX=${values.tag_prefix}`,
     `SOURCE_REPO=${values.source_repo}`,

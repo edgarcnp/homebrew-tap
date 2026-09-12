@@ -104,6 +104,61 @@ describe("descriptor contents (regression against the previous per-app scripts)"
   });
 });
 
+describe("release watch", () => {
+  it("loads each app's watch block", () => {
+    assert.deepEqual(loadDescriptor("vscode").watch, {
+      feedUrl: "https://github.com/microsoft/vscode/releases.atom",
+      versionPattern: "^(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
+      repo: "microsoft/vscode",
+    });
+    assert.deepEqual(loadDescriptor("opencode").watch, {
+      feedUrl: "https://github.com/anomalyco/opencode/releases.atom",
+      versionPattern: "^v(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
+      skipPattern: "^v2\\.",
+      repo: "anomalyco/opencode",
+    });
+    assert.deepEqual(loadDescriptor("gitbutler").watch, {
+      feedUrl: "https://github.com/gitbutlerapp/gitbutler/releases.atom",
+      versionPattern: "^release\\/(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
+      skipPattern: "^nightly\\/",
+      repo: "gitbutlerapp/gitbutler",
+    });
+    assert.deepEqual(loadDescriptor("commandcode").watch, {
+      feedUrl: "https://github.com/CommandCodeAI/desktop/releases.atom",
+      versionPattern: "(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
+      repo: "CommandCodeAI/desktop",
+    });
+  });
+
+  it("captures the version from a real feed title", () => {
+    // Feed titles are release names, not tags (e.g. "Command Code 0.1.29").
+    const titles: Record<string, [string, string]> = {
+      vscode: ["1.137.0", "1.137.0"],
+      opencode: ["v1.18.30", "1.18.30"],
+      gitbutler: ["release/0.22.3", "0.22.3"],
+      commandcode: ["Command Code 0.1.29", "0.1.29"],
+    };
+    for (const app of APPS) {
+      const watch = loadDescriptor(app).watch;
+      assert.ok(watch !== undefined, `${app} must declare a watch block`);
+      const [title, version] = titles[app] ?? ["", ""];
+      assert.equal(new RegExp(watch.versionPattern).exec(title)?.[1], version);
+    }
+  });
+
+  it("skips the pre-release lines each pattern excludes", () => {
+    // opencode's 2.x line is a GitHub pre-release with no linux desktop
+    // assets, so the watch tracks the buildable 1.x line the oracle resolves.
+    const opencode = loadDescriptor("opencode").watch;
+    assert.ok(opencode?.skipPattern !== undefined);
+    assert.equal(new RegExp(opencode.skipPattern).test("v2.0.2"), true);
+
+    const gitbutler = loadDescriptor("gitbutler").watch;
+    assert.ok(gitbutler?.skipPattern !== undefined);
+    assert.equal(new RegExp(gitbutler.skipPattern).test("nightly/0.5.2194"), true);
+  });
+});
+
 describe("descriptor validation", () => {
   it("rejects an id that does not match the directory", () => {
     assert.throws(
@@ -295,6 +350,59 @@ describe("descriptor validation", () => {
       /must contain \{version\}/,
     );
   });
+
+  it("rejects malformed watch blocks and treats the block as optional", () => {
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("vscode", (copy) => { delete nested(copy, "watch")["feedUrl"]; }),
+          "vscode",
+        ),
+      /watch\.feedUrl must be a non-empty string/,
+    );
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("vscode", (copy) => { nested(copy, "watch")["versionPattern"] = "("; }),
+          "vscode",
+        ),
+      /watch\.versionPattern must be a valid regular expression/,
+    );
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("gitbutler", (copy) => { nested(copy, "watch")["skipPattern"] = "["; }),
+          "gitbutler",
+        ),
+      /watch\.skipPattern must be a valid regular expression/,
+    );
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("gitbutler", (copy) => { nested(copy, "watch")["skipPattern"] = ""; }),
+          "gitbutler",
+        ),
+      /watch\.skipPattern must be a non-empty string/,
+    );
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("vscode", (copy) => { copy["watch"] = "https://example.com/releases.atom"; }),
+          "vscode",
+        ),
+      /watch must be an object/,
+    );
+
+    const withoutWatch = mutated("vscode", (copy) => { delete copy["watch"]; });
+    assert.equal(validateDescriptor(withoutWatch, "vscode").watch, undefined);
+    const minimal = mutated("vscode", (copy) => {
+      copy["watch"] = { feedUrl: "https://example.com/releases.atom", versionPattern: "^(\\d+)$" };
+    });
+    assert.deepEqual(validateDescriptor(minimal, "vscode").watch, {
+      feedUrl: "https://example.com/releases.atom",
+      versionPattern: "^(\\d+)$",
+    });
+  });
 });
 
 describe("descriptor env and output lines", () => {
@@ -307,6 +415,7 @@ describe("descriptor env and output lines", () => {
     );
     assert.equal(env.get("APP_ID"), "commandcode");
     assert.equal(env.get("APP_CASK"), "commandcode-desktop");
+    assert.equal(env.get("WATCH"), JSON.stringify(loadDescriptor("commandcode").watch));
     assert.equal(env.get("TAG_PREFIX"), "commandcode-desktop-v");
     assert.equal(env.get("SOURCE_DIR"), "packaging/apps/commandcode");
     assert.equal(env.get("BUILD_COMMAND"), "./build.sh");
@@ -316,9 +425,11 @@ describe("descriptor env and output lines", () => {
   });
 
   it("emits lowercase keys for job outputs", () => {
-    const lines = descriptorLines(loadDescriptor("gitbutler"), "output");
+    const gitbutler = loadDescriptor("gitbutler");
+    const lines = descriptorLines(gitbutler, "output");
     assert.ok(lines.includes("id=gitbutler"));
     assert.ok(lines.includes("cask=gitbutler"));
+    assert.ok(lines.includes(`watch=${JSON.stringify(gitbutler.watch)}`));
     assert.ok(lines.includes("asset_prefix=gitbutler"));
     assert.ok(lines.includes("needs_webkit=true"));
     assert.ok(lines.every((line) => /^[a-z_]+=/.test(line)));
