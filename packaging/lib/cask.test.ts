@@ -16,14 +16,25 @@ describe("readCask", () => {
       const descriptor = loadDescriptor(app);
       const state = readCaskFile(caskPath(descriptor.cask));
       assert.match(state.version, /^\d/);
-      assert.match(state.sha256.amd64, /^[0-9a-f]{64}$/);
-      assert.match(state.sha256.arm64, /^[0-9a-f]{64}$/);
+      for (const architecture of descriptor.architectures) {
+        assert.match(state.sha256[architecture] ?? "", /^[0-9a-f]{64}$/, `${app} ${architecture}`);
+      }
     }
   });
 
-  it("requires exactly one version and both checksums", () => {
-    const source = ["  version \"1.0.0\"", `  sha256 arm64_linux:  "${HASH_A}"`].join("\n");
-    assert.throws(() => readCask(source), /x86_64_linux sha256/);
+  it("reads the single-arch cask with one checksum", () => {
+    const descriptor = loadDescriptor("commandcode");
+    const state = readCaskFile(caskPath(descriptor.cask));
+    assert.equal(state.sha256["amd64"]?.length, 64);
+    assert.equal(state.sha256["arm64"], undefined);
+  });
+
+  it("requires exactly one version and a complete checksum pin", () => {
+    const halfDual = ["  version \"1.0.0\"", `  sha256 arm64_linux:  "${HASH_A}"`].join("\n");
+    assert.throws(() => readCask(halfDual), /must pin either both arch checksums/);
+    const single = ["  version \"1.0.0\"", `  sha256 "${HASH_A}"`, "  depends_on arch: :x86_64"].join("\n") +
+      "\n  url \"https://example.com/app-1.0.0-x86_64.AppImage\"\n";
+    assert.equal(readCask(single).sha256["amd64"], HASH_A);
     assert.throws(() => readCask(""), /version stanza/);
     assert.throws(
       () => readCask('  version "1.0.0"\n  version "1.0.1"\n'),
@@ -58,7 +69,7 @@ describe("updateCask", () => {
   it("fails instead of half-updating an unexpected file", () => {
     assert.throws(
       () => updateCask('  version "1.0.0"\n', { version: "2.0.0", sha256: { amd64: HASH_A, arm64: HASH_B } }),
-      /exactly one arm64_linux sha256/,
+      /must pin either both arch checksums/,
     );
     assert.throws(
       () => updateCask(source, { version: "bad\"version", sha256: { amd64: HASH_A, arm64: HASH_B } }),
@@ -67,6 +78,29 @@ describe("updateCask", () => {
     assert.throws(
       () => updateCask(source, { version: "2.0.0", sha256: { amd64: "short", arm64: HASH_B } }),
       /Invalid x86_64 sha256/,
+    );
+    assert.throws(
+      () => updateCask(source, { version: "2.0.0", sha256: { amd64: HASH_A } }),
+      /requires both arm64 and amd64/,
+    );
+  });
+
+  it("rewrites the single checksum of a single-arch cask", () => {
+    const single = [
+      'cask "solo" do',
+      '  version "0.1.29"',
+      `  sha256 "${HASH_A}"`,
+      '  url "https://example.com/solo-#{version}-x86_64.AppImage"',
+      "  depends_on arch: :x86_64",
+      "end",
+      "",
+    ].join("\n");
+    const updated = updateCask(single, { version: "0.1.30", sha256: { amd64: HASH_B } });
+    assert.match(updated, /^ {2}version "0\.1\.30"$/m);
+    assert.match(updated, new RegExp(`sha256 "${HASH_B}"`));
+    assert.throws(
+      () => updateCask(single, { version: "0.1.30", sha256: { arm64: HASH_B } }),
+      /requires the amd64 checksum/,
     );
   });
 

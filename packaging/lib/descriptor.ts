@@ -5,8 +5,10 @@
 import * as fs from "node:fs";
 import { assertSameLength, assertSingleLine, fail } from "./guards.ts";
 import { APPS_DIR, descriptorPath } from "./paths.ts";
+import { ARCHITECTURES, isArchitecture } from "./types.ts";
 import type {
   AppDescriptor,
+  Architecture,
   IconConfig,
   Oracle,
   Payload,
@@ -76,12 +78,38 @@ function validateOracle(raw: unknown, label: string): Oracle {
         fingerprint: str(source, "fingerprint", label),
         keyBase64Path: relativePath(str(source, "keyBase64Path", label), `${label}.keyBase64Path`),
       };
-    case "github-release":
-      return {
-        kind,
-        repository: str(source, "repository", label),
-        assetPrefix: str(source, "assetPrefix", label),
-      };
+    case "github-release": {
+      const repository = str(source, "repository", label);
+      if (!/^https:\/\/api\.github\.com\/repos\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) {
+        fail(`${label}.repository must be a GitHub API repository URL: ${repository}`);
+      }
+      const hasPrefix = source["assetPrefix"] !== undefined;
+      const hasTemplate = source["assetNameTemplate"] !== undefined;
+      const hasTag = source["tagPrefix"] !== undefined;
+      const hasPackage = source["packageName"] !== undefined;
+      if (hasTemplate || hasTag || hasPackage) {
+        if (hasPrefix) fail(`${label}: assetPrefix and assetNameTemplate are mutually exclusive`);
+        if (!hasTemplate || !hasTag || !hasPackage) {
+          fail(`${label}: assetNameTemplate, tagPrefix and packageName must be set together`);
+        }
+        const tagPrefix = str(source, "tagPrefix", label);
+        if (!/^[A-Za-z0-9][A-Za-z0-9._+-]*$/.test(tagPrefix)) {
+          fail(`${label}.tagPrefix is not a safe tag prefix: ${tagPrefix}`);
+        }
+        const assetNameTemplate = str(source, "assetNameTemplate", label);
+        if (!assetNameTemplate.includes("{version}")) {
+          fail(`${label}.assetNameTemplate must contain {version}: ${assetNameTemplate}`);
+        }
+        return {
+          kind,
+          repository,
+          assetNameTemplate,
+          tagPrefix,
+          packageName: str(source, "packageName", label),
+        };
+      }
+      return { kind, repository, assetPrefix: str(source, "assetPrefix", label) };
+    }
     case "electron-feed":
       return {
         kind,
@@ -227,6 +255,24 @@ function validateUpdater(raw: unknown, label: string): UpdaterConfig {
   return updater;
 }
 
+function validateArchitectures(raw: unknown, label: string): Architecture[] {
+  if (raw === undefined) return [...ARCHITECTURES];
+  if (!Array.isArray(raw) || raw.length === 0) {
+    fail(`${label}.architectures must be a non-empty array`);
+  }
+  const seen = new Set<string>();
+  const architectures: Architecture[] = [];
+  for (const [index, entry] of raw.entries()) {
+    if (!isArchitecture(entry)) {
+      fail(`${label}.architectures[${index}] must be one of ${ARCHITECTURES.join(", ")}`);
+    }
+    if (seen.has(entry)) fail(`${label}.architectures must not contain duplicates`);
+    seen.add(entry);
+    architectures.push(entry);
+  }
+  return architectures;
+}
+
 function validateIcon(raw: unknown, label: string): IconConfig {
   const source = asObject(raw, label);
   const size = str(source, "size", label);
@@ -257,6 +303,7 @@ export function validateDescriptor(raw: unknown, expectedId: string): AppDescrip
     buildCommand: str(source, "buildCommand", label),
     debloatArgs: str(source, "debloatArgs", label),
     needsWebkit: bool(source, "needsWebkit", label),
+    architectures: validateArchitectures(source["architectures"], label),
     binaryTargets: strArray(source, "binaryTargets", label),
     oracle: validateOracle(source["oracle"], `${label}.oracle`),
     payload: validatePayload(source["payload"], `${label}.payload`),
@@ -315,6 +362,7 @@ export interface DescriptorExport {
   build_command: string;
   debloat_args: string;
   needs_webkit: string;
+  architectures: string;
 }
 
 export function descriptorExport(descriptor: AppDescriptor): DescriptorExport {
@@ -330,6 +378,7 @@ export function descriptorExport(descriptor: AppDescriptor): DescriptorExport {
     build_command: descriptor.buildCommand,
     debloat_args: descriptor.debloatArgs,
     needs_webkit: descriptor.needsWebkit ? "true" : "false",
+    architectures: JSON.stringify(descriptor.architectures),
   };
 }
 
@@ -356,5 +405,6 @@ export function descriptorLines(
     `BUILD_COMMAND=${values.build_command}`,
     `DEBLOAT_ARGS=${values.debloat_args}`,
     `NEEDS_WEBKIT=${values.needs_webkit}`,
+    `APP_ARCHITECTURES=${values.architectures}`,
   ];
 }

@@ -12,6 +12,7 @@
   "buildCommand": "./build.sh",
   "debloatArgs": "--add-common --prefer-nano ffmpeg-mini",
   "needsWebkit": false,
+  "architectures": ["amd64", "arm64"],
   "binaryTargets": ["code"],
   "oracle": {
     "kind": "apt",

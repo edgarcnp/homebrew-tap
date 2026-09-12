@@ -39,7 +39,16 @@ export interface AptOracle {
 export interface GithubReleaseOracle {
   kind: "github-release";
   repository: string;
-  assetPrefix: string;
+  // Legacy layout: "<assetPrefix>-<arch>.deb". Absent in the versioned-asset
+  // flavor, where assetNameTemplate names the file instead.
+  assetPrefix?: string;
+  // Optional versioned-asset flavor (e.g. CommandCode, whose filenames embed
+  // the version): when assetNameTemplate is present, tagPrefix and packageName
+  // must be present and assetPrefix must be absent; when absent, the legacy
+  // layout applies. {version} and {arch} (deb arch) are substituted.
+  assetNameTemplate?: string;
+  tagPrefix?: string;
+  packageName?: string;
 }
 
 // electron-updater feed: a 302 whose Location names the exact release tag.
@@ -130,7 +139,7 @@ export interface UpdaterConfig {
   removeJsonKeys?: JsonKeyRemoval;
   patchEndpoint?: EndpointPatch;
   removeFeed?: FeedRemoval;
-  // Written to AppDir/.env after packaging, e.g. FREEBUFF_DISABLE_UPDATE_CHECK=1.
+  // Written to AppDir/.env after packaging, e.g. CC_DISABLE_AUTO_UPDATE=1.
   env?: Record<string, string>;
   // Runtime hook sourced by the generated AppRun.sh; path relative to the app dir.
   hook?: string;
@@ -175,6 +184,10 @@ export interface AppDescriptor {
   debloatArgs: string;
   // Whether the build needs the webkit2gtk/GTK build dependencies.
   needsWebkit: boolean;
+  // Architectures this app ships (subset of ["amd64", "arm64"]). Single-arch
+  // apps (e.g. CommandCode, amd64-only upstream) ship one AppImage and pin one
+  // checksum; the pipeline builds, publishes and checks only these arches.
+  architectures: Architecture[];
   // Names the cask must expose on PATH (checkCask asserts the agreement).
   binaryTargets: string[];
   oracle: Oracle;
@@ -191,8 +204,8 @@ export interface AppDescriptor {
 
 export interface CaskState {
   version: string;
-  // Architecture -> pinned SHA-256.
-  sha256: Record<Architecture, string>;
+  // Architecture -> pinned SHA-256 (single-arch casks carry one entry).
+  sha256: Partial<Record<Architecture, string>>;
 }
 
 export type GateAction = "build" | "skip" | "repair-cask";

@@ -27,6 +27,7 @@ function descriptorWith(updater: UpdaterConfig, id = "vscode"): AppDescriptor {
     buildCommand: "./build.sh",
     debloatArgs: "--add-common",
     needsWebkit: false,
+    architectures: ["amd64", "arm64"],
     binaryTargets: ["code"],
     oracle: { kind: "github-release", repository: "https://api.github.com/repos/x/y", assetPrefix: "z" },
     payload: { kind: "deb-tree", tree: "usr/share/code" },
@@ -193,7 +194,7 @@ describe("finalizeApp", () => {
     write("bin/app", "binary");
     // gitbutler is the app that ships a runtime hook template.
     const descriptor = descriptorWith(
-      { env: { FREEBUFF_DISABLE_UPDATE_CHECK: "1" }, hook: "templates/prevent-autoupdate.hook" },
+      { env: { CC_DISABLE_AUTO_UPDATE: "1" }, hook: "templates/prevent-autoupdate.hook" },
       "gitbutler",
     );
 
@@ -204,7 +205,7 @@ describe("finalizeApp", () => {
     assert.equal(second.length, 2);
     assert.equal(
       fs.readFileSync(path.join(appDir, ".env"), "utf8"),
-      "FREEBUFF_DISABLE_UPDATE_CHECK=1\n",
+      "CC_DISABLE_AUTO_UPDATE=1\n",
     );
     const hook = path.join(appDir, "bin/prevent-autoupdate.hook");
     assert.equal(fs.existsSync(hook), true);

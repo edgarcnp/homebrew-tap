@@ -1,49 +1,127 @@
 {
-    "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-    "extends": [
-        "config:recommended",
-        "helpers:pinGitHubActionDigests"
-    ],
-    "abandonmentThreshold": "1 year",
-    "addLabels": [
-        "renovate",
-        "dependencies"
-    ],
-    "automerge": false,
-    "dependencyDashboard": false,
-    "keepUpdatedLabel": "renovate-keep-updated",
-    "lockFileMaintenance": {
-        "enabled": false
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    "helpers:pinGitHubActionDigests"
+  ],
+  "abandonmentThreshold": "1 year",
+  "addLabels": [
+    "renovate",
+    "dependencies"
+  ],
+  "automerge": false,
+  "dependencyDashboard": false,
+  "keepUpdatedLabel": "renovate-keep-updated",
+  "lockFileMaintenance": {
+    "enabled": false
+  },
+  "osvVulnerabilityAlerts": true,
+  "pruneBranchAfterAutomerge": true,
+  "reviewers": [
+    "edgarcnp"
+  ],
+  "rollbackPrs": true,
+  "schedule": [
+    "* * * * *"
+  ],
+  "vulnerabilityAlerts": {
+    "groupName": null,
+    "schedule": [],
+    "dependencyDashboardApproval": false,
+    "minimumReleaseAge": null,
+    "rangeStrategy": "bump",
+    "commitMessageSuffix": "[SECURITY]",
+    "branchTopic": "{{{datasource}}}-{{{depNameSanitized}}}-vulnerability",
+    "prCreation": "immediate",
+    "vulnerabilityFixStrategy": "lowest"
+  },
+  "customManagers": [
+    {
+      "description": "actionlint release pinned by hand in the lint step of the test workflow",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/tests\\.yml$/"
+      ],
+      "matchStrings": [
+        "ACTIONLINT_VERSION=\"(?<currentValue>\\d+\\.\\d+\\.\\d+)\""
+      ],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "rhysd/actionlint",
+      "extractVersionTemplate": "^v(?<version>.*)$"
     },
-    "osvVulnerabilityAlerts": true,
-    "pruneBranchAfterAutomerge": true,
-    "reviewers": [
-        "edgarcnp"
-    ],
-    "rollbackPrs": true,
-    "schedule": [
-        "* * * * *"
-    ],
-    "vulnerabilityAlerts": {
-        "groupName": null,
-        "schedule": [],
-        "dependencyDashboardApproval": false,
-        "minimumReleaseAge": null,
-        "rangeStrategy": "bump",
-        "commitMessageSuffix": "[SECURITY]",
-        "branchTopic": "{{{datasource}}}-{{{depNameSanitized}}}-vulnerability",
-        "prCreation": "immediate",
-        "vulnerabilityFixStrategy": "lowest"
+    {
+      "description": "pkgforge appimagetool release pinned by hand in the AppImage build workflow",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/build-appimage\\.yml$/"
+      ],
+      "matchStrings": [
+        "appimagetool/releases/download/(?<currentValue>\\d+\\.\\d+\\.\\d+)/"
+      ],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "pkgforge-dev/appimagetool"
     },
-    "docker": {
-        "enabled": true
+    {
+      "description": "quick-sharun and get-debloated-pkgs, pinned to a commit of Anylinux-AppImages",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^packaging\\/scripts\\/install-anylinux-tools\\.sh$/"
+      ],
+      "matchStrings": [
+        "PINNED_COMMIT=\"(?<currentDigest>[0-9a-f]{40})\""
+      ],
+      "currentValueTemplate": "main",
+      "depNameTemplate": "pkgforge-dev/Anylinux-AppImages",
+      "packageNameTemplate": "https://github.com/pkgforge-dev/Anylinux-AppImages",
+      "datasourceTemplate": "git-refs"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "TypeScript stays on the 6.x line until this toolchain is ready for 7",
+      "matchDatasources": [
+        "npm"
+      ],
+      "matchPackageNames": [
+        "typescript"
+      ],
+      "allowedVersions": ">=6.0.3 <7"
     },
-    "packageRules": [
-        {
-            "matchManagers": [
-                "github-actions"
-            ],
-            "groupName": "GitHub Actions"
-        }
-    ]
+    {
+      "description": "@types/node describes the Node major the CI runs, so it moves with the node runtime rule, not ahead of it",
+      "matchDatasources": [
+        "npm"
+      ],
+      "matchPackageNames": [
+        "@types/node"
+      ],
+      "allowedVersions": ">=24 <25"
+    },
+    {
+      "description": "Actions are SHA-pinned; one PR per digest bump keeps the review small",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "groupName": "GitHub Actions"
+    },
+    {
+      "description": "The Node pin gates engines, @types/node and type stripping, so it is reviewed on its own",
+      "matchPackageNames": [
+        "node"
+      ],
+      "groupName": "node runtime"
+    },
+    {
+      "description": "Hand-pinned upstream tools whose version and local SHA-256 must move together",
+      "matchPackageNames": [
+        "rhysd/actionlint",
+        "pkgforge-dev/appimagetool",
+        "pkgforge-dev/Anylinux-AppImages"
+      ],
+      "groupName": "pinned upstream build tools",
+      "prBodyNotes": [
+        "This dependency is verified against a SHA-256 pinned in this repository, which Renovate cannot recompute. Update the pin in this PR: the check reports the hash it measured when the two disagree."
+      ]
+    }
+  ]
 }

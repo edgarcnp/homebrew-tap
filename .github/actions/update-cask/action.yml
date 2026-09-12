@@ -66,20 +66,27 @@ runs:
           exit 1
         fi
         # hash the released assets, not the run artifacts, so the cask
-        # always matches what the release actually hosts
+        # always matches what the release actually hosts. Single-arch apps
+        # publish one AppImage; only their architectures are pinned.
+        arches="$(node packaging/bin/fbr.ts descriptor --app "${APP}" --field architectures)"
+        patterns=()
+        [[ "${arches}" == *amd64* ]] && patterns+=(--pattern "${ASSET_PREFIX}-*-x86_64.AppImage")
+        [[ "${arches}" == *arm64* ]] && patterns+=(--pattern "${ASSET_PREFIX}-*-aarch64.AppImage")
+        [ "${#patterns[@]}" -gt 0 ] || { echo "no supported architectures in ${arches}" >&2; exit 1; }
         gh release download "${TAG_PREFIX}${PACKAGE_VERSION}" \
           --repo "$GITHUB_REPOSITORY" \
-          --pattern "${ASSET_PREFIX}-*-x86_64.AppImage" \
-          --pattern "${ASSET_PREFIX}-*-aarch64.AppImage" \
+          "${patterns[@]}" \
           --dir assets --clobber
-        x86_64_sha="$(sha256sum assets/"${ASSET_PREFIX}"-*-x86_64.AppImage | awk '{print $1}')"
-        arm64_sha="$(sha256sum assets/"${ASSET_PREFIX}"-*-aarch64.AppImage | awk '{print $1}')"
-        node packaging/bin/fbr.ts cask \
-          --action set-version \
-          --app "${APP}" \
-          --version "${PACKAGE_VERSION}" \
-          --sha256-x86-64 "${x86_64_sha}" \
-          --sha256-arm-64 "${arm64_sha}"
+        set_args=(--action set-version --app "${APP}" --version "${PACKAGE_VERSION}")
+        if [[ "${arches}" == *amd64* ]]; then
+          x86_64_sha="$(sha256sum assets/"${ASSET_PREFIX}"-*-x86_64.AppImage | awk '{print $1}')"
+          set_args+=(--sha256-x86-64 "${x86_64_sha}")
+        fi
+        if [[ "${arches}" == *arm64* ]]; then
+          arm64_sha="$(sha256sum assets/"${ASSET_PREFIX}"-*-aarch64.AppImage | awk '{print $1}')"
+          set_args+=(--sha256-arm-64 "${arm64_sha}")
+        fi
+        node packaging/bin/fbr.ts cask "${set_args[@]}"
     - name: Import GPG signing key
       id: import-gpg
       shell: bash -xeuo pipefail {0}

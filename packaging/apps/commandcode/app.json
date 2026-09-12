@@ -1,0 +1,46 @@
+{
+  "id": "commandcode",
+  "appName": "Command Code Desktop",
+  "displayName": "Command Code",
+  "comment": "Command Code desktop app",
+  "cask": "commandcode-desktop",
+  "assetPrefix": "commandcode-desktop",
+  "tagPrefix": "commandcode-desktop-v",
+  "sourceRepo": "edgarcnp/homebrew-tap",
+  "sourceOwner": "edgarcnp",
+  "sourceDir": "packaging/apps/commandcode",
+  "buildCommand": "./build.sh",
+  "debloatArgs": "--add-common --prefer-nano ffmpeg-mini",
+  "needsWebkit": false,
+  "architectures": ["amd64"],
+  "binaryTargets": ["command-code"],
+  "oracle": {
+    "kind": "github-release",
+    "repository": "https://api.github.com/repos/CommandCodeAI/desktop",
+    "packageName": "command-code",
+    "tagPrefix": "v",
+    "assetNameTemplate": "CommandCode-{version}-{arch}.deb"
+  },
+  "payload": {
+    "kind": "deb-tree",
+    "tree": "opt/Command Code"
+  },
+  "icon": {
+    "source": "usr/share/icons/hicolor/512x512/apps/command-code.png",
+    "size": "512x512"
+  },
+  "desktopTemplate": "templates/commandcode-desktop.desktop",
+  "updater": {
+    "removeFeed": {
+      "paths": ["bin/resources/app-update.yml"],
+      "required": true
+    },
+    "env": {
+      "CC_DISABLE_AUTO_UPDATE": "1"
+    },
+    "residualScan": {
+      "patterns": ["CommandCodeAI/gui"],
+      "severity": "error"
+    }
+  }
+}

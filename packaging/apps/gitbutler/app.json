@@ -12,6 +12,7 @@
   "buildCommand": "./build.sh",
   "debloatArgs": "--add-mesa --prefer-nano",
   "needsWebkit": true,
+  "architectures": ["amd64", "arm64"],
   "binaryTargets": ["gitbutler-tauri", "but"],
   "oracle": {
     "kind": "cdn-redirect",

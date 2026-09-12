@@ -36,6 +36,8 @@ jobs:
       asset_prefix: ${{ steps.app.outputs.asset_prefix }}
       tag_prefix: ${{ steps.app.outputs.tag_prefix }}
       needs_webkit: ${{ steps.app.outputs.needs_webkit }}
+      architectures: ${{ steps.app.outputs.architectures }}
+      build_matrix: ${{ steps.matrix.outputs.matrix }}
       version: ${{ steps.resolve.outputs.version }}
       skipped: ${{ steps.gate.outputs.skipped }}
       repair_cask: ${{ steps.gate.outputs.repair_cask }}
@@ -45,11 +47,11 @@ jobs:
       upstream_url_amd64: ${{ steps.resolve.outputs.upstream_url_amd64 }}
       upstream_url_arm64: ${{ steps.resolve.outputs.upstream_url_arm64 }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: tap
           persist-credentials: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24.21.0
       - name: Load app descriptor
@@ -62,6 +64,15 @@ jobs:
           # for job outputs, which cannot read the env context.
           node tap/packaging/bin/fbr.ts descriptor-env --app "${APP}" >> "${GITHUB_ENV}"
           node tap/packaging/bin/fbr.ts descriptor-env --app "${APP}" --format output >> "${GITHUB_OUTPUT}"
+      - name: Plan the build matrix
+        id: matrix
+        run: |
+          # Single-arch apps (e.g. CommandCode, amd64-only upstream) build one
+          # AppImage; dual-arch apps build both. The matrix is derived from the
+          # descriptor so adding a single-arch app needs no workflow edit.
+          matrix="$(jq -c '{include: [.[] | select(. == "amd64" or . == "arm64") | if . == "amd64" then {architecture: ., runner: "ubuntu-latest", appimage_arch: "x86_64"} else {architecture: ., runner: "ubuntu-24.04-arm", appimage_arch: "aarch64"} end]}' <<<"${APP_ARCHITECTURES}")"
+          [ "$(jq '.include | length' <<<"${matrix}")" -gt 0 ] || { echo "::error::no supported architectures in ${APP_ARCHITECTURES}" >&2; exit 1; }
+          echo "matrix=${matrix}" >> "${GITHUB_OUTPUT}"
       - name: Select source repository
         id: source
         run: |
@@ -73,7 +84,7 @@ jobs:
           else
             echo "repo=${SOURCE_OWNER}/${upstream#*/}" >> "${GITHUB_OUTPUT}"
           fi
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ steps.source.outputs.repo }}
           path: source
@@ -89,24 +100,46 @@ jobs:
             sudo apt-get install -y gnupg
           fi
           cd source
-          node packaging/bin/fbr.ts resolve \
-            --app "${APP_ID}" --arch amd64 --metadata-only \
-            --output-dir upstream --metadata upstream/metadata.json
-          node packaging/bin/fbr.ts resolve \
-            --app "${APP_ID}" --arch arm64 --metadata-only \
-            --output-dir upstream --metadata upstream/metadata-arm64.json
-          amd64_metadata="upstream/metadata.json"
-          arm64_metadata="upstream/metadata-arm64.json"
-          version="$(jq -r '.version' "${amd64_metadata}")"
-          arm64_version="$(jq -r '.version' "${arm64_metadata}")"
-          [ "${version}" = "${arm64_version}" ] || { echo "amd64/arm64 upstream version mismatch" >&2; exit 1; }
+          version=""
+          upstream_sha256_amd64=""
+          upstream_sha256_arm64=""
+          upstream_url_amd64=""
+          upstream_url_arm64=""
+          while IFS= read -r arch; do
+            [ -n "${arch}" ] || continue
+            file="upstream/metadata-${arch}.json"
+            node packaging/bin/fbr.ts resolve \
+              --app "${APP_ID}" --arch "${arch}" --metadata-only \
+              --output-dir upstream --metadata "${file}"
+            arch_version="$(jq -r '.version' "${file}")"
+            if [ -z "${version}" ]; then
+              version="${arch_version}"
+            elif [ "${version}" != "${arch_version}" ]; then
+              echo "upstream version mismatch: ${version} vs ${arch_version} (${arch})" >&2
+              exit 1
+            fi
+            sha="$(jq -r '.sha256' "${file}")"
+            url="$(jq -r '.repository + "/" + .repositoryPath' "${file}")"
+            case "${arch}" in
+              amd64)
+                upstream_sha256_amd64="${sha}"
+                upstream_url_amd64="${url}"
+                ;;
+              arm64)
+                upstream_sha256_arm64="${sha}"
+                upstream_url_arm64="${url}"
+                ;;
+              *) echo "unsupported architecture: ${arch}" >&2; exit 1 ;;
+            esac
+          done < <(jq -r '.[]' <<<"${APP_ARCHITECTURES}")
+          [ -n "${version}" ] || { echo "no architectures resolved" >&2; exit 1; }
           [[ "${version}" =~ ^[0-9A-Za-z._-]+$ ]] || { echo "invalid upstream version: ${version}" >&2; exit 1; }
           version="${version//[^0-9A-Za-z._-]/_}"
           {
-            echo "upstream_sha256_amd64=$(jq -r '.sha256' "${amd64_metadata}")"
-            echo "upstream_sha256_arm64=$(jq -r '.sha256' "${arm64_metadata}")"
-            echo "upstream_url_amd64=$(jq -r '.repository + "/" + .repositoryPath' "${amd64_metadata}")"
-            echo "upstream_url_arm64=$(jq -r '.repository + "/" + .repositoryPath' "${arm64_metadata}")"
+            echo "upstream_sha256_amd64=${upstream_sha256_amd64}"
+            echo "upstream_sha256_arm64=${upstream_sha256_arm64}"
+            echo "upstream_url_amd64=${upstream_url_amd64}"
+            echo "upstream_url_arm64=${upstream_url_arm64}"
             echo "version=${version}"
           } >> "${GITHUB_OUTPUT}"
       - name: Gate on upstream version vs cask version
@@ -140,15 +173,34 @@ jobs:
               shopt -s nullglob
               x86_files=("${tmp_dir}/${ASSET_PREFIX}"-*-x86_64.AppImage)
               arm_files=("${tmp_dir}/${ASSET_PREFIX}"-*-aarch64.AppImage)
-              if [[ "${#x86_files[@]}" -eq 1 && "${#arm_files[@]}" -eq 1 ]]; then
+              # Single-arch apps publish one AppImage; compare only the
+              # architectures the descriptor ships. A missing expected asset
+              # leaves matches empty (could not compare); a hash mismatch
+              # sets it to false.
+              incomparable=false
+              amd64_ok=true
+              arm64_ok=true
+              if [[ "${APP_ARCHITECTURES}" == *amd64* ]]; then
+                if [[ "${#x86_files[@]}" -ne 1 ]]; then
+                  echo "expected exactly one x86_64 asset in release ${TAG_PREFIX}${version}" >&2
+                  incomparable=true
+                elif [[ "$(sha256sum "${x86_files[0]}" | awk '{print $1}')" != "$(jq -r '.sha256.amd64' <<<"${cask_json}")" ]]; then
+                  amd64_ok=false
+                fi
+              fi
+              if [[ "${APP_ARCHITECTURES}" == *arm64* ]]; then
+                if [[ "${#arm_files[@]}" -ne 1 ]]; then
+                  echo "expected exactly one aarch64 asset in release ${TAG_PREFIX}${version}" >&2
+                  incomparable=true
+                elif [[ "$(sha256sum "${arm_files[0]}" | awk '{print $1}')" != "$(jq -r '.sha256.arm64' <<<"${cask_json}")" ]]; then
+                  arm64_ok=false
+                fi
+              fi
+              if [[ "${incomparable}" = "false" ]]; then
                 matches=false
-                if [[ "$(sha256sum "${x86_files[0]}" | awk '{print $1}')" = "$(jq -r '.sha256.amd64' <<<"${cask_json}")" \
-                  && "$(sha256sum "${arm_files[0]}" | awk '{print $1}')" = "$(jq -r '.sha256.arm64' <<<"${cask_json}")" ]]
-                then
+                if [[ "${amd64_ok}" = "true" && "${arm64_ok}" = "true" ]]; then
                   matches=true
                 fi
-              else
-                echo "expected exactly one asset per architecture in release ${TAG_PREFIX}${version}" >&2
               fi
             else
               echo "failed to download release ${TAG_PREFIX}${version}" >&2
@@ -179,14 +231,7 @@ jobs:
     if: needs.detect.outputs.skipped == 'false' && needs.detect.outputs.repair_cask == 'false'
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - architecture: amd64
-            runner: ubuntu-latest
-            appimage_arch: x86_64
-          - architecture: arm64
-            runner: ubuntu-24.04-arm
-            appimage_arch: aarch64
+      matrix: ${{ fromJSON(needs.detect.outputs.build_matrix) }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     permissions:
@@ -199,16 +244,16 @@ jobs:
     container:
       image: ghcr.io/pkgforge-dev/archlinux:v2026.09.05
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ needs.detect.outputs.source }}
           path: source
           persist-credentials: false
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: tap
           persist-credentials: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24.21.0
       - name: Load app descriptor
@@ -249,12 +294,13 @@ jobs:
             webkit2gtk-4.1
       - name: Install appimagetool
         run: |
-          # pinned release 0.4.2, verified via SHA256; hashes captured from
-          # the pkgforge 0.4.2 release assets and cross-checked against the
-          # sha256 quick-sharun embeds for the same release (version pairing
-          # matters: quick-sharun is tested against its default appimagetool);
-          # renovate customManagers were removed (regex manager cannot update
-          # per-arch digest lines), so version+hash bumps are manual PRs.
+          # Renovate owns the 0.4.2 version below (renovate.json
+          # customManagers); it cannot recompute the per-arch hashes, so update
+          # them in the same PR - the check prints the hash it measured.
+          # Hashes come from the pkgforge 0.4.2 release assets and are
+          # cross-checked against the sha256 quick-sharun embeds for the same
+          # release (version pairing matters: quick-sharun is tested against
+          # its default appimagetool).
           # quick-sharun invokes this binary via the APPIMAGETOOL env var with
           # no CLI args; it reads APPDIR/OUTPATH/OUTNAME/ARCH/VERSION from the
           # environment.
@@ -267,7 +313,12 @@ jobs:
             aarch64) expected="988c44cca6060d4c6b6680e2bda445f0bddbe8596510b0ed95017da5cd045cfc" ;;
             *) echo "Unknown appimage_arch: ${{ matrix.appimage_arch }}" >&2; exit 1 ;;
           esac
-          echo "${expected}  /tmp/appimagetool-uruntime" | sha256sum -c -
+          actual="$(sha256sum /tmp/appimagetool-uruntime | awk '{print $1}')"
+          if [ "${actual}" != "${expected}" ]
+          then
+            echo "::error::appimagetool ${{ matrix.appimage_arch }} hashes to ${actual}, not ${expected}" >&2
+            exit 1
+          fi
           chmod +x /tmp/appimagetool-uruntime
           mv /tmp/appimagetool-uruntime /opt/appimagetool-uruntime
       - name: Install Anylinux build tools
@@ -317,6 +368,16 @@ jobs:
       contents: write
       id-token: write
     steps:
+      # Release retention sorts tags with the pipeline's own dpkg ordering, so
+      # this job needs the tap and the CLI (unlike the release steps, which
+      # only need gh).
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: tap
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.21.0
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: ${{ needs.detect.outputs.asset_prefix }}-*
@@ -340,7 +401,9 @@ jobs:
             printf '%s\n' '| Artifact | SHA-256 |'
             printf '%s\n' '| --- | --- |'
             printf '| Upstream package (amd64) | `%s` |\n' "${UPSTREAM_SHA_AMD64:-n/a}"
-            printf '| Upstream package (arm64) | `%s` |\n' "${UPSTREAM_SHA_ARM64:-n/a}"
+            if [ -n "${UPSTREAM_SHA_ARM64}" ]; then
+              printf '| Upstream package (arm64) | `%s` |\n' "${UPSTREAM_SHA_ARM64}"
+            fi
             for file in assets/"${ASSET_PREFIX}"-*.AppImage; do
               [ -e "$file" ] || continue
               arch="${file##*-}"
@@ -350,7 +413,9 @@ jobs:
             printf '\n'
             printf '%s\n' '### Sources'
             printf -- '- Upstream package (amd64): %s\n' "$UPSTREAM_URL_AMD64"
-            printf -- '- Upstream package (arm64): %s\n' "$UPSTREAM_URL_ARM64"
+            if [ -n "${UPSTREAM_URL_ARM64}" ]; then
+              printf -- '- Upstream package (arm64): %s\n' "$UPSTREAM_URL_ARM64"
+            fi
           } > release-notes.md
       - name: Create GitHub release
         env:
@@ -383,19 +448,40 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG_PREFIX: ${{ needs.detect.outputs.tag_prefix }}
         run: |
-          matches="$(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName --jq '.[].tagName' | grep "^${TAG_PREFIX}" | sort -V || true)"
-          if [[ -z "$matches" ]]; then
+          # "Newest" is the pipeline's dpkg ordering, not `sort -V`: for shapes
+          # upstreams publish (1.0.109a vs 1.0.109-1, 1.0+build vs 1.0-rc.1)
+          # GNU's version sort and dpkg disagree about which is newer, and
+          # pruning must never drop the newest release. A failing gh call or an
+          # unparseable tag fails this step instead of pruning a short list.
+          tags="$(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName \
+            --jq '.[].tagName')"
+
+          versions=()
+          while IFS= read -r tag
+          do
+            [ -n "${tag}" ] || continue
+            stripped="${tag#"${TAG_PREFIX}"}"
+            [ "${stripped}" != "${tag}" ] || continue
+            [ -n "${stripped}" ] || { echo "::error::release tag ${tag} has an empty version" >&2; exit 1; }
+            versions+=("${stripped}")
+          done <<< "${tags}"
+
+          keep=3
+          if [ "${#versions[@]}" -le "${keep}" ]; then
+            printf 'retaining %s release(s); nothing stale\n' "${#versions[@]}"
             exit 0
           fi
-          mapfile -t tags <<< "$matches"
-          if [ "${#tags[@]}" -le 3 ]; then
-            exit 0
-          fi
-          stale=("${tags[@]:0:$((${#tags[@]} - 3))}")
-          printf 'retaining %s release(s); deleting %s stale release(s)\n' "${#tags[@]}" "${#stale[@]}"
-          for tag in "${stale[@]}"; do
-            echo "deleting release ${tag}"
-            gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag
+
+          ordered="$(node tap/packaging/bin/fbr.ts version-compare --sort "${versions[@]}")"
+          [ -n "${ordered}" ] || { echo "::error::version-compare --sort produced no output" >&2; exit 1; }
+          mapfile -t sorted <<< "${ordered}"
+
+          stale=("${sorted[@]:0:$((${#sorted[@]} - keep))}")
+          printf 'retaining %s release(s); deleting %s stale release(s)\n' "${keep}" "${#stale[@]}"
+          for version in "${stale[@]}"
+          do
+            printf 'deleting release %s%s\n' "${TAG_PREFIX}" "${version}"
+            gh release delete "${TAG_PREFIX}${version}" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag
           done
 
   update-cask:
@@ -409,10 +495,10 @@ jobs:
       group: push-casks
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24.21.0
       - name: Pin cask to published release
@@ -436,10 +522,10 @@ jobs:
       group: push-casks
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24.21.0
       - name: Pin cask to published release

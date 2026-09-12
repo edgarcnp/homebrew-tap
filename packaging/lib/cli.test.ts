@@ -20,11 +20,11 @@ describe("fbr CLI contract", () => {
   it("lists apps as newline-separated ids and as a JSON array", () => {
     const plain = fbr(["list-apps"]);
     assert.equal(plain.status, 0);
-    assert.deepEqual(plain.stdout.trim().split("\n"), ["freebuff", "gitbutler", "opencode", "vscode"]);
+    assert.deepEqual(plain.stdout.trim().split("\n"), ["commandcode", "gitbutler", "opencode", "vscode"]);
 
     const json = fbr(["list-apps", "--json"]);
     assert.equal(json.status, 0);
-    assert.deepEqual(JSON.parse(json.stdout), ["freebuff", "gitbutler", "opencode", "vscode"]);
+    assert.deepEqual(JSON.parse(json.stdout), ["commandcode", "gitbutler", "opencode", "vscode"]);
   });
 
   it("accepts the gate flags exactly as the workflow passes them", () => {
@@ -68,6 +68,29 @@ describe("fbr CLI contract", () => {
     const positional = fbr(["descriptor", "--app", "vscode", "extra"]);
     assert.equal(positional.status, 2);
     assert.match(positional.stderr, /positional/);
+  });
+
+  it("sorts a release-tag version list the way the retention step calls it", () => {
+    // The workflow runs exactly this shape: --sort then the stripped versions.
+    const sorted = fbr([
+      "version-compare",
+      "--sort",
+      "1.137.0",
+      "1.0.109a",
+      "1.0.109-1",
+      "1.9.0",
+    ]);
+    assert.equal(sorted.status, 0, sorted.stderr);
+    assert.deepEqual(sorted.stdout.trim().split("\n"), [
+      "1.0.109-1",
+      "1.0.109a",
+      "1.9.0",
+      "1.137.0",
+    ]);
+
+    const empty = fbr(["version-compare", "--sort"]);
+    assert.equal(empty.status, 2);
+    assert.match(empty.stderr, /needs at least one version/);
   });
 
   it("compares versions and validates app names", () => {

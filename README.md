@@ -43,12 +43,12 @@ brew install --cask edgarcnp/tap/gitbutler
 
 Shares the standard GitButler profile and the `but://` URL scheme with the app.
 
-### freebuff-desktop
+### commandcode-desktop
 
-Repackage of [Freebuff](https://freebuff.com/) (the community desktop app from [Codebuff](https://codebuff.com/)) as an AppImage. Upstream publishes Linux builds only as an electron-builder AppImage built on the classic runtime, which needs FUSE 2 (`libfuse.so.2`); this cask rebuilds it from the AppImage published through the [CodebuffAI/codebuff-community](https://github.com/CodebuffAI/codebuff-community) GitHub releases, verified against the release's SHA-256 asset digests, on the FUSE 3-compatible uruntime with an extract-and-run fallback. The embedded auto-updater feed is removed; the app launches sandboxed via user namespaces, with its own preflight re-exec fallback where those are blocked.
+Repackage of [Command Code Desktop](https://commandcode.ai/desktop) as an AppImage, built from the checksum-pinned amd64 `.deb` published on the [CommandCodeAI/desktop](https://github.com/CommandCodeAI/desktop) GitHub releases and verified against the release's SHA-256 asset digests. Upstream publishes Linux builds only for x64, so this cask is amd64-only (`depends_on arch: :x86_64`). The embedded auto-updater feed is removed and update checks are gated by `CC_DISABLE_AUTO_UPDATE=1`.
 
 ```sh
-brew install --cask edgarcnp/tap/freebuff-desktop
+brew install --cask edgarcnp/tap/commandcode-desktop
 ```
 
 ### opencode-desktop

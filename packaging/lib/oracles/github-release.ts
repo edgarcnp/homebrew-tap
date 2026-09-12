@@ -1,6 +1,9 @@
 // GitHub release asset oracle: release listing -> per-asset SHA-256 digest from
-// the GitHub API -> download-time verification. Picks the newest non-draft,
-// non-prerelease release carrying both architecture .deb assets.
+// the GitHub API -> download-time verification. Legacy layout picks the newest
+// non-draft, non-prerelease release carrying both architecture .deb assets
+// ("<assetPrefix>-<arch>.deb"); the versioned-asset flavor picks the newest
+// release carrying the requested architecture's templated asset
+// ("<name>-<version>-<arch>.deb") under a pinned tag prefix.
 
 import * as path from "node:path";
 import {
@@ -117,6 +120,80 @@ export async function selectRelease(
   );
 }
 
+export interface TemplatedSelection {
+  tag: string;
+  version: string;
+  asset: ReleaseAsset;
+}
+
+function validAssetDigest(
+  byName: Map<string, { name: string; digest: string; size: number }>,
+  name: string,
+): ReleaseAsset | null {
+  const asset = byName.get(name);
+  if (
+    !asset ||
+    !/^sha256:/i.test(asset.digest) ||
+    !Number.isSafeInteger(asset.size) ||
+    asset.size <= 0 ||
+    asset.size > MAX_PAYLOAD_BYTES
+  ) {
+    return null;
+  }
+  return { name: asset.name, digest: parseSha256Digest(asset.digest), size: asset.size };
+}
+
+// Newest non-draft, non-prerelease release whose tag starts with tagPrefix and
+// which carries the templated asset for the requested architecture. An arm64
+// request against an amd64-only upstream (e.g. CommandCode) scans every
+// release and fails with the asset name it never found.
+export async function selectTemplatedRelease(
+  repository: string,
+  assetNameTemplate: string,
+  tagPrefix: string,
+  architecture: Architecture,
+  token: string,
+): Promise<TemplatedSelection> {
+  const prefix = assertMatches(tagPrefix, /^[A-Za-z0-9][A-Za-z0-9._+-]*$/, "tag prefix");
+  if (!assetNameTemplate.includes("{version}")) fail("assetNameTemplate must contain {version}");
+  const releases = await fetchJson(`${repository}/releases?per_page=30`, token);
+  if (!Array.isArray(releases)) throw new Error("GitHub API did not return a release list");
+  for (const candidate of releases) {
+    const release = candidate as {
+      draft?: unknown;
+      prerelease?: unknown;
+      assets?: unknown;
+      tag_name?: unknown;
+    };
+    if (release.draft === true || release.prerelease === true) continue;
+    if (typeof release.tag_name !== "string" || !release.tag_name.startsWith(prefix)) continue;
+    let version: string;
+    try {
+      version = normalizeTagVersion(release.tag_name.slice(prefix.length));
+    } catch {
+      continue;
+    }
+    if (!Array.isArray(release.assets)) continue;
+    const byName = new Map<string, { name: string; digest: string; size: number }>();
+    for (const raw of release.assets) {
+      const asset = raw as { name?: unknown; digest?: unknown; size?: unknown };
+      if (typeof asset.name !== "string") continue;
+      if (typeof asset.digest !== "string" || typeof asset.size !== "number") continue;
+      byName.set(asset.name, { name: asset.name, digest: asset.digest, size: asset.size });
+    }
+    const expected = assetNameTemplate
+      .replaceAll("{version}", version)
+      .replaceAll("{arch}", architecture);
+    const asset = validAssetDigest(byName, expected);
+    if (asset === null) continue;
+    if (typeof release.tag_name !== "string") continue;
+    return { tag: release.tag_name, version, asset };
+  }
+  throw new Error(
+    `No GitHub release found carrying ${assetNameTemplate.replaceAll("{arch}", architecture)} with a SHA-256 digest under tag prefix ${prefix}`,
+  );
+}
+
 export async function downloadAndVerify(
   url: string,
   destination: string,
@@ -150,18 +227,63 @@ export async function resolveWithGithubRelease(
   request: ResolveRequest,
 ): Promise<Metadata> {
   const repository = assertRepositoryUrl(oracle.repository);
+  const { outputDir, metadataPath } = prepareOutput(request);
+  const architecture = request.architecture;
+  const downloadBase = `${repository.replace(GITHUB_API_PREFIX, "https://github.com/")}/releases/download`;
+
+  if (oracle.assetNameTemplate !== undefined) {
+    if (oracle.tagPrefix === undefined || oracle.packageName === undefined) {
+      fail("assetNameTemplate requires tagPrefix and packageName");
+    }
+    const packageName = assertMatches(
+      oracle.packageName,
+      /^[A-Za-z0-9][A-Za-z0-9._+-]*$/,
+      "package name",
+    );
+    const { tag, version, asset } = await selectTemplatedRelease(
+      repository,
+      oracle.assetNameTemplate,
+      oracle.tagPrefix,
+      architecture,
+      request.token,
+    );
+    const size = assertPositiveSize(asset.size, MAX_PAYLOAD_BYTES, `${asset.name} size`);
+    const metadata: Metadata = {
+      package: packageName,
+      version,
+      packageVersion: version,
+      architecture,
+      repositoryPath: `${tag}/${asset.name}`,
+      sha256: asset.digest,
+      size,
+      depends: "",
+      repository: downloadBase,
+      path: null,
+    };
+    if (!request.metadataOnly) {
+      const packagePath = path.join(outputDir, `${packageName}_${version}_${architecture}.deb`);
+      await downloadAndVerify(
+        `${downloadBase}/${metadata.repositoryPath}`,
+        packagePath,
+        metadata.sha256,
+        metadata.size,
+        path.basename(packagePath),
+      );
+      metadata.path = packagePath;
+    }
+    writeMetadata(metadataPath, metadata);
+    return metadata;
+  }
+
+  if (oracle.assetPrefix === undefined) fail("github-release oracle requires assetPrefix or assetNameTemplate");
   const assetPrefix = assertMatches(
     oracle.assetPrefix,
     /^[A-Za-z0-9][A-Za-z0-9._+-]*$/,
     "asset prefix",
   );
-  const { outputDir, metadataPath } = prepareOutput(request);
-  const architecture = request.architecture;
-
   const { tag, assets } = await selectRelease(repository, assetPrefix, request.token);
   const asset = assets[architecture];
   const version = normalizeTagVersion(tag);
-  const downloadBase = `${repository.replace(GITHUB_API_PREFIX, "https://github.com/")}/releases/download`;
   const size = assertPositiveSize(asset.size, MAX_PAYLOAD_BYTES, `${asset.name} size`);
 
   const metadata: Metadata = {
