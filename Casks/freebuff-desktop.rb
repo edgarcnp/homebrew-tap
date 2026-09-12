@@ -2,8 +2,8 @@ cask "freebuff-desktop" do
   arch arm: "aarch64", intel: "x86_64"
 
   version "0.0.109"
-  sha256 arm64_linux:  "0000000000000000000000000000000000000000000000000000000000000000",
-         x86_64_linux: "0000000000000000000000000000000000000000000000000000000000000000"
+  sha256 arm64_linux:  "03e40e47aebefddf75a50f43648abd6ea260097bf161a8c43e25d872f3edbb72",
+         x86_64_linux: "e96151f990ed6d45272b998fc9e4f15a4a725abb34ab7452b49a03c5321bc243"
 
   url "https://github.com/edgarcnp/homebrew-tap/releases/download/freebuff-desktop-v#{version}/freebuff-desktop-#{version}-#{arch}.AppImage"
   name "Freebuff"
