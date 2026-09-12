@@ -79,7 +79,7 @@ jobs:
           # in the brew container the tap checkout lives in the tap
           # directory, not under GITHUB_WORKSPACE
           cd "$(brew --repository "$TAP_REPO")"
-          shellcheck packaging/scripts/*.sh packaging/lib/*.sh packaging/vscode/scripts/*.sh packaging/opencode/scripts/*.sh packaging/gitbutler/scripts/*.sh
+          shellcheck packaging/scripts/*.sh packaging/lib/*.sh packaging/vscode/scripts/*.sh packaging/opencode/scripts/*.sh packaging/gitbutler/scripts/*.sh packaging/freebuff/scripts/*.sh
 
       - name: Actionlint workflow lint
         env:
@@ -95,7 +95,7 @@ jobs:
           echo "${ACTIONLINT_SHA256}  /tmp/actionlint.tar.gz" | sha256sum -c -
           tar -C /tmp -xzf /tmp/actionlint.tar.gz actionlint
           cd "$(brew --repository "$TAP_REPO")"
-          /tmp/actionlint -color .github/workflows/build-appimage.yml .github/workflows/build-vscode.yml .github/workflows/build-gitbutler.yml .github/workflows/build-opencode-desktop.yml .github/workflows/cask-smoke.yml .github/workflows/tests.yml .github/workflows/autobump.yml .github/workflows/publish.yml
+          /tmp/actionlint -color .github/workflows/build-appimage.yml .github/workflows/build-vscode.yml .github/workflows/build-gitbutler.yml .github/workflows/build-opencode-desktop.yml .github/workflows/build-freebuff-desktop.yml .github/workflows/cask-smoke.yml .github/workflows/tests.yml .github/workflows/autobump.yml .github/workflows/publish.yml
 
       - name: Style and audit casks
         env:

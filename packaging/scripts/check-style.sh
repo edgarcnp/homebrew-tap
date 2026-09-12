@@ -16,7 +16,8 @@ shellcheck packaging/scripts/install-anylinux-tools.sh \
   packaging/lib/package-common.sh \
   packaging/gitbutler/scripts/build-appimage.sh \
   packaging/opencode/scripts/build-appimage.sh \
-  packaging/vscode/scripts/build-appimage.sh
+  packaging/vscode/scripts/build-appimage.sh \
+  packaging/freebuff/scripts/build-appimage.sh
 echo "shellcheck: OK"
 
 echo "=== brew style ==="
@@ -36,6 +37,7 @@ then
   actionlint \
     .github/workflows/build-appimage.yml \
     .github/workflows/build-gitbutler.yml \
+    .github/workflows/build-freebuff-desktop.yml \
     .github/workflows/build-opencode-desktop.yml \
     .github/workflows/build-vscode.yml \
     .github/workflows/cask-smoke.yml \

@@ -29,10 +29,12 @@ on:
         type: string
       repository_url:
         description: >-
-          Signed apt repository URL the app's .deb packages come from
-          (e.g. https://packages.microsoft.com/repos/code); for resolve_kind
-          github, the GitHub API repository base
-          (e.g. https://api.github.com/repos/myorg/my-app)
+          Source URL passed to the resolver as --repository: the signed apt
+          repository URL the app's .deb packages come from
+          (e.g. https://packages.microsoft.com/repos/code), the GitHub API
+          repository base (e.g. https://api.github.com/repos/myorg/my-app),
+          or an upstream version-oracle endpoint the resolver follows
+          (e.g. https://example.com/api/desktop/updates)
         required: true
         type: string
       resolve_kind:
@@ -456,12 +458,12 @@ jobs:
           # shellcheck disable=SC2016 # printf format strings and GitHub Actions templates are intentional
           {
             printf '%s\n\n' '## Artifact checksums'
-            printf 'Upstream `.deb` integrity is verified against the release source (signed APT index or download-time SHA-256) before packaging; the AppImage hashes are enforced by the `%s` cask at install.\n' "${APP_CASK}"
+            printf 'Upstream package integrity is verified against the release source (signed APT index or download-time SHA-256) before packaging; the AppImage hashes are enforced by the `%s` cask at install.\n' "${APP_CASK}"
             printf '\n'
             printf '%s\n' '| Artifact | SHA-256 |'
             printf '%s\n' '| --- | --- |'
-            printf '| Upstream `.deb` (amd64) | `%s` |\n' "${UPSTREAM_SHA_AMD64:-n/a}"
-            printf '| Upstream `.deb` (arm64) | `%s` |\n' "${UPSTREAM_SHA_ARM64:-n/a}"
+            printf '| Upstream package (amd64) | `%s` |\n' "${UPSTREAM_SHA_AMD64:-n/a}"
+            printf '| Upstream package (arm64) | `%s` |\n' "${UPSTREAM_SHA_ARM64:-n/a}"
             for file in assets/"${ASSET_PREFIX}"-*.AppImage; do
               [ -e "$file" ] || continue
               arch="${file##*-}"
@@ -470,8 +472,8 @@ jobs:
             done
             printf '\n'
             printf '%s\n' '### Sources'
-            printf -- '- Upstream `.deb` (amd64): %s\n' "$UPSTREAM_URL_AMD64"
-            printf -- '- Upstream `.deb` (arm64): %s\n' "$UPSTREAM_URL_ARM64"
+            printf -- '- Upstream package (amd64): %s\n' "$UPSTREAM_URL_AMD64"
+            printf -- '- Upstream package (arm64): %s\n' "$UPSTREAM_URL_ARM64"
           } > release-notes.md
       - name: Create GitHub release
         env:

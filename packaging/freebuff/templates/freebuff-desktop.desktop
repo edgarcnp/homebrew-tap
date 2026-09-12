@@ -1,0 +1,12 @@
+# NOTE: Placeholders __PACKAGE_NAME__/__VERSION__ are substituted via render_template; injection mitigated by PACKAGE_NAME validation in build-appimage.sh
+[Desktop Entry]
+Name=__PACKAGE_DISPLAY_NAME__
+Comment=__PACKAGE_COMMENT__
+Exec=freebuff-desktop %U
+Icon=__PACKAGE_NAME__
+Terminal=false
+Type=Application
+StartupNotify=true
+StartupWMClass=Freebuff
+Categories=Development;
+X-AppImage-Version=__VERSION__
