@@ -1,0 +1,46 @@
+{
+  "id": "freebuff",
+  "appName": "Freebuff Desktop",
+  "displayName": "Freebuff",
+  "comment": "Freebuff Desktop",
+  "cask": "freebuff-desktop",
+  "assetPrefix": "freebuff-desktop",
+  "tagPrefix": "freebuff-desktop-v",
+  "sourceRepo": "edgarcnp/homebrew-tap",
+  "sourceOwner": "edgarcnp",
+  "sourceDir": "packaging/apps/freebuff",
+  "buildCommand": "./build.sh",
+  "debloatArgs": "--add-common --prefer-nano ffmpeg-mini",
+  "needsWebkit": false,
+  "binaryTargets": ["freebuff-desktop"],
+  "oracle": {
+    "kind": "electron-feed",
+    "repository": "https://freebuff.com/api/desktop/updates",
+    "githubRepository": "https://api.github.com/repos/CodebuffAI/codebuff-community",
+    "tagPrefix": "freebuff-desktop-v",
+    "packageName": "freebuff-desktop",
+    "assetNameTemplate": "Freebuff-{version}-linux-{arch}.AppImage"
+  },
+  "payload": {
+    "kind": "appimage-tree",
+    "rename": {
+      "@codebufffreebuff-desktop": "freebuff-desktop"
+    },
+    "exclude": ["AppRun", "*.desktop", "*.png", "usr"],
+    "moveUsrToRoot": true
+  },
+  "icon": {
+    "source": "usr/share/icons/hicolor/512x512/apps/@codebufffreebuff-desktop.png",
+    "size": "512x512"
+  },
+  "desktopTemplate": "templates/freebuff-desktop.desktop",
+  "updater": {
+    "removeFeed": {
+      "paths": ["bin/resources/app-update.yml"],
+      "required": true
+    },
+    "env": {
+      "FREEBUFF_DISABLE_UPDATE_CHECK": "1"
+    }
+  }
+}

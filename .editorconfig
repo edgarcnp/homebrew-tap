@@ -14,5 +14,8 @@ indent_size = 2
 [*.rb]
 indent_size = 2
 
+[*.ts]
+indent_size = 2
+
 [*.md]
 trim_trailing_whitespace = false

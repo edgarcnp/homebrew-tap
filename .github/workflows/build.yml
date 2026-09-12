@@ -1,0 +1,77 @@
+name: Build AppImages
+
+# Single entry point for building AppImages. The app list comes from
+# packaging/apps/*/app.json, so adding an app needs no workflow edit. Each app
+# runs as its own call of the reusable build workflow, which keeps per-app
+# concurrency groups and lets one app fail without blocking the others.
+
+on:
+  workflow_dispatch:
+    inputs:
+      app:
+        description: App id to build, or "all" (see packaging/apps/*/app.json)
+        required: false
+        default: all
+        type: string
+  workflow_call:
+    inputs:
+      app:
+        description: App id to build, or "all"
+        required: true
+        type: string
+
+defaults:
+  run:
+    shell: bash -xeuo pipefail {0}
+
+permissions: {}
+
+concurrency:
+  group: appimage-plan-${{ inputs.app }}
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      apps: ${{ steps.plan.outputs.apps }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24.21.0
+      - name: Plan the app matrix
+        id: plan
+        env:
+          REQUESTED: ${{ inputs.app }}
+        run: |
+          all="$(node packaging/bin/fbr.ts list-apps --json)"
+          [[ -n "${REQUESTED}" ]] || { echo "::error::no app requested" >&2; exit 1; }
+          if [[ "${REQUESTED}" = "all" ]]; then
+            echo "apps=${all}" >> "${GITHUB_OUTPUT}"
+            echo "building all apps: $(jq -r 'join(", ")' <<<"${all}")"
+          else
+            jq -e --arg app "${REQUESTED}" 'index($app) != null' <<<"${all}" >/dev/null \
+              || { echo "::error::unknown app '${REQUESTED}' (known: $(jq -r 'join(", ")' <<<"${all}"))" >&2; exit 1; }
+            echo "apps=$(jq -c --arg app "${REQUESTED}" '[ $app ]' <<<"${all}")" >> "${GITHUB_OUTPUT}"
+          fi
+
+  build:
+    needs: plan
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJSON(needs.plan.outputs.apps) }}
+    permissions:
+      attestations: write
+      contents: write
+      id-token: write
+    uses: ./.github/workflows/build-appimage.yml
+    secrets: inherit
+    with:
+      app: ${{ matrix.app }}

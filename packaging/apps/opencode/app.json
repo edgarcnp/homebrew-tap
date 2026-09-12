@@ -1,0 +1,43 @@
+{
+  "id": "opencode",
+  "appName": "OpenCode Desktop",
+  "displayName": "OpenCode",
+  "comment": "Open source AI coding agent",
+  "cask": "opencode-desktop",
+  "assetPrefix": "opencode-desktop",
+  "tagPrefix": "opencode-desktop-v",
+  "sourceRepo": "edgarcnp/homebrew-tap",
+  "sourceOwner": "edgarcnp",
+  "sourceDir": "packaging/apps/opencode",
+  "buildCommand": "./build.sh",
+  "debloatArgs": "--add-common --prefer-nano ffmpeg-mini",
+  "needsWebkit": false,
+  "binaryTargets": ["opencode-desktop"],
+  "oracle": {
+    "kind": "github-release",
+    "repository": "https://api.github.com/repos/anomalyco/opencode",
+    "assetPrefix": "opencode-desktop-linux"
+  },
+  "payload": {
+    "kind": "deb-tree",
+    "tree": "opt/OpenCode"
+  },
+  "icon": {
+    "source": "usr/share/icons/hicolor/128x128/apps/ai.opencode.desktop.png",
+    "size": "128x128"
+  },
+  "desktopTemplate": "templates/opencode-desktop.desktop",
+  "updater": {
+    "removeFeed": {
+      "paths": ["bin/resources/app-update.yml"],
+      "required": false
+    },
+    "env": {
+      "OPENCODE_DISABLE_AUTOUPDATE": "1"
+    },
+    "residualScan": {
+      "patterns": ["https://github.com/anomalyco/opencode/releases/download/"],
+      "severity": "error"
+    }
+  }
+}
