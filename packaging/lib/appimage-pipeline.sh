@@ -9,7 +9,7 @@
 #   TARGET_ARCH DEB_ARCH APPIMAGE_ARCH
 #   WORK_DIR DIST_DIR APPDIR METADATA_PATH PAYLOAD_PATH PAYLOAD_ROOT
 #
-# Requires: bash, jq, node (for the fbr CLI), plus the app's own tooling
+# Requires: bash, jq, bun (for the fbr CLI), plus the app's own tooling
 # (dpkg-deb for .deb payloads, quick-sharun and APPIMAGETOOL for packing).
 # shellcheck disable=SC2154 # globals are provided by pipeline_init
 (return 0 2>/dev/null) || exit 1
@@ -23,7 +23,7 @@ FBR_ENTRY="${FBR_ENTRY:-${PIPELINE_REPO_DIR}/packaging/bin/fbr.ts}"
 . "${PIPELINE_LIB_DIR}/shell-common.sh"
 
 fbr() {
-  node "${FBR_ENTRY}" "$@"
+  bun "${FBR_ENTRY}" "$@"
 }
 
 descriptor_field() {
