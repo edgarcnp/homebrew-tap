@@ -11,10 +11,6 @@ info() {
   printf '[INFO] %s\n' "$*" >&2
 }
 
-warn() {
-  printf '[WARN] %s\n' "$*" >&2
-}
-
 # Requires callers to run under `set -Eeuo pipefail`; error() exits and
 # `set -E` makes the failure visible to the caller's ERR trap.
 error() {

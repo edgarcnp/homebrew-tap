@@ -34,10 +34,6 @@ export function assertSafeName(value: string, label: string): string {
   return assertMatches(value, /^[A-Za-z0-9][A-Za-z0-9._-]*$/, label);
 }
 
-export function assertVersion(value: string, label: string): string {
-  return assertMatches(value, /^[0-9][0-9A-Za-z.+~_-]*$/, label);
-}
-
 export function assertSha256Hex(value: string, label: string): string {
   return assertMatches(value, /^[0-9a-f]{64}$/, label);
 }
@@ -86,9 +82,4 @@ export function assertSameLength(from: string, to: string, label: string): void 
   if (from.length !== to.length) {
     fail(`${label} patch length mismatch: ${from.length} vs ${to.length}`);
   }
-}
-
-export function assertNonEmpty(value: string, label: string): string {
-  if (value.length === 0) fail(`${label} must not be empty`);
-  return value;
 }

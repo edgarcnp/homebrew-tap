@@ -39,7 +39,6 @@ jobs:
       version: ${{ steps.resolve.outputs.version }}
       skipped: ${{ steps.gate.outputs.skipped }}
       repair_cask: ${{ steps.gate.outputs.repair_cask }}
-      cask_version: ${{ steps.gate.outputs.cask_version }}
       source: ${{ steps.source.outputs.repo }}
       upstream_sha256_amd64: ${{ steps.resolve.outputs.upstream_sha256_amd64 }}
       upstream_sha256_arm64: ${{ steps.resolve.outputs.upstream_sha256_arm64 }}
@@ -291,8 +290,11 @@ jobs:
           # quick-sharun drives the pkgforge appimagetool via env vars,
           # not CLI args
           APPIMAGETOOL: /opt/appimagetool-uruntime
-          # brew owns updates; block appimagetool from embedding zsync/update
-          # info auto-derived from GITHUB_REPOSITORY
+          # brew owns updates, so no AppImage self-update information ships.
+          # quick-sharun treats an empty UPINFO as "guess it from
+          # GITHUB_REPOSITORY" (quick-sharun.sh, pinned commit), but the guess
+          # does not reach the AppImage: published artifacts carry an empty
+          # .upd_info section and no zsync string.
           UPINFO: ""
         run: |
           cd source

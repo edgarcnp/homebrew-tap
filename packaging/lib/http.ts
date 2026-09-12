@@ -133,10 +133,6 @@ export function sha512Base64(data: Buffer): string {
   return crypto.createHash("sha512").update(data).digest("base64");
 }
 
-export function sha256File(filePath: string): string {
-  return sha256Hex(fs.readFileSync(filePath));
-}
-
 // Constant-time comparison against a lowercase hex digest.
 export function digestMatchesHex(expectedHex: string, actual: Buffer): boolean {
   const expected = Buffer.from(expectedHex, "hex");
