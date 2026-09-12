@@ -36,12 +36,12 @@ jobs:
       options: --privileged
     steps:
       - name: Set up Homebrew
-        uses: Homebrew/actions/setup-homebrew@a657b8b0cd35d0f65cce41fce9b24cf054b49869 # 2026.08.24.1
+        uses: Homebrew/actions/setup-homebrew@f8d4222eb633e65c2a0157383cf80861fc7fae7f # 2026.09.07.1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24.21.0
 
@@ -52,7 +52,7 @@ jobs:
           tap_dir="$(brew --repository "$TAP_REPO")"
           cd "$tap_dir"
           # Iterate descriptors (app id -> cask token), not filenames: the two
-          # differ (freebuff -> freebuff-desktop).
+          # differ (commandcode -> commandcode-desktop).
           for app in $(node packaging/bin/fbr.ts list-apps); do
             name="$(node packaging/bin/fbr.ts descriptor --app "$app" --field cask)"
             cask="Casks/${name}.rb"

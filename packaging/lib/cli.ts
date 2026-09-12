@@ -13,9 +13,9 @@ import { readMetadataField } from "./metadata.ts";
 import { finalizeApp, neutralizeUpdater } from "./neutralize.ts";
 import { resolveWith } from "./oracles/registry.ts";
 import { writeDesktopEntry } from "./render.ts";
-import type { AppDescriptor } from "./types.ts";
+import type { AppDescriptor, Architecture } from "./types.ts";
 import { ARCHITECTURES, isArchitecture } from "./types.ts";
-import { compareDebVersions } from "./version.ts";
+import { compareDebVersions, sortDebVersions } from "./version.ts";
 
 type Options = NonNullable<ParseArgsConfig["options"]>;
 type Values = Record<string, unknown>;
@@ -258,12 +258,24 @@ const COMMANDS: Command[] = [
         return 0;
       }
       if (action === "set-version") {
+        const sha256: Partial<Record<Architecture, string>> = {};
+        const x86 = flags.optStr("sha256-x86-64");
+        const arm = flags.optStr("sha256-arm-64");
+        if (descriptor.architectures.includes("amd64")) {
+          if (x86 === undefined) throw new UsageError("Missing required flag --sha256-x86-64");
+          sha256["amd64"] = x86;
+        } else if (x86 !== undefined) {
+          throw new UsageError(`--sha256-x86-64 is unexpected for single-arch (${descriptor.architectures.join(",")}) ${descriptor.id}`);
+        }
+        if (descriptor.architectures.includes("arm64")) {
+          if (arm === undefined) throw new UsageError("Missing required flag --sha256-arm-64");
+          sha256["arm64"] = arm;
+        } else if (arm !== undefined) {
+          throw new UsageError(`--sha256-arm-64 is unexpected for single-arch (${descriptor.architectures.join(",")}) ${descriptor.id}`);
+        }
         writeCask(file, {
           version: flags.str("version"),
-          sha256: {
-            amd64: flags.str("sha256-x86-64"),
-            arm64: flags.str("sha256-arm-64"),
-          },
+          sha256,
         });
         process.stdout.write(`${file}\n`);
         return 0;
@@ -318,10 +330,19 @@ const COMMANDS: Command[] = [
   },
   {
     name: "version-compare",
-    summary: "Compare two Debian versions, printing -1, 0 or 1",
-    options: {},
+    summary: "Compare two Debian versions (-1|0|1), or sort them with --sort",
+    options: { sort: { type: "boolean" } },
     positionals: true,
-    run: (_flags, positionals) => {
+    run: (flags, positionals) => {
+      if (flags.bool("sort")) {
+        if (positionals.length === 0) {
+          throw new UsageError("version-compare --sort needs at least one version");
+        }
+        for (const version of sortDebVersions(positionals)) {
+          process.stdout.write(`${version}\n`);
+        }
+        return 0;
+      }
       const [a, b] = positionals;
       if (a === undefined || b === undefined) {
         throw new UsageError("version-compare needs two version arguments");

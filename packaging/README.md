@@ -58,6 +58,7 @@ upstream source kind behind a shared interface, dispatched exhaustively
 | `sourceRepo`, `sourceOwner` | Upstream repository to build from, and the owner of the fallback fork |
 | `sourceDir`, `buildCommand` | Where CI `cd`s before running the build |
 | `debloatArgs`, `needsWebkit` | pkgforge debloat flags; whether the webkit2gtk/GTK build deps are needed |
+| `architectures` | Architectures this app ships (`["amd64", "arm64"]` or, for amd64-only upstreams like CommandCode, `["amd64"]`); the pipeline builds, publishes and checks only these arches |
 | `binaryTargets` | Names the cask must expose on `PATH` (checked by `fbr cask --action check`) |
 | `oracle` | Where the version and payload come from (below) |
 | `payload` | How the upstream package is staged into `AppDir/bin` |
@@ -73,7 +74,9 @@ upstream source kind behind a shared interface, dispatched exhaustively
   ordering.
 - **`github-release`** — GitHub release assets: the newest non-draft,
   non-prerelease release carrying both architecture `.deb` files with SHA-256
-  digests, verified at download time.
+  digests, verified at download time. The versioned-asset flavor (CommandCode)
+  pins a tag prefix plus an `assetNameTemplate` (`CommandCode-{version}-{arch}.deb`)
+  instead, and resolves each shipped architecture separately.
 - **`electron-feed`** — an electron-updater feed whose 302 names the exact
   release tag; the yml supplies the filename, SHA-512 and size, and the GitHub
   API supplies the SHA-256. All three must agree.
@@ -97,7 +100,8 @@ fbr cask --action read|set-version|check     read, re-pin or check casks
 fbr neutralize --app X --appdir D            disable the in-AppDir updater
 fbr finalize --app X --appdir D              write .env and install the hook
 fbr render-desktop --app X --version V --appdir D
-fbr version-compare A B                      dpkg-equivalent comparison
+fbr version-compare A B                      dpkg-equivalent comparison (-1|0|1)
+fbr version-compare --sort A B [C ...]       dpkg-order a list ascending, one per line
 ```
 
 Every command declares its flags: an unknown or duplicate flag is a usage
@@ -154,7 +158,7 @@ descriptor) so the AppImages carry stripped `libicudata`, mesa without LLVM,
 and other size optimizations.
 
 The workflow installs the webkit2gtk/GTK deps only for apps whose descriptor
-sets `needsWebkit` (gitbutler) — vscode, opencode-desktop and freebuff are
+sets `needsWebkit` (gitbutler) — vscode, opencode-desktop and commandcode-desktop are
 Electron and ship their own webkit. The other build deps (`nodejs`, `gnupg`,
 `dpkg`, `patchelf`, `xorg-server-xvfb`) are installed for every app; `nss` is
 too, because quick-sharun aborts if an Electron binary's `ldd` closure is
@@ -181,6 +185,37 @@ sets it). Requires an Arch Linux system (or the
 tooling (`dpkg-deb` for `.deb` payloads, `gpg`/`gpgv` for apt), `quick-sharun`
 in `PATH` and `APPIMAGETOOL` pointing at the uruntime `appimagetool`. Output
 lands in `<tap>/dist/`.
+
+## Dependency pinning and Renovate
+
+Every version this repository depends on is discoverable by Renovate, which
+opens one reviewed PR per dependency (automerge stays off):
+
+| Dependency | Declared in | How Renovate sees it |
+| --- | --- | --- |
+| `typescript`, `@types/node` | `package.json` | npm manager, lockfile included (exact pins, no `^`: frozen-lock) |
+| GitHub Actions | `uses:` in workflows | built-in manager plus `helpers:pinGitHubActionDigests`: the version in the trailing comment is bumped and the SHA re-pinned |
+| Build and test container images | `container:` in workflows | built-in manager (`container` dependency type), digests included |
+| Runner labels (`ubuntu-24.04-arm`) | `runs-on:` | built-in manager (`github-runner` dependency type) |
+| Node version | `node-version:` under `actions/setup-node` | built-in manager (`uses-with` dependency type) |
+| actionlint | `tests.yml` | `customManagers` (github-releases) |
+| pkgforge `appimagetool` | `build-appimage.yml` | `customManagers` (github-releases) |
+| `quick-sharun`, `get-debloated-pkgs` | `install-anylinux-tools.sh` | `customManagers` (git-refs: the digest of `main`) |
+
+The casks are not Renovate's: `Casks/*.rb` versions and checksums are produced
+by this pipeline through `fbr cask`, which is why nothing points Renovate at
+them.
+
+Three pins carry a local SHA-256 that Renovate cannot recompute: actionlint's
+tarball, appimagetool's per-arch binaries, and the two Anylinux scripts. The
+version bump still arrives as a PR; the build then fails printing the hash it
+measured, so updating the pin is a copy-paste in that same PR.
+
+Two dependencies are deliberately held back. `typescript` stays on the 6.x line
+(`allowedVersions` in `renovate.json`) until this toolchain is ready for 7, and
+`@types/node` stays on the Node major the CI actually runs (24.x, the newest
+LTS) so the types cannot describe APIs the tested runtime lacks. Moving the
+`node` runtime rule to a newer LTS means widening that rule in the same change.
 
 ## Tests and gates
 

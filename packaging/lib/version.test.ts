@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { compareDebVersions, normalizeUpstreamVersion, parseDebVersion } from "./version.ts";
+import { compareDebVersions, sortDebVersions, normalizeUpstreamVersion, parseDebVersion } from "./version.ts";
 
 describe("compareDebVersions", () => {
   // Expectations follow dpkg's verrevcmp()/order() (libdpkg/version.c): the
@@ -44,6 +44,37 @@ describe("compareDebVersions", () => {
   it("splits epoch, upstream and revision like dpkg", () => {
     assert.deepEqual(parseDebVersion("1:2.3-4"), { epoch: "1", upstream: "2.3", revision: "4" });
     assert.deepEqual(parseDebVersion("2.3"), { epoch: "0", upstream: "2.3", revision: "" });
+  });
+});
+
+describe("sortDebVersions", () => {
+  it("orders a mixed release train ascending", () => {
+    const versions = ["1.0.109a", "1.0.109-1", "1.0.109", "1.0.10", "1.0.9", "1.0.109~beta"];
+    assert.deepEqual(sortDebVersions(versions), [
+      "1.0.9",
+      "1.0.10",
+      "1.0.109~beta",
+      "1.0.109",
+      "1.0.109-1",
+      "1.0.109a",
+    ]);
+  });
+
+  it("orders the shapes where GNU sort -V disagrees with dpkg", () => {
+    // sort -V ranks 1.0.109a before 1.0.109-1; dpkg splits the hyphen into
+    // upstream+revision and ranks the lettered version second.
+    assert.deepEqual(sortDebVersions(["1.0.109a", "1.0.109-1"]), ["1.0.109-1", "1.0.109a"]);
+    assert.deepEqual(sortDebVersions(["1.0.109+build", "1.0.109-rc.1"]), [
+      "1.0.109-rc.1",
+      "1.0.109+build",
+    ]);
+  });
+
+  it("leaves the input untouched and rejects malformed versions", () => {
+    const versions = ["1.0.0", "0.9.0"];
+    assert.deepEqual(sortDebVersions(versions), ["0.9.0", "1.0.0"]);
+    assert.deepEqual(versions, ["1.0.0", "0.9.0"]);
+    assert.throws(() => sortDebVersions(["v1.0.0"]), /Invalid package version/);
   });
 });
 

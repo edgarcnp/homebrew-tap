@@ -4,7 +4,7 @@ import { describe, it } from "node:test";
 import { descriptorLines, listApps, loadDescriptor, validateDescriptor } from "./descriptor.ts";
 import { descriptorPath } from "./paths.ts";
 
-const APPS = ["freebuff", "gitbutler", "opencode", "vscode"];
+const APPS = ["commandcode", "gitbutler", "opencode", "vscode"];
 
 function rawDescriptor(app: string): Record<string, unknown> {
   return JSON.parse(fs.readFileSync(descriptorPath(app), "utf8")) as Record<string, unknown>;
@@ -79,20 +79,28 @@ describe("descriptor contents (regression against the previous per-app scripts)"
     assert.equal(descriptor.updater.residualScan?.severity, "warning");
   });
 
-  it("keeps freebuff's feed oracle, AppImage staging and required feed removal", () => {
-    const descriptor = loadDescriptor("freebuff");
-    assert.equal(descriptor.oracle.kind, "electron-feed");
+  it("keeps commandcode's versioned-asset oracle, deb staging and required feed removal", () => {
+    const descriptor = loadDescriptor("commandcode");
+    assert.equal(descriptor.oracle.kind, "github-release");
     assert.equal(
-      descriptor.oracle.kind === "electron-feed" ? descriptor.oracle.assetNameTemplate : "",
-      "Freebuff-{version}-linux-{arch}.AppImage",
+      descriptor.oracle.kind === "github-release" ? descriptor.oracle.assetNameTemplate : "",
+      "CommandCode-{version}-{arch}.deb",
     );
-    assert.equal(descriptor.payload.kind, "appimage-tree");
-    assert.deepEqual(descriptor.payload.rename, {
-      "@codebufffreebuff-desktop": "freebuff-desktop",
-    });
-    assert.equal(descriptor.payload.moveUsrToRoot, true);
+    assert.equal(
+      descriptor.oracle.kind === "github-release" ? descriptor.oracle.tagPrefix : "",
+      "v",
+    );
+    assert.equal(
+      descriptor.oracle.kind === "github-release" ? descriptor.oracle.packageName : "",
+      "command-code",
+    );
+    assert.deepEqual(descriptor.architectures, ["amd64"]);
+    assert.equal(descriptor.payload.kind, "deb-tree");
+    assert.equal(descriptor.payload.kind === "deb-tree" ? descriptor.payload.tree : "", "opt/Command Code");
+    assert.equal(descriptor.icon.size, "512x512");
     assert.equal(descriptor.updater.removeFeed?.required, true);
-    assert.deepEqual(descriptor.updater.env, { FREEBUFF_DISABLE_UPDATE_CHECK: "1" });
+    assert.deepEqual(descriptor.updater.env, { CC_DISABLE_AUTO_UPDATE: "1" });
+    assert.equal(descriptor.updater.residualScan?.severity, "error");
   });
 });
 
@@ -189,20 +197,20 @@ describe("descriptor validation", () => {
     assert.throws(
       () =>
         validateDescriptor(
-          mutated("freebuff", (copy) => {
+          mutated("commandcode", (copy) => {
             nested(copy, "updater")["env"] = { "bad key": "1" };
           }),
-          "freebuff",
+          "commandcode",
         ),
       /not a valid name/,
     );
     assert.throws(
       () =>
         validateDescriptor(
-          mutated("freebuff", (copy) => {
+          mutated("commandcode", (copy) => {
             nested(copy, "updater")["env"] = { OK: "value\ninjected" };
           }),
-          "freebuff",
+          "commandcode",
         ),
       /newlines or NUL/,
     );
@@ -243,23 +251,68 @@ describe("descriptor validation", () => {
       /size must look like/,
     );
   });
+
+  it("defaults to dual-arch and rejects bad architecture lists", () => {
+    const without = mutated("vscode", (copy) => { delete copy["architectures"]; });
+    assert.deepEqual(validateDescriptor(without, "vscode").architectures, ["amd64", "arm64"]);
+    assert.throws(
+      () => validateDescriptor(mutated("vscode", (copy) => { copy["architectures"] = []; }), "vscode"),
+      /non-empty array/,
+    );
+    assert.throws(
+      () => validateDescriptor(mutated("vscode", (copy) => { copy["architectures"] = ["riscv"]; }), "vscode"),
+      /must be one of/,
+    );
+    assert.throws(
+      () => validateDescriptor(mutated("vscode", (copy) => { copy["architectures"] = ["amd64", "amd64"]; }), "vscode"),
+      /duplicates/,
+    );
+  });
+
+  it("requires the versioned-asset oracle fields together and exclusively", () => {
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("commandcode", (copy) => { delete nested(copy, "oracle")["tagPrefix"]; }),
+          "commandcode",
+        ),
+      /must be set together/,
+    );
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("commandcode", (copy) => { nested(copy, "oracle")["assetPrefix"] = "x"; }),
+          "commandcode",
+        ),
+      /mutually exclusive/,
+    );
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("commandcode", (copy) => { nested(copy, "oracle")["assetNameTemplate"] = "no-version-here.deb"; }),
+          "commandcode",
+        ),
+      /must contain \{version\}/,
+    );
+  });
 });
 
 describe("descriptor env and output lines", () => {
   it("emits the workflow variables", () => {
     const env = new Map(
-      descriptorLines(loadDescriptor("freebuff"), "env").map((line) => {
+      descriptorLines(loadDescriptor("commandcode"), "env").map((line) => {
         const [key = "", ...rest] = line.split("=");
         return [key, rest.join("=")] as [string, string];
       }),
     );
-    assert.equal(env.get("APP_ID"), "freebuff");
-    assert.equal(env.get("APP_CASK"), "freebuff-desktop");
-    assert.equal(env.get("TAG_PREFIX"), "freebuff-desktop-v");
-    assert.equal(env.get("SOURCE_DIR"), "packaging/apps/freebuff");
+    assert.equal(env.get("APP_ID"), "commandcode");
+    assert.equal(env.get("APP_CASK"), "commandcode-desktop");
+    assert.equal(env.get("TAG_PREFIX"), "commandcode-desktop-v");
+    assert.equal(env.get("SOURCE_DIR"), "packaging/apps/commandcode");
     assert.equal(env.get("BUILD_COMMAND"), "./build.sh");
     assert.equal(env.get("NEEDS_WEBKIT"), "false");
     assert.equal(env.get("DEBLOAT_ARGS"), "--add-common --prefer-nano ffmpeg-mini");
+    assert.equal(env.get("APP_ARCHITECTURES"), '["amd64"]');
   });
 
   it("emits lowercase keys for job outputs", () => {

@@ -101,6 +101,22 @@ export function compareDebVersions(a: string, b: string): Ordering {
   return compareParts(pa.revision, pb.revision);
 }
 
+// Ascending sort under the same ordering the gate and the casks use. Callers
+// that publish or prune releases must not re-derive an order from `sort -V`:
+// GNU's version sort and dpkg disagree about which of two versions is newer.
+// For "1.0.109a" vs "1.0.109-1" sort -V ranks the lettered version first,
+// while dpkg splits the hyphen into upstream+revision, compares the upstream
+// parts ("1.0.109" < "1.0.109a", because an ended part sorts before a letter)
+// and so ranks it second - and pruning must never drop the newest release.
+export function sortDebVersions(versions: readonly string[]): string[] {
+  // Validate every entry up front: comparing alone would never look at a
+  // version that the sort leaves uncompared (a single-element list, or an
+  // element that happens to need no comparison), and a caller that prunes by
+  // index must not receive a list holding an unparseable version.
+  for (const version of versions) parseDebVersion(version);
+  return [...versions].sort(compareDebVersions);
+}
+
 // Strips a numeric build-epoch suffix so a cask/tag version stays stable
 // across per-architecture rebuilds; versions without one are kept verbatim.
 export function normalizeUpstreamVersion(version: string): string {
