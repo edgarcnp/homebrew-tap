@@ -45,9 +45,9 @@ runs:
         [[ "$PACKAGE_VERSION" =~ ^[0-9A-Za-z._-]+$ ]] || { echo "invalid version: $PACKAGE_VERSION" >&2; exit 1; }
         # fbr validates the tag/asset prefixes, cask token and checksum shapes
         # before touching the file, and fails rather than half-updating it.
-        cask="$(node packaging/bin/fbr.ts descriptor --app "${APP}" --field cask)"
-        tag_prefix="$(node packaging/bin/fbr.ts descriptor --app "${APP}" --field tagPrefix)"
-        asset_prefix="$(node packaging/bin/fbr.ts descriptor --app "${APP}" --field assetPrefix)"
+        cask="$(bun packaging/bin/fbr.ts descriptor --app "${APP}" --field cask)"
+        tag_prefix="$(bun packaging/bin/fbr.ts descriptor --app "${APP}" --field tagPrefix)"
+        asset_prefix="$(bun packaging/bin/fbr.ts descriptor --app "${APP}" --field assetPrefix)"
         [[ "$tag_prefix" == "$TAG_PREFIX" && "$asset_prefix" == "$ASSET_PREFIX" ]] \
           || { echo "descriptor prefixes disagree with the workflow inputs" >&2; exit 1; }
         echo "cask=${cask}" >> "$GITHUB_OUTPUT"
@@ -68,7 +68,7 @@ runs:
         # hash the released assets, not the run artifacts, so the cask
         # always matches what the release actually hosts. Single-arch apps
         # publish one AppImage; only their architectures are pinned.
-        arches="$(node packaging/bin/fbr.ts descriptor --app "${APP}" --field architectures)"
+        arches="$(bun packaging/bin/fbr.ts descriptor --app "${APP}" --field architectures)"
         patterns=()
         [[ "${arches}" == *amd64* ]] && patterns+=(--pattern "${ASSET_PREFIX}-*-x86_64.AppImage")
         [[ "${arches}" == *arm64* ]] && patterns+=(--pattern "${ASSET_PREFIX}-*-aarch64.AppImage")
@@ -86,7 +86,7 @@ runs:
           arm64_sha="$(sha256sum assets/"${ASSET_PREFIX}"-*-aarch64.AppImage | awk '{print $1}')"
           set_args+=(--sha256-arm-64 "${arm64_sha}")
         fi
-        node packaging/bin/fbr.ts cask "${set_args[@]}"
+        bun packaging/bin/fbr.ts cask "${set_args[@]}"
     - name: Import GPG signing key
       id: import-gpg
       shell: bash -xeuo pipefail {0}

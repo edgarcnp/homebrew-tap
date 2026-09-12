@@ -88,14 +88,14 @@
       "allowedVersions": ">=6.0.3 <7"
     },
     {
-      "description": "@types/node describes the Node major the CI runs, so it moves with the node runtime rule, not ahead of it",
+      "description": "@types/bun describes the Bun the CI runs, so it moves with the bun runtime rule, not ahead of it",
       "matchDatasources": [
         "npm"
       ],
       "matchPackageNames": [
-        "@types/node"
+        "@types/bun"
       ],
-      "allowedVersions": ">=24 <25"
+      "allowedVersions": ">=1.4 <1.5"
     },
     {
       "description": "Actions are SHA-pinned; one PR per digest bump keeps the review small",
@@ -105,11 +105,14 @@
       "groupName": "GitHub Actions"
     },
     {
-      "description": "The Node pin gates engines, @types/node and type stripping, so it is reviewed on its own",
-      "matchPackageNames": [
-        "node"
+      "description": "The Bun pin gates engines, @types/bun and the toolchain runtime, so it is reviewed on its own",
+      "matchDatasources": [
+        "npm"
       ],
-      "groupName": "node runtime"
+      "matchPackageNames": [
+        "bun"
+      ],
+      "groupName": "bun runtime"
     },
     {
       "description": "Hand-pinned upstream tools whose version and local SHA-256 must move together",

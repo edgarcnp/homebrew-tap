@@ -2,9 +2,9 @@
 
 Build tooling for the AppImage casks in this tap. One pipeline serves every
 app: what differs between apps is **data** (`packaging/apps/<app>/app.json`),
-not a forked script. The TypeScript runs directly on Node's type stripping, so
-there is no build step and no runtime dependency — `typescript` and
-`@types/node` are dev-only, used for `tsc --noEmit` and editor support.
+not a forked script. The TypeScript runs directly on Bun (no build step), so
+there is no runtime dependency — `typescript` and `@types/bun` are dev-only,
+used for `tsc --noEmit` and editor support.
 
 ## Layout
 
@@ -17,7 +17,7 @@ packaging/
   apps/<app>/README.md       app-specific notes
   bin/fbr.ts                 the one CLI (resolve, gate, cask, neutralize, render)
   lib/*.ts                   pipeline core, one responsibility per module
-  lib/*.test.ts              unit tests (node --test)
+  lib/*.test.ts              unit tests (bun test)
   lib/*.sh                   shared bash: build driver, pipeline stages, primitives
   scripts/                   repo-level tooling (tool installer, local style gate)
 ```
@@ -160,7 +160,7 @@ and other size optimizations.
 
 The workflow installs the webkit2gtk/GTK deps only for apps whose descriptor
 sets `needsWebkit` (gitbutler) — vscode, opencode-desktop and commandcode-desktop are
-Electron and ship their own webkit. The other build deps (`nodejs`, `gnupg`,
+Electron and ship their own webkit. The other build deps (`gnupg`,
 `dpkg`, `patchelf`, `xorg-server-xvfb`) are installed for every app; `nss` is
 too, because quick-sharun aborts if an Electron binary's `ldd` closure is
 missing the NSS libraries (libnss3, libnspr4, ...) it bundles. The pinned
@@ -182,7 +182,7 @@ TARGET_ARCH=amd64 PACKAGE_VERSION=1.137.0 packaging/apps/vscode/build.sh
 `PACKAGE_VERSION` is optional: when unset it comes from the resolved upstream
 metadata; when set, the build fails if the resolved version differs (CI always
 sets it). Requires an Arch Linux system (or the
-`ghcr.io/pkgforge-dev/archlinux` container), `node` ≥ 24, `jq`, the app's own
+`ghcr.io/pkgforge-dev/archlinux` container), `bun` ≥ 1.4, `jq`, the app's own
 tooling (`dpkg-deb` for `.deb` payloads, `gpg`/`gpgv` for apt), `quick-sharun`
 in `PATH` and `APPIMAGETOOL` pointing at the uruntime `appimagetool`. Output
 lands in `<tap>/dist/`.
@@ -194,11 +194,11 @@ opens one reviewed PR per dependency (automerge stays off):
 
 | Dependency | Declared in | How Renovate sees it |
 | --- | --- | --- |
-| `typescript`, `@types/node` | `package.json` | npm manager, lockfile included (exact pins, no `^`: frozen-lock) |
+| `typescript`, `@types/bun` | `package.json` | npm manager over `package.json`, `bun` manager over `bun.lock` (exact pins, no `^`: frozen-lock) |
 | GitHub Actions | `uses:` in workflows | built-in manager plus `helpers:pinGitHubActionDigests`: the version in the trailing comment is bumped and the SHA re-pinned |
 | Build and test container images | `container:` in workflows | built-in manager (`container` dependency type), digests included |
 | Runner labels (`ubuntu-24.04-arm`) | `runs-on:` | built-in manager (`github-runner` dependency type) |
-| Node version | `node-version:` under `actions/setup-node` | built-in manager (`uses-with` dependency type) |
+| Bun version | `bun-version:` under `oven-sh/setup-bun` | built-in manager (`uses-with` dependency type: npm `bun`) |
 | actionlint | `tests.yml` | `customManagers` (github-releases) |
 | pkgforge `appimagetool` | `build-appimage.yml` | `customManagers` (github-releases) |
 | `quick-sharun`, `get-debloated-pkgs` | `install-anylinux-tools.sh` | `customManagers` (git-refs: the digest of `main`) |
@@ -214,20 +214,21 @@ measured, so updating the pin is a copy-paste in that same PR.
 
 Two dependencies are deliberately held back. `typescript` stays on the 6.x line
 (`allowedVersions` in `renovate.json`) until this toolchain is ready for 7, and
-`@types/node` stays on the Node major the CI actually runs (24.x, the newest
-LTS) so the types cannot describe APIs the tested runtime lacks. Moving the
-`node` runtime rule to a newer LTS means widening that rule in the same change.
+`@types/bun` stays on the Bun minor the CI actually runs (1.4.x) so the types
+cannot describe APIs the tested runtime lacks. Moving the `bun` runtime rule to
+a newer minor means widening that rule in the same change.
 
 ## Tests and gates
 
-`npm test` runs the unit suite (`node --test`, no dependencies): dpkg version
+`bun test` runs the unit suite (Bun's runner over `node:test` files, no test
+dependencies): dpkg version
 ordering, deb822/InRelease parsing and freshness, HTTP retry/cap/atomic-write,
 guards and metadata validation, descriptor validation against the real
 descriptors, cask read/update/consistency, the gate decision table, updater
 neutralization over temporary AppDirs, desktop rendering against the real
 templates, and the oracle parsers.
 
-`npm run typecheck` runs `tsc --noEmit` with `strict`, `noUncheckedIndexedAccess`,
+`bun run typecheck` runs `tsc --noEmit` with `strict`, `noUncheckedIndexedAccess`,
 `exactOptionalPropertyTypes` and `erasableSyntaxOnly`. `packaging/scripts/check-style.sh`
 runs the full local gate (shellcheck, typecheck, tests, cask check, brew
 style/audit, actionlint); CI runs the same set on every PR.

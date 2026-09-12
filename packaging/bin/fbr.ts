@@ -1,6 +1,6 @@
-#!/usr/bin/env node
-// Entry point for the packaging CLI. Runs directly on Node (type stripping),
-// so the repository needs no build step and no runtime dependencies.
+#!/usr/bin/env bun
+// Entry point for the packaging CLI. Runs directly on Bun (TypeScript), so the
+// repository needs no build step and no runtime dependencies.
 
 import { isUsageError, runCli } from "../lib/cli.ts";
 
