@@ -4,6 +4,12 @@
   "displayName": "OpenCode",
   "comment": "Open source AI coding agent",
   "cask": "opencode-desktop",
+  "watch": {
+    "feedUrl": "https://github.com/anomalyco/opencode/releases.atom",
+    "versionPattern": "^v(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
+    "skipPattern": "^v2\\.",
+    "repo": "anomalyco/opencode"
+  },
   "assetPrefix": "opencode-desktop",
   "tagPrefix": "opencode-desktop-v",
   "sourceRepo": "edgarcnp/homebrew-tap",

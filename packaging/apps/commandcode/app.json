@@ -4,6 +4,11 @@
   "displayName": "Command Code",
   "comment": "Command Code desktop app",
   "cask": "commandcode-desktop",
+  "watch": {
+    "feedUrl": "https://github.com/CommandCodeAI/desktop/releases.atom",
+    "versionPattern": "(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
+    "repo": "CommandCodeAI/desktop"
+  },
   "assetPrefix": "commandcode-desktop",
   "tagPrefix": "commandcode-desktop-v",
   "sourceRepo": "edgarcnp/homebrew-tap",

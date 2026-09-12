@@ -61,6 +61,7 @@ upstream source kind behind a shared interface, dispatched exhaustively
 | `architectures` | Architectures this app ships (`["amd64", "arm64"]` or, for amd64-only upstreams like CommandCode, `["amd64"]`); the pipeline builds, publishes and checks only these arches |
 | `binaryTargets` | Names the cask must expose on `PATH` (checked by `fbr cask --action check`) |
 | `oracle` | Where the version and payload come from (below) |
+| `watch` | Optional release-watch block (`feedUrl`, `versionPattern`, optional `skipPattern`, `repo`) the API's watcher polls to dispatch builds. The pattern is matched against the feed entry title — the GitHub release *name*, not the tag — and capture group 1 is the version; `repo` only feeds the informational `trigger_repo`. The watched version must be one the `oracle` can build, or the app stalls at `dispatched` |
 | `payload` | How the upstream package is staged into `AppDir/bin` |
 | `icon` | Icon path inside the payload plus its hicolor size directory |
 | `desktopTemplate` | Desktop entry template relative to the app directory |

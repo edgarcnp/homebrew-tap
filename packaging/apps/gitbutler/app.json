@@ -4,6 +4,12 @@
   "displayName": "GitButler",
   "comment": "Git, finally designed for humans",
   "cask": "gitbutler",
+  "watch": {
+    "feedUrl": "https://github.com/gitbutlerapp/gitbutler/releases.atom",
+    "versionPattern": "^release\\/(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
+    "skipPattern": "^nightly\\/",
+    "repo": "gitbutlerapp/gitbutler"
+  },
   "assetPrefix": "gitbutler",
   "tagPrefix": "gitbutler-v",
   "sourceRepo": "edgarcnp/homebrew-tap",
