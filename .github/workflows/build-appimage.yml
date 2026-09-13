@@ -311,7 +311,7 @@ jobs:
           # environment.
           curl -fL --retry 5 --retry-all-errors --retry-delay 5 \
             -o /tmp/appimagetool-uruntime \
-            "https://github.com/pkgforge-dev/appimagetool/releases/download/0.5.0/appimagetool-${{ matrix.appimage_arch }}-linux"
+            "https://github.com/pkgforge-dev/appimagetool/releases/download/0.5.1/appimagetool-${{ matrix.appimage_arch }}-linux"
           test -s /tmp/appimagetool-uruntime
           case "${{ matrix.appimage_arch }}" in
             x86_64) expected="0557ee3b0451a150d1c32c23a8038c23d527dcde6e8c10af72e24e066b41770c" ;;
