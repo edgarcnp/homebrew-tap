@@ -5,9 +5,11 @@ set -Eeuo pipefail
 # pkgforge-dev/Anylinux-AppImages, verifying SHA-256 before install.
 # Must run inside the Arch Linux container used by the CI build job.
 #
-# Pinned commit: eefb8bed88f227bf7d29d3d0c5c816c2b4c5fdf4
-# (Anylinux-AppImages main, 2026-09-12). Bumps are manual PRs: update the
-# commit and the two hashes below together, from the same commit.
+# PINNED_COMMIT below tracks Anylinux-AppImages main. Renovate owns it
+# (renovate.json customManagers) but cannot recompute the two hashes, so
+# update them in the same PR, from that same commit - the check prints the
+# hash it measured.
+#
 # Since the restructure, quick-sharun ships prebuilt helper libs
 # (sharun+helper-libs-$ARCH.tar from Anylinux-sharun releases) instead of
 # compiling useful-tools/lib/anylinux.c, which upstream deleted.
@@ -22,8 +24,8 @@ ANYLINUX_TOOLS_DIR="${ANYLINUX_TOOLS_DIR:-/usr/local/bin}"
 PINNED_COMMIT="ae05e80a7fe2e91488e10871deb6d3e07d9652f8"
 BASE_URL="https://raw.githubusercontent.com/pkgforge-dev/Anylinux-AppImages/${PINNED_COMMIT}/useful-tools"
 declare -A TOOLS=(
-  ["quick-sharun"]=d5f0a8c902b859d9f3d6dc3ad78c1df8133ec3a2a8add7ec164279e0089529f6
-  ["get-debloated-pkgs"]=a0ca19c479e0dd40e0c37f5e53fc4e61a75c302d6025a5aef6e144a2eef4daad
+  ["quick-sharun"]=87b385f17f2b1d1d4cd75d869937c2ab4dc3952a09b693aef8bad3803e42bb84
+  ["get-debloated-pkgs"]=463605f27db37f67252108ab47eb673ecb07ff30c22c9561a0c0b4063075c528
 )
 
 mkdir -p -- "${ANYLINUX_TOOLS_DIR}"

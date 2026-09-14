@@ -296,10 +296,10 @@ jobs:
             webkit2gtk-4.1
       - name: Install appimagetool
         run: |
-          # Renovate owns the 0.5.0 version below (renovate.json
+          # Renovate owns the 0.5.1 version below (renovate.json
           # customManagers); it cannot recompute the per-arch hashes, so update
           # them in the same PR - the check prints the hash it measured.
-          # Hashes come from the pkgforge 0.5.0 release assets. This is the
+          # Hashes come from the pkgforge 0.5.1 release assets. This is the
           # plain (non -full) build: it downloads uruntime/mkdwarfs at build
           # time and verifies them against its own pinned digests, exactly as
           # the 0.4.2 build it replaces did.
@@ -314,8 +314,8 @@ jobs:
             "https://github.com/pkgforge-dev/appimagetool/releases/download/0.5.1/appimagetool-${{ matrix.appimage_arch }}-linux"
           test -s /tmp/appimagetool-uruntime
           case "${{ matrix.appimage_arch }}" in
-            x86_64) expected="0557ee3b0451a150d1c32c23a8038c23d527dcde6e8c10af72e24e066b41770c" ;;
-            aarch64) expected="9411822729ef3601197ae40a06c5fb3e1fa9d681938fe0ed9813dbb07c36ba6d" ;;
+            x86_64) expected="0a771486c173b482e44417e04554aae57a915eb3e3a6a20a29d17fdc8e8cbb13" ;;
+            aarch64) expected="6534610d4d1e56865ae20516ea73c1b5d105bee887f1f77e53df12679499e342" ;;
             *) echo "Unknown appimage_arch: ${{ matrix.appimage_arch }}" >&2; exit 1 ;;
           esac
           actual="$(sha256sum /tmp/appimagetool-uruntime | awk '{print $1}')"
