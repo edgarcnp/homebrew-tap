@@ -196,7 +196,7 @@ opens one reviewed PR per dependency (automerge stays off):
 | --- | --- | --- |
 | `typescript`, `@types/bun` | `package.json` | npm manager over `package.json`, `bun` manager over `bun.lock` (exact pins, no `^`: frozen-lock) |
 | GitHub Actions | `uses:` in workflows | built-in manager plus `helpers:pinGitHubActionDigests`: the version in the trailing comment is bumped and the SHA re-pinned |
-| Build and test container images | `container:` in workflows | built-in manager (`container` dependency type), digests included |
+| Build and test container images | `container:` in workflows | built-in manager (`container` dependency type), digests included. It only reads a job-level `container:`: the digest nested in `tests.yml`'s `strategy.matrix` is invisible to it and is bumped by hand, together with the Renovate PR that moves `cask-smoke.yml` |
 | Runner labels (`ubuntu-24.04-arm`) | `runs-on:` | built-in manager (`github-runner` dependency type) |
 | Bun version | `bun-version:` under `oven-sh/setup-bun` | built-in manager (`uses-with` dependency type: npm `bun`) |
 | actionlint | `tests.yml` | `customManagers` (github-releases) |
