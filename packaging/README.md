@@ -148,8 +148,9 @@ place:
 
 ## Build model: sharun/quick-sharun in an Arch container
 
-AppImage builds run inside `ghcr.io/pkgforge-dev/archlinux:<tag>` (pinned in
-`build-appimage.yml`), mirroring how pkgforge's Anylinux-AppImages are built.
+AppImage builds run inside `ghcr.io/pkgforge-dev/archlinux:<tag>@<digest>` (both
+the tag and digest pinned in `build-appimage.yml`; the image rolls, so Renovate
+bumps the pair together), mirroring how pkgforge's Anylinux-AppImages are built.
 `linuxdeploy` was retired: quick-sharun (wrapping sharun) bundles the app's
 dynamic-linker closure **including glibc and ld-linux** and generates the
 AppRun, so the resulting AppImages have no host-libc dependency and run on
@@ -169,9 +170,10 @@ the `APPIMAGETOOL` env var with no CLI args; it reads
 `APPDIR/OUTPATH/OUTNAME/ARCH/VERSION` from the environment.
 
 `packaging/scripts/install-anylinux-tools.sh` downloads `quick-sharun` and
-`get-debloated-pkgs` pinned to a commit of pkgforge-dev/Anylinux-AppImages and
-verifies both by SHA-256; bumps are manual PRs that update the commit and both
-hashes together.
+`get-debloated-pkgs` from a raw URL addressed by a 40-character commit digest
+of pkgforge-dev/Anylinux-AppImages. That digest fixes the exact bytes of both
+tools, so there is no separate SHA-256 to co-update: Renovate owns the pin end
+to end.
 
 ## Local run (verification only)
 
@@ -196,7 +198,7 @@ opens one reviewed PR per dependency (automerge stays off):
 | --- | --- | --- |
 | `typescript`, `@types/bun` | `package.json` | npm manager over `package.json`, `bun` manager over `bun.lock` (exact pins, no `^`: frozen-lock) |
 | GitHub Actions | `uses:` in workflows | built-in manager plus `helpers:pinGitHubActionDigests`: the version in the trailing comment is bumped and the SHA re-pinned |
-| Build and test container images | `container:` in workflows | built-in manager (`container` dependency type), digests included. It only reads a job-level `container:`: the digest nested in `tests.yml`'s `strategy.matrix` is invisible to it and is bumped by hand, together with the Renovate PR that moves `cask-smoke.yml` |
+| Build and test container images | `container:` in workflows | built-in manager (`container` dependency type), digests included. It only reads a job-level `container:`, so the digest nested in `tests.yml`'s `strategy.matrix` is extracted by a `customManagers` regex entry instead; a package rule groups both brew digests into the GitHub Actions PR so the two files move together |
 | Runner labels (`ubuntu-24.04-arm`) | `runs-on:` | built-in manager (`github-runner` dependency type) |
 | Bun version | `bun-version:` under `oven-sh/setup-bun` | built-in manager (`uses-with` dependency type: npm `bun`) |
 | actionlint | `tests.yml` | `customManagers` (github-releases) |
@@ -207,10 +209,10 @@ The casks are not Renovate's: `Casks/*.rb` versions and checksums are produced
 by this pipeline through `fbr cask`, which is why nothing points Renovate at
 them.
 
-Three pins carry a local SHA-256 that Renovate cannot recompute: actionlint's
-tarball, appimagetool's per-arch binaries, and the two Anylinux scripts. The
-version bump still arrives as a PR; the build then fails printing the hash it
-measured, so updating the pin is a copy-paste in that same PR.
+Two pins carry a local SHA-256 that Renovate cannot recompute: actionlint's
+tarball and appimagetool's per-arch binaries. The version bump still arrives as
+a PR; the build then fails printing the hash it measured, so updating the pin
+is a copy-paste in that same PR.
 
 Two dependencies are deliberately held back. `typescript` stays on the 6.x line
 (`allowedVersions` in `renovate.json`) until this toolchain is ready for 7, and

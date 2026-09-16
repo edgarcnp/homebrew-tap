@@ -240,9 +240,11 @@ jobs:
     # with sharun/quick-sharun, which bundle the app + libc + everything else
     # from the build system, so the build OS must be Arch for correct 32-bit
     # lib layout and access to pkgforge's debloated packages via pacman.
-    # Pinned image tag; pacman -Syu runs on every build anyway.
+    # Pinned by digest, not just the (mutable) date tag; Renovate's
+    # github-actions manager reads this job-level container and bumps both
+    # together. pacman -Syu runs on every build anyway.
     container:
-      image: ghcr.io/pkgforge-dev/archlinux:v2026.09.05
+      image: ghcr.io/pkgforge-dev/archlinux:v2026.09.05@sha256:b2507f1964270cab3cc190aa8df858521f6a7e45e969146a012877891d5dfc9b
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -328,9 +330,9 @@ jobs:
           mv /tmp/appimagetool-uruntime /opt/appimagetool-uruntime
       - name: Install Anylinux build tools
         run: |
-          # quick-sharun + get-debloated-pkgs, pinned to a commit of
-          # pkgforge-dev/Anylinux-AppImages and SHA-256 verified; bumps are
-          # manual PRs (see packaging/scripts/install-anylinux-tools.sh)
+          # quick-sharun + get-debloated-pkgs, pinned to a commit digest of
+          # pkgforge-dev/Anylinux-AppImages; Renovate owns the pin end to end
+          # (see packaging/scripts/install-anylinux-tools.sh)
           "${GITHUB_WORKSPACE}/tap/packaging/scripts/install-anylinux-tools.sh"
       - name: Install debloated packages
         run: |
