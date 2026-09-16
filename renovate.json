@@ -74,6 +74,18 @@
       "depNameTemplate": "pkgforge-dev/Anylinux-AppImages",
       "packageNameTemplate": "https://github.com/pkgforge-dev/Anylinux-AppImages",
       "datasourceTemplate": "git-refs"
+    },
+    {
+      "description": "brew container image nested in the tests workflow strategy matrix, which the github-actions manager cannot see (it only reads a job-level container:)",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/tests\\.yml$/"
+      ],
+      "matchStrings": [
+        "ghcr\\.io/homebrew/brew:(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[0-9a-f]{64})"
+      ],
+      "depNameTemplate": "ghcr.io/homebrew/brew",
+      "datasourceTemplate": "docker"
     }
   ],
   "packageRules": [
@@ -105,6 +117,16 @@
       "groupName": "GitHub Actions"
     },
     {
+      "description": "The tests workflow brew image is extracted by the regex customManager above; keep both brew digests in the GitHub Actions PR so the two files move together",
+      "matchManagers": [
+        "regex"
+      ],
+      "matchPackageNames": [
+        "ghcr.io/homebrew/brew"
+      ],
+      "groupName": "GitHub Actions"
+    },
+    {
       "description": "The Bun pin gates engines, @types/bun and the toolchain runtime, so it is reviewed on its own",
       "matchDatasources": [
         "npm"
@@ -123,7 +145,7 @@
       ],
       "groupName": "pinned upstream build tools",
       "prBodyNotes": [
-        "This dependency is verified against a SHA-256 pinned in this repository, which Renovate cannot recompute. Update the pin in this PR: the check reports the hash it measured when the two disagree."
+        "Some dependencies in this group are verified against a SHA-256 pinned in this repository, which Renovate cannot recompute (actionlint's tarball and appimagetool's per-arch binaries). Update those pins in this PR: each check reports the hash it measured when the two disagree. pkgforge-dev/Anylinux-AppImages needs no such update: its tools are fetched from a URL addressed by the commit digest Renovate bumps."
       ]
     }
   ]
