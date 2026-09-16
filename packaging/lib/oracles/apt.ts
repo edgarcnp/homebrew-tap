@@ -174,7 +174,7 @@ export function selectLatestPackage(
 }
 
 function resolveKeyBase64(keyBase64Path: string, outputDir: string): string {
-  const resolvedKey = path.resolve(keyBase64Path);
+  const resolvedKey = path.resolve(REPO_ROOT, keyBase64Path);
   const insideOutput =
     resolvedKey === outputDir || resolvedKey.startsWith(outputDir + path.sep);
   const insideRepo = resolvedKey === REPO_ROOT || resolvedKey.startsWith(REPO_ROOT + path.sep);
