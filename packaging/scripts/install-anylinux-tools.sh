@@ -21,7 +21,7 @@ error() {
 }
 
 ANYLINUX_TOOLS_DIR="${ANYLINUX_TOOLS_DIR:-/usr/local/bin}"
-PINNED_COMMIT="45964bcbcb5456a6c902c55185635c06700d3284"
+PINNED_COMMIT="7f54737ed2db9ae61b14a39aa4ca0cfb8004bcd4"
 BASE_URL="https://raw.githubusercontent.com/pkgforge-dev/Anylinux-AppImages/${PINNED_COMMIT}/useful-tools"
 declare -A TOOLS=(
   ["quick-sharun"]=87b385f17f2b1d1d4cd75d869937c2ab4dc3952a09b693aef8bad3803e42bb84
