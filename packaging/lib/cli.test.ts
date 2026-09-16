@@ -16,6 +16,14 @@ function fbr(args: string[]): { status: number | null; stdout: string; stderr: s
   return { status: result.status, stdout: result.stdout, stderr: result.stderr };
 }
 
+function vscodeCaskVersion(): string {
+  const result = fbr(["cask", "--action", "read", "--app", "vscode"]);
+  assert.equal(result.status, 0, result.stderr);
+  const parsed = JSON.parse(result.stdout) as { version?: unknown };
+  assert.equal(typeof parsed.version, "string");
+  return parsed.version;
+}
+
 describe("fbr CLI contract", () => {
   it("lists apps as newline-separated ids and as a JSON array", () => {
     const plain = fbr(["list-apps"]);
@@ -28,7 +36,7 @@ describe("fbr CLI contract", () => {
   });
 
   it("accepts the gate flags exactly as the workflow passes them", () => {
-    const base = ["gate", "--app", "vscode", "--upstream-version", "1.137.0", "--release-exists"];
+    const base = ["gate", "--app", "vscode", "--upstream-version", vscodeCaskVersion(), "--release-exists"];
 
     const matching = fbr([...base, "--release-matches-cask", "true"]);
     assert.equal(matching.status, 0, matching.stderr);
@@ -52,7 +60,7 @@ describe("fbr CLI contract", () => {
       "--app",
       "vscode",
       "--upstream-version",
-      "1.137.0",
+      vscodeCaskVersion(),
       "--release-matches-cask",
       "maybe",
     ]);
