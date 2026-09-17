@@ -21,7 +21,7 @@ function vscodeCaskVersion(): string {
   assert.equal(result.status, 0, result.stderr);
   const parsed = JSON.parse(result.stdout) as { version?: unknown };
   assert.equal(typeof parsed.version, "string");
-  return parsed.version;
+  return parsed.version as string;
 }
 
 describe("fbr CLI contract", () => {
