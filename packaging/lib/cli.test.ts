@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import * as path from "node:path";
 import { describe, it } from "node:test";
+import { listApps } from "./descriptor.ts";
 import { REPO_ROOT } from "./paths.ts";
 
 // The workflows call fbr with exact flag shapes; these tests run the real
@@ -26,13 +27,15 @@ function vscodeCaskVersion(): string {
 
 describe("fbr CLI contract", () => {
   it("lists apps as newline-separated ids and as a JSON array", () => {
+    const expected = listApps();
+
     const plain = fbr(["list-apps"]);
     assert.equal(plain.status, 0);
-    assert.deepEqual(plain.stdout.trim().split("\n"), ["commandcode", "gitbutler", "opencode", "vscode"]);
+    assert.deepEqual(plain.stdout.trim().split("\n"), expected);
 
     const json = fbr(["list-apps", "--json"]);
     assert.equal(json.status, 0);
-    assert.deepEqual(JSON.parse(json.stdout), ["commandcode", "gitbutler", "opencode", "vscode"]);
+    assert.deepEqual(JSON.parse(json.stdout), expected);
   });
 
   it("accepts the gate flags exactly as the workflow passes them", () => {
