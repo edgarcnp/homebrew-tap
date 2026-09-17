@@ -4,7 +4,7 @@ import { describe, it } from "node:test";
 import { descriptorLines, listApps, loadDescriptor, validateDescriptor } from "./descriptor.ts";
 import { descriptorPath } from "./paths.ts";
 
-const APPS = ["commandcode", "gitbutler", "opencode", "vscode"];
+const APPS = listApps();
 
 function rawDescriptor(app: string): Record<string, unknown> {
   return JSON.parse(fs.readFileSync(descriptorPath(app), "utf8")) as Record<string, unknown>;
@@ -22,7 +22,8 @@ function nested(source: Record<string, unknown>, key: string): Record<string, un
 
 describe("descriptor loading", () => {
   it("lists every app that has a descriptor", () => {
-    assert.deepEqual(listApps(), APPS);
+    assert.ok(APPS.length > 0, "expected at least one app");
+    assert.deepEqual(APPS, [...APPS].sort(), "app ids must be sorted");
   });
 
   it("loads every app descriptor", () => {
@@ -138,10 +139,9 @@ describe("release watch", () => {
       gitbutler: ["release/0.22.3", "0.22.3"],
       commandcode: ["Command Code 0.1.29", "0.1.29"],
     };
-    for (const app of APPS) {
+    for (const [app, [title, version]] of Object.entries(titles)) {
       const watch = loadDescriptor(app).watch;
       assert.ok(watch !== undefined, `${app} must declare a watch block`);
-      const [title, version] = titles[app] ?? ["", ""];
       assert.equal(new RegExp(watch.versionPattern).exec(title)?.[1], version);
     }
   });

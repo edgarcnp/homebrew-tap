@@ -32,7 +32,8 @@ mkdir -p -- "${ANYLINUX_TOOLS_DIR}"
 tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/anylinux-tools.XXXXXX")"
 trap 'rm -rf -- "${tmp_dir}"' EXIT
 
-for name in "${TOOLS[@]}"; do
+for name in "${TOOLS[@]}"
+do
   dest="${tmp_dir}/${name}"
   info "Downloading ${name} from pinned commit ${PINNED_COMMIT}"
   curl -fL --retry 5 --retry-all-errors --retry-delay 5 -o "${dest}" "${BASE_URL}/${name}.sh"
