@@ -53,7 +53,7 @@ brew install --cask edgarcnp/tap/commandcode-desktop
 
 ### opencode-desktop
 
-Repackage of [OpenCode Desktop](https://opencode.ai/) as an AppImage, built from the `.deb` published on the [anomalyco/opencode](https://github.com/anomalyco/opencode) GitHub releases and verified against the release's SHA-256 asset digests.
+Repackage of [OpenCode Desktop](https://opencode.ai/) as an AppImage, built from the `.deb` served by OpenCode's v2 desktop update API (`https://opencode.ai/update/api/latest/desktop/opencode`) and verified against the manifest's SHA-256 asset digest. v2 binary distributions are no longer published as GitHub release assets, so the manifest is both the version source and the digest source.
 
 ```sh
 brew install --cask edgarcnp/tap/opencode-desktop
