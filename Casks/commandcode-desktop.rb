@@ -1,6 +1,6 @@
 cask "commandcode-desktop" do
-  version "0.1.34"
-  sha256 "9f12675dfaf0e57df53422b30131045c86e1a15f59da64010cd5ee5844c851ce"
+  version "0.1.35"
+  sha256 "83c819d796e29a21e050c6b6d728b64d7871d1ecf8f9fc2537dfc8f416eb26ed"
 
   url "https://github.com/edgarcnp/homebrew-tap/releases/download/commandcode-desktop-v#{version}/commandcode-desktop-#{version}-x86_64.AppImage"
   name "Command Code Desktop"
