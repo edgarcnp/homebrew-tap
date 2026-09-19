@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import { describe, it } from "node:test";
-import { descriptorLines, listApps, loadDescriptor, validateDescriptor } from "./descriptor.ts";
+import { descriptorLines, listApps, loadDescriptor, resolveApp, validateDescriptor } from "./descriptor.ts";
 import { descriptorPath } from "./paths.ts";
 
 const APPS = listApps();
@@ -24,6 +24,22 @@ describe("descriptor loading", () => {
   it("lists every app that has a descriptor", () => {
     assert.ok(APPS.length > 0, "expected at least one app");
     assert.deepEqual(APPS, [...APPS].sort(), "app ids must be sorted");
+  });
+
+  it("resolves app ids and cask tokens to the app id", () => {
+    // Cask tokens that differ from the id (dispatch sends these).
+    assert.equal(resolveApp("commandcode-desktop"), "commandcode");
+    assert.equal(resolveApp("opencode-desktop"), "opencode");
+    // App ids (manual workflow_dispatch runs) resolve directly, even when the
+    // cask equals the id.
+    assert.equal(resolveApp("commandcode"), "commandcode");
+    assert.equal(resolveApp("gitbutler"), "gitbutler");
+    assert.equal(resolveApp("vscode"), "vscode");
+    // Every cask token maps back to its own app.
+    for (const id of APPS) {
+      assert.equal(resolveApp(loadDescriptor(id).cask), id);
+    }
+    assert.equal(resolveApp("nope"), undefined);
   });
 
   it("loads every app descriptor", () => {

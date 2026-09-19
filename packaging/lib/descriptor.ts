@@ -396,6 +396,19 @@ export function listApps(): string[] {
     .sort();
 }
 
+// The build entry point accepts a name that is either an app id (a directory
+// under packaging/apps, as workflow_dispatch and the smoke test use) or a cask
+// token (the Casks/<cask>.rb name, as the API's watcher now dispatches builds
+// by). Both forms resolve to the app id, which is what the pipeline keys on.
+// Casks must be unique across app ids (release tags are named after them), so
+// a name matching several descriptors resolves to nothing rather than a guess.
+export function resolveApp(name: string): string | undefined {
+  const apps = listApps();
+  if (apps.includes(name)) return name;
+  const byCask = apps.filter((id) => loadDescriptor(id).cask === name);
+  return byCask.length === 1 ? byCask[0] : undefined;
+}
+
 export interface DescriptorExport {
   id: string;
   name: string;
