@@ -75,11 +75,29 @@ export interface CdnRedirectOracle {
   debName: string;
 }
 
+// A JSON update manifest pinned at an https endpoint that is itself the
+// version source, e.g. opencode's v2 desktop update API:
+//   {version, metadata: {files: {<name>: {url, sha256, size}}}}
+// The manifest publishes the SHA-256 and size that the payload is verified
+// against at download time, so metadata-only resolve needs no download.
+export interface UpdateManifestOracle {
+  kind: "update-manifest";
+  // Pinned https endpoint returning the update manifest.
+  repository: string;
+  // Upstream package identity recorded in the metadata document.
+  packageName: string;
+  // Asset name template; {arch} is the deb architecture (amd64/arm64).
+  assetTemplate: string;
+  // Hosts asset URLs must resolve to after redirecting.
+  downloadHosts: string[];
+}
+
 export type Oracle =
   | AptOracle
   | GithubReleaseOracle
   | ElectronFeedOracle
-  | CdnRedirectOracle;
+  | CdnRedirectOracle
+  | UpdateManifestOracle;
 
 export type OracleKind = Oracle["kind"];
 

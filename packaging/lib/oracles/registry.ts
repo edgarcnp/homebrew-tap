@@ -8,6 +8,7 @@ import { resolveWithCdnRedirect } from "./cdn-redirect.ts";
 import { resolveWithElectronFeed } from "./electron-feed.ts";
 import { resolveWithGithubRelease } from "./github-release.ts";
 import type { ResolveRequest } from "./shared.ts";
+import { resolveWithUpdateManifest } from "./update-manifest.ts";
 
 export type OracleResolver<K extends OracleKind> = (
   oracle: Extract<Oracle, { kind: K }>,
@@ -21,6 +22,7 @@ export const ORACLE_RESOLVERS: Registry = {
   "github-release": resolveWithGithubRelease,
   "electron-feed": resolveWithElectronFeed,
   "cdn-redirect": resolveWithCdnRedirect,
+  "update-manifest": resolveWithUpdateManifest,
 };
 
 export function resolveWith(oracle: Oracle, request: ResolveRequest): Promise<Metadata> {
@@ -33,6 +35,8 @@ export function resolveWith(oracle: Oracle, request: ResolveRequest): Promise<Me
       return ORACLE_RESOLVERS["electron-feed"](oracle, request);
     case "cdn-redirect":
       return ORACLE_RESOLVERS["cdn-redirect"](oracle, request);
+    case "update-manifest":
+      return ORACLE_RESOLVERS["update-manifest"](oracle, request);
   }
   const exhaustive: never = oracle;
   return fail(`Unsupported resolver kind: ${JSON.stringify(exhaustive)}`);

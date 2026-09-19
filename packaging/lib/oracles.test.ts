@@ -11,6 +11,10 @@ import {
 } from "./oracles/electron-feed.ts";
 import { assertRepositoryUrl, selectRelease } from "./oracles/github-release.ts";
 import { normalizeTagVersion, parseSha256Digest } from "./oracles/release-common.ts";
+import {
+  selectManifestAsset,
+  validateManifestEndpoint,
+} from "./oracles/update-manifest.ts";
 import { compareDebVersions } from "./version.ts";
 
 const SHA512 = "A".repeat(86) + "==";
@@ -283,5 +287,204 @@ describe("cdn-redirect oracle", () => {
       () => parseFinalUrl(target.replace("https://", "http://"), GITBUTLER_HOSTS),
       /non-HTTPS URL/,
     );
+  });
+});
+
+function manifestFor(version = "2.0.8"): Record<string, unknown> {
+  const entry = (name: string, sha256: string, size: number) => ({
+    url: `https://opencode.ai/files/bin/${version}/${name}`,
+    sha256,
+    size,
+  });
+  return {
+    channel: "latest",
+    name: "desktop",
+    distribution: "opencode",
+    version,
+    metadata: {
+      files: {
+        "opencode-desktop-linux-amd64.deb": entry(
+          "opencode-desktop-linux-amd64.deb",
+          "a".repeat(64),
+          1000,
+        ),
+        "opencode-desktop-linux-arm64.deb": entry(
+          "opencode-desktop-linux-arm64.deb",
+          "b".repeat(64),
+          2000,
+        ),
+      },
+    },
+  };
+}
+
+const OPENCODE_HOSTS = ["opencode.ai"];
+
+function manifestEntry(m: Record<string, unknown>): Record<string, unknown> {
+  const metadata = m["metadata"] as Record<string, unknown>;
+  const files = metadata["files"] as Record<string, Record<string, unknown>>;
+  return files["opencode-desktop-linux-amd64.deb"]!;
+}
+
+function mutatedEntry(mutate: (entry: Record<string, unknown>) => void): Record<string, unknown> {
+  const copy = structuredClone(manifestFor());
+  mutate(manifestEntry(copy));
+  return copy;
+}
+
+describe("update-manifest oracle", () => {
+  it("selects the requested asset from a valid manifest", () => {
+    const selected = selectManifestAsset(
+      manifestFor(),
+      "opencode-desktop-linux-arm64.deb",
+      OPENCODE_HOSTS,
+    );
+    assert.equal(selected.version, "2.0.8");
+    assert.equal(selected.repository, "https://opencode.ai");
+    assert.equal(selected.repositoryPath, "files/bin/2.0.8/opencode-desktop-linux-arm64.deb");
+    assert.deepEqual(selected.asset, {
+      url: "https://opencode.ai/files/bin/2.0.8/opencode-desktop-linux-arm64.deb",
+      sha256: "b".repeat(64),
+      size: 2000,
+    });
+  });
+
+  it("rejects a non-object, version-less or badly versioned manifest", () => {
+    assert.throws(() => selectManifestAsset("nope", "a", OPENCODE_HOSTS), /not an object/);
+    assert.throws(() => selectManifestAsset([], "a", OPENCODE_HOSTS), /not an object/);
+    assert.throws(
+      () => selectManifestAsset({ ...manifestFor(), version: 2 }, "a", OPENCODE_HOSTS),
+      /no sane version/,
+    );
+    assert.throws(
+      () => selectManifestAsset({ ...manifestFor(), version: "/etc" }, "a", OPENCODE_HOSTS),
+      /no sane version/,
+    );
+  });
+
+  it("rejects a manifest without a metadata object or a files map", () => {
+    assert.throws(
+      () => selectManifestAsset({ version: "2.0.8" }, "a", OPENCODE_HOSTS),
+      /no metadata object/,
+    );
+    assert.throws(
+      () => selectManifestAsset({ version: "2.0.8", metadata: { files: [] } }, "a", OPENCODE_HOSTS),
+      /no metadata\.files map/,
+    );
+  });
+
+  it("rejects a missing or malformed asset entry", () => {
+    assert.throws(
+      () => selectManifestAsset(manifestFor(), "nope.deb", OPENCODE_HOSTS),
+      /no entry for nope\.deb/,
+    );
+    assert.throws(
+      () => selectManifestAsset({ ...manifestFor(), metadata: { files: { x: "y" } } }, "x", OPENCODE_HOSTS),
+      /no entry for x/,
+    );
+  });
+
+  it("rejects unsafe, off-host or versionless asset urls", () => {
+    const withUrl = (url: string) =>
+      mutatedEntry((entry) => {
+        entry["url"] = url;
+      });
+    assert.throws(
+      () => selectManifestAsset(withUrl(""), "opencode-desktop-linux-amd64.deb", OPENCODE_HOSTS),
+      /has no url/,
+    );
+    assert.throws(
+      () =>
+        selectManifestAsset(
+          withUrl("http://opencode.ai/files/bin/2.0.8/x.deb"),
+          "opencode-desktop-linux-amd64.deb",
+          OPENCODE_HOSTS,
+        ),
+      /must be https/,
+    );
+    assert.throws(
+      () =>
+        selectManifestAsset(
+          withUrl("https://opencode.ai/files/bin/2.0.8/x.deb?foo=1"),
+          "opencode-desktop-linux-amd64.deb",
+          OPENCODE_HOSTS,
+        ),
+      /must not contain a query or fragment/,
+    );
+    assert.throws(
+      () =>
+        selectManifestAsset(
+          withUrl("https://evil.example.com/files/bin/2.0.8/x.deb"),
+          "opencode-desktop-linux-amd64.deb",
+          OPENCODE_HOSTS,
+        ),
+      /Unexpected update manifest asset host/,
+    );
+    assert.throws(
+      () =>
+        selectManifestAsset(
+          withUrl("https://opencode.ai/files/bin/2.0.9/x.deb"),
+          "opencode-desktop-linux-amd64.deb",
+          OPENCODE_HOSTS,
+        ),
+      /does not carry version 2\.0\.8/,
+    );
+  });
+
+  it("rejects a bad digest and unsane sizes", () => {
+    assert.throws(
+      () =>
+        selectManifestAsset(
+          mutatedEntry((entry) => {
+            entry["sha256"] = "zzz";
+          }),
+          "opencode-desktop-linux-amd64.deb",
+          OPENCODE_HOSTS,
+        ),
+      /sha256/,
+    );
+    assert.throws(
+      () =>
+        selectManifestAsset(
+          mutatedEntry((entry) => {
+            entry["size"] = 0;
+          }),
+          "opencode-desktop-linux-amd64.deb",
+          OPENCODE_HOSTS,
+        ),
+      /not a sane byte count/,
+    );
+    assert.throws(
+      () =>
+        selectManifestAsset(
+          mutatedEntry((entry) => {
+            entry["size"] = -1;
+          }),
+          "opencode-desktop-linux-amd64.deb",
+          OPENCODE_HOSTS,
+        ),
+      /not a sane byte count/,
+    );
+    assert.throws(
+      () =>
+        selectManifestAsset(
+          mutatedEntry((entry) => {
+            entry["size"] = 1.5;
+          }),
+          "opencode-desktop-linux-amd64.deb",
+          OPENCODE_HOSTS,
+        ),
+      /not a sane byte count/,
+    );
+  });
+
+  it("normalizes the manifest endpoint and rejects unsafe ones", () => {
+    assert.equal(
+      validateManifestEndpoint("https://opencode.ai/update/api/latest/desktop/opencode/"),
+      "https://opencode.ai/update/api/latest/desktop/opencode",
+    );
+    assert.throws(() => validateManifestEndpoint("http://opencode.ai/x"), /must be https/);
+    assert.throws(() => validateManifestEndpoint("https://opencode.ai/x?y=1"), /query or fragment/);
+    assert.throws(() => validateManifestEndpoint("not a url"), /Invalid update manifest endpoint/);
   });
 });

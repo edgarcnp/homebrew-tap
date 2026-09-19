@@ -7,7 +7,6 @@
   "watch": {
     "feedUrl": "https://github.com/anomalyco/opencode/releases.atom",
     "versionPattern": "^v(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
-    "skipPattern": "^v2\\.",
     "repo": "anomalyco/opencode"
   },
   "assetPrefix": "opencode-desktop",
@@ -21,9 +20,11 @@
   "architectures": ["amd64", "arm64"],
   "binaryTargets": ["opencode-desktop"],
   "oracle": {
-    "kind": "github-release",
-    "repository": "https://api.github.com/repos/anomalyco/opencode",
-    "assetPrefix": "opencode-desktop-linux"
+    "kind": "update-manifest",
+    "repository": "https://opencode.ai/update/api/latest/desktop/opencode",
+    "packageName": "opencode-desktop",
+    "assetTemplate": "opencode-desktop-linux-{arch}.deb",
+    "downloadHosts": ["opencode.ai"]
   },
   "payload": {
     "kind": "deb-tree",
@@ -37,14 +38,14 @@
   "updater": {
     "removeFeed": {
       "paths": ["bin/resources/app-update.yml"],
-      "required": false
+      "required": true
     },
     "env": {
       "OPENCODE_DISABLE_AUTOUPDATE": "1"
     },
     "residualScan": {
-      "patterns": ["https://github.com/anomalyco/opencode/releases/download/"],
-      "severity": "error"
+      "patterns": ["https://opencode.ai/update/api/"],
+      "severity": "warning"
     }
   }
 }

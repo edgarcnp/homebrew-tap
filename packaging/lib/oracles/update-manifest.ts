@@ -1,0 +1,194 @@
+// Update-manifest oracle. A pinned https JSON endpoint is the version source:
+// it returns {version, metadata: {files: {<name>: {url, sha256, size}}}}, e.g.
+// opencode's v2 desktop update API (GET
+// https://opencode.ai/update/api/latest/desktop/opencode). Unlike the CDN
+// redirect oracle the manifest publishes the SHA-256 and size the payload is
+// verified against, so --metadata-only resolve needs no download.
+
+import * as path from "node:path";
+import {
+  assertHostAllowed,
+  assertHttpsUrl,
+  assertPositiveSize,
+  assertSafeName,
+  assertSha256Hex,
+  fail,
+} from "../guards.ts";
+import {
+  MAX_PAYLOAD_BYTES,
+  digestMatchesHex,
+  fetchWithRetry,
+  readPayload,
+  sha256Digest,
+  writeFileAtomic,
+} from "../http.ts";
+import { writeMetadata } from "../metadata.ts";
+import type { Metadata, UpdateManifestOracle } from "../types.ts";
+import { prepareOutput, type ResolveRequest } from "./shared.ts";
+
+const MAX_MANIFEST_BYTES = 1024 * 1024;
+
+// Deb versions: leading digit, then [0-9A-Za-z.+~_-]*. "2.0.8" is fine and
+// must appear verbatim as a path segment of the asset URL below.
+const MANIFEST_VERSION = /^[0-9][0-9A-Za-z.+~_-]*$/;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export function validateManifestEndpoint(repository: string): string {
+  const url = assertHttpsUrl(repository, "update manifest endpoint");
+  return url.origin + url.pathname.replace(/\/+$/, "");
+}
+
+export interface ManifestAsset {
+  url: string;
+  sha256: string;
+  size: number;
+}
+
+export interface SelectedManifest {
+  version: string;
+  repository: string;
+  repositoryPath: string;
+  asset: ManifestAsset;
+}
+
+// Parses the update-manifest body and selects the asset named by assetName.
+// Every field the pipeline trusts — version, url, host, sha256, size — is
+// validated here so an upstream layout change fails loudly instead of
+// producing a wrong download. Pure of network side effects for testing.
+export function selectManifestAsset(
+  body: unknown,
+  assetName: string,
+  downloadHosts: readonly string[],
+): SelectedManifest {
+  if (!isRecord(body)) fail("Update manifest is not an object");
+  const version = body["version"];
+  if (typeof version !== "string" || !MANIFEST_VERSION.test(version)) {
+    fail(`Update manifest has no sane version: ${String(version)}`);
+  }
+  const metadata = body["metadata"];
+  if (!isRecord(metadata)) fail("Update manifest has no metadata object");
+  const files = metadata["files"];
+  if (!isRecord(files)) fail("Update manifest has no metadata.files map");
+  const entry = files[assetName];
+  if (!isRecord(entry)) fail(`Update manifest has no entry for ${assetName}`);
+  const rawUrl = entry["url"];
+  if (typeof rawUrl !== "string" || rawUrl === "") {
+    fail(`Update manifest ${assetName} has no url`);
+  }
+  const url = assertHttpsUrl(rawUrl, `Update manifest ${assetName} url`);
+  assertHostAllowed(url, downloadHosts, "update manifest asset");
+  // The file server pins the exact version in the download path; an entry
+  // pointing at a different version fails loudly rather than quietly
+  // downgrading or mixing versions.
+  if (!url.pathname.split("/").includes(version)) {
+    fail(`Update manifest ${assetName} url does not carry version ${version}: ${rawUrl}`);
+  }
+  const sha256 = entry["sha256"];
+  if (typeof sha256 !== "string" || sha256 === "") {
+    fail(`Update manifest ${assetName} has no sha256`);
+  }
+  assertSha256Hex(sha256, `Update manifest ${assetName} sha256`);
+  const size = assertPositiveSize(
+    entry["size"] as number,
+    MAX_PAYLOAD_BYTES,
+    `Update manifest ${assetName} size`,
+  );
+  return {
+    version,
+    repository: url.origin,
+    repositoryPath: url.pathname.replace(/^\/+/, ""),
+    asset: { url: rawUrl, sha256, size },
+  };
+}
+
+async function fetchManifest(repository: string): Promise<unknown> {
+  const response = await fetchWithRetry(repository, { redirect: "follow", timeoutMs: 30000 });
+  if (!response.ok) {
+    throw new Error(`Update manifest fetch failed (${response.status}) for ${repository}`);
+  }
+  const bytes = await readPayload(response, MAX_MANIFEST_BYTES);
+  return JSON.parse(bytes.toString("utf8"));
+}
+
+async function downloadAndVerify(
+  oracle: UpdateManifestOracle,
+  url: string,
+  destination: string,
+  label: string,
+  expectedSha256: string,
+  expectedSize: number,
+): Promise<void> {
+  const response = await fetchWithRetry(url, { redirect: "follow", timeoutMs: 60000 });
+  if (!response.ok) throw new Error(`Download failed (${response.status}) for ${url}`);
+  const finalUrl = new URL(response.url);
+  if (finalUrl.protocol !== "https:") {
+    throw new Error(`Download redirected to non-HTTPS URL (${finalUrl.protocol}) for ${url}`);
+  }
+  assertHostAllowed(finalUrl, oracle.downloadHosts, "download");
+  const contentLength = Number(response.headers.get("content-length") ?? 0);
+  if (contentLength > MAX_PAYLOAD_BYTES) throw new Error("payload too large");
+  const bytes = await readPayload(response);
+  if (bytes.length !== expectedSize) {
+    throw new Error(`${label} size mismatch: expected ${expectedSize}, got ${bytes.length}`);
+  }
+  const actual = sha256Digest(bytes).toString("hex");
+  if (!digestMatchesHex(expectedSha256, sha256Digest(bytes))) {
+    throw new Error(`${label} SHA256 mismatch: expected ${expectedSha256}, got ${actual}`);
+  }
+  writeFileAtomic(destination, bytes);
+}
+
+export async function resolveWithUpdateManifest(
+  oracle: UpdateManifestOracle,
+  request: ResolveRequest,
+): Promise<Metadata> {
+  const repository = validateManifestEndpoint(oracle.repository);
+  if (oracle.downloadHosts.length === 0) fail("downloadHosts must not be empty");
+  for (const host of oracle.downloadHosts) assertSafeName(host, "download host");
+  const packageName = assertSafeName(oracle.packageName, "package name");
+  if (!oracle.assetTemplate.includes("{arch}")) {
+    fail("update-manifest oracle requires an assetTemplate containing {arch}");
+  }
+  const assetName = oracle.assetTemplate.replaceAll("{arch}", request.architecture);
+  const { outputDir, metadataPath } = prepareOutput(request);
+  const manifest = selectManifestAsset(
+    await fetchManifest(repository),
+    assetName,
+    oracle.downloadHosts,
+  );
+
+  const metadata: Metadata = {
+    package: packageName,
+    version: manifest.version,
+    packageVersion: manifest.version,
+    architecture: request.architecture,
+    repositoryPath: manifest.repositoryPath,
+    sha256: manifest.asset.sha256,
+    size: manifest.asset.size,
+    depends: "",
+    repository: manifest.repository,
+    path: null,
+  };
+
+  if (!request.metadataOnly) {
+    const packagePath = path.join(
+      outputDir,
+      `${packageName}_${manifest.version}_${request.architecture}.deb`,
+    );
+    await downloadAndVerify(
+      oracle,
+      manifest.asset.url,
+      packagePath,
+      path.basename(packagePath),
+      manifest.asset.sha256,
+      manifest.asset.size,
+    );
+    metadata.path = packagePath;
+  }
+
+  writeMetadata(metadataPath, metadata);
+  return metadata;
+}

@@ -56,12 +56,23 @@ describe("descriptor contents (regression against the previous per-app scripts)"
     assert.equal(descriptor.updater.residualScan?.severity, "error");
   });
 
-  it("keeps opencode's release assets and update flags", () => {
+  it("keeps opencode's update-manifest, required feed removal and warning-level scan", () => {
     const descriptor = loadDescriptor("opencode");
-    assert.equal(descriptor.oracle.kind, "github-release");
-    assert.equal(descriptor.oracle.kind === "github-release" ? descriptor.oracle.assetPrefix : "", "opencode-desktop-linux");
+    assert.equal(descriptor.oracle.kind, "update-manifest");
+    if (descriptor.oracle.kind === "update-manifest") {
+      assert.equal(
+        descriptor.oracle.repository,
+        "https://opencode.ai/update/api/latest/desktop/opencode",
+      );
+      assert.equal(descriptor.oracle.assetTemplate, "opencode-desktop-linux-{arch}.deb");
+      assert.deepEqual(descriptor.oracle.downloadHosts, ["opencode.ai"]);
+    }
     assert.equal(descriptor.payload.tree, "opt/OpenCode");
-    assert.equal(descriptor.updater.removeFeed?.required, false);
+    assert.equal(descriptor.updater.removeFeed?.required, true);
+    assert.deepEqual(descriptor.updater.residualScan?.patterns, ["https://opencode.ai/update/api/"]);
+    // Warning, not error: the endpoint is legitimately embedded in app.asar,
+    // which cannot be same-length patched (see the app README).
+    assert.equal(descriptor.updater.residualScan?.severity, "warning");
     assert.deepEqual(descriptor.updater.env, { OPENCODE_DISABLE_AUTOUPDATE: "1" });
   });
 
@@ -115,7 +126,6 @@ describe("release watch", () => {
     assert.deepEqual(loadDescriptor("opencode").watch, {
       feedUrl: "https://github.com/anomalyco/opencode/releases.atom",
       versionPattern: "^v(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
-      skipPattern: "^v2\\.",
       repo: "anomalyco/opencode",
     });
     assert.deepEqual(loadDescriptor("gitbutler").watch, {
@@ -147,12 +157,6 @@ describe("release watch", () => {
   });
 
   it("skips the pre-release lines each pattern excludes", () => {
-    // opencode's 2.x line is a GitHub pre-release with no linux desktop
-    // assets, so the watch tracks the buildable 1.x line the oracle resolves.
-    const opencode = loadDescriptor("opencode").watch;
-    assert.ok(opencode?.skipPattern !== undefined);
-    assert.equal(new RegExp(opencode.skipPattern).test("v2.0.2"), true);
-
     const gitbutler = loadDescriptor("gitbutler").watch;
     assert.ok(gitbutler?.skipPattern !== undefined);
     assert.equal(new RegExp(gitbutler.skipPattern).test("nightly/0.5.2194"), true);
@@ -348,6 +352,41 @@ describe("descriptor validation", () => {
           "commandcode",
         ),
       /must contain \{version\}/,
+    );
+  });
+
+  it("rejects malformed update-manifest oracles", () => {
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("opencode", (copy) => { delete nested(copy, "oracle")["assetTemplate"]; }),
+          "opencode",
+        ),
+      /assetTemplate must be a non-empty string/,
+    );
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("opencode", (copy) => { nested(copy, "oracle")["assetTemplate"] = "opencode.desb"; }),
+          "opencode",
+        ),
+      /must contain \{arch\}/,
+    );
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("opencode", (copy) => { nested(copy, "oracle")["downloadHosts"] = []; }),
+          "opencode",
+        ),
+      /downloadHosts must not be empty/,
+    );
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("opencode", (copy) => { nested(copy, "oracle")["downloadHosts"] = "opencode.ai"; }),
+          "opencode",
+        ),
+      /downloadHosts must be an array/,
     );
   });
 

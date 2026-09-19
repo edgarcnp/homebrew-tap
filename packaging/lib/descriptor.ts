@@ -131,6 +131,21 @@ function validateOracle(raw: unknown, label: string): Oracle {
         debName: str(source, "debName", label),
       };
     }
+    case "update-manifest": {
+      const downloadHosts = strArray(source, "downloadHosts", label);
+      if (downloadHosts.length === 0) fail(`${label}.downloadHosts must not be empty`);
+      const assetTemplate = str(source, "assetTemplate", label);
+      if (!assetTemplate.includes("{arch}")) {
+        fail(`${label}.assetTemplate must contain {arch}: ${assetTemplate}`);
+      }
+      return {
+        kind,
+        repository: str(source, "repository", label),
+        downloadHosts,
+        packageName: str(source, "packageName", label),
+        assetTemplate,
+      };
+    }
     default:
       return fail(`Unknown resolver kind: ${kind}`);
   }

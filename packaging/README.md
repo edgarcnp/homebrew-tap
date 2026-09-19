@@ -84,6 +84,12 @@ upstream source kind behind a shared interface, dispatched exhaustively
 - **`cdn-redirect`** — a CDN download redirect that is itself the version
   source; the redirect target's URL shape is pinned, the payload is hashed on
   download (the CDN publishes no checksums).
+- **`update-manifest`** — a pinned https JSON endpoint that is itself the
+  version source and publishes the per-asset SHA-256/size (e.g. opencode's v2
+  desktop update API). The entry for `assetTemplate` (`{arch}` substituted)
+  must carry the version as a download-path segment on a pinned
+  `downloadHosts` host; the payload is verified against the manifest's digest
+  at download time, so `--metadata-only` resolve needs no download.
 
 ## `fbr` CLI
 
