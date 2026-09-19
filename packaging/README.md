@@ -95,6 +95,7 @@ upstream source kind behind a shared interface, dispatched exhaustively
 
 ```
 fbr list-apps [--json]                       app ids with a descriptor
+fbr resolve-app --name X                     map an app id or cask token to the app id
 fbr descriptor --app X [--field a.b]         validated descriptor (or one field)
 fbr descriptor-env --app X [--format env|output]
                                              KEY=VALUE lines for $GITHUB_ENV/$GITHUB_OUTPUT

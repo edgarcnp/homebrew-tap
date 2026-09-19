@@ -7,7 +7,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { parseArgs, type ParseArgsConfig } from "node:util";
 import { checkCask, readCaskFile, writeCask } from "./cask.ts";
-import { descriptorLines, listApps, loadDescriptor } from "./descriptor.ts";
+import { descriptorLines, listApps, loadDescriptor, resolveApp } from "./descriptor.ts";
 import { planGate } from "./gate.ts";
 import { readMetadataField } from "./metadata.ts";
 import { finalizeApp, neutralizeUpdater } from "./neutralize.ts";
@@ -113,6 +113,24 @@ const COMMANDS: Command[] = [
       } else {
         for (const app of apps) process.stdout.write(`${app}\n`);
       }
+      return 0;
+    },
+  },
+  {
+    name: "resolve-app",
+    summary: "Map an app id or cask token to the app id (--name)",
+    options: { name: { type: "string" } },
+    run: (flags) => {
+      const name = flags.str("name");
+      const app = resolveApp(name);
+      if (app === undefined) {
+        const known = listApps()
+          .map((id) => `${id} (${loadDescriptor(id).cask})`)
+          .join(", ");
+        process.stderr.write(`[ERROR] unknown app or cask '${name}' (known: ${known})\n`);
+        return 1;
+      }
+      process.stdout.write(`${app}\n`);
       return 0;
     },
   },

@@ -1,8 +1,9 @@
 name: Dispatch build
 
 # Sole repository_dispatch subscriber: a trigger-build event names the app to
-# build (or "all"). Routing lives in the build workflow's plan job, so an
-# unknown or missing app fails loudly instead of matching no job at all.
+# build, by app id or cask token (or "all"). Routing lives in the build
+# workflow's plan job, so an unknown or missing app fails loudly instead of
+# matching no job at all.
 
 on:
   repository_dispatch:
