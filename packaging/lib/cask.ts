@@ -4,6 +4,7 @@
 // every cask agrees with its app descriptor.
 
 import * as fs from "node:fs";
+import { APPIMAGE_ARCH, BREW_ARCH, resolveBrewArch } from "./architecture.ts";
 import { assertSha256Hex, fail } from "./guards.ts";
 import { writeFileAtomic } from "./http.ts";
 import type { AppDescriptor, Architecture, CaskState } from "./types.ts";
@@ -13,11 +14,6 @@ const ARM64_SHA256 = /arm64_linux:[ \t]*"([0-9a-f]{64})"/g;
 const X86_64_SHA256 = /x86_64_linux:[ \t]*"([0-9a-f]{64})"/g;
 const SINGLE_SHA256 = /^[ \t]*sha256 "([0-9a-f]{64})"/gm;
 const DEPENDS_ARCH = /depends_on arch: :(x86_64|arm64)/g;
-
-const APPIMAGE_ARCH: Record<Architecture, string> = {
-  amd64: "x86_64",
-  arm64: "aarch64",
-};
 
 function isDualArch(architectures: readonly Architecture[]): boolean {
   return architectures.length === 2 && architectures.includes("amd64") && architectures.includes("arm64");
@@ -63,8 +59,7 @@ export function readCask(source: string): CaskState {
     if (archMatches.length !== 1) {
       fail(`single-arch cask must contain exactly one depends_on arch (found ${archMatches.length})`);
     }
-    const brewArch = archMatches[0]?.[1];
-    const architecture: Architecture = brewArch === "x86_64" ? "amd64" : brewArch === "arm64" ? "arm64" : fail(`unsupported depends_on arch: ${brewArch}`);
+    const architecture = resolveBrewArch(archMatches[0]?.[1] ?? "");
     const appimageArch = APPIMAGE_ARCH[architecture];
     if (!source.includes(`-${appimageArch}.AppImage`)) {
       fail(`single-arch cask URL does not contain -${appimageArch}.AppImage`);
@@ -131,8 +126,7 @@ export function updateCask(source: string, state: CaskState): string {
   if (arm64Count === 0 && x86Count === 0 && singleCount === 1) {
     const archMatches = [...updated.matchAll(DEPENDS_ARCH)];
     if (archMatches.length !== 1) fail("single-arch cask must contain exactly one depends_on arch");
-    const brewArch = archMatches[0]?.[1];
-    const architecture: Architecture = brewArch === "x86_64" ? "amd64" : brewArch === "arm64" ? "arm64" : fail(`unsupported depends_on arch: ${brewArch}`);
+    const architecture = resolveBrewArch(archMatches[0]?.[1] ?? "");
     const hash = state.sha256[architecture];
     if (hash === undefined) fail(`single-arch cask update requires the ${architecture} checksum`);
     const other: Architecture = architecture === "amd64" ? "arm64" : "amd64";
@@ -199,10 +193,11 @@ export function checkCask(descriptor: AppDescriptor, source: string): string[] {
     require(arm64.length === 1, `expected one arm64_linux sha256, found ${arm64.length}`);
     require(x86_64.length === 1, `expected one x86_64_linux sha256, found ${x86_64.length}`);
     require(single.length === 0, `dual-arch cask must not carry a single sha256 (found ${single.length})`);
-    require(source.includes('arch arm: "aarch64", intel: "x86_64"'), "missing arch arm/intel mapping");
+    const archMapping = `arch arm: "${APPIMAGE_ARCH.arm64}", intel: "${APPIMAGE_ARCH.amd64}"`;
+    require(source.includes(archMapping), `missing arch mapping: ${archMapping}`);
   } else {
     const arch = singleArch(descriptor.architectures);
-    const brewArch = arch === "amd64" ? "x86_64" : "arm64";
+    const brewArch = BREW_ARCH[arch];
     require(arm64.length === 0, `single-arch cask must not carry arm64_linux sha256 (found ${arm64.length})`);
     require(x86_64.length === 0, `single-arch cask must not carry x86_64_linux sha256 (found ${x86_64.length})`);
     require(single.length === 1, `expected one single sha256, found ${single.length}`);

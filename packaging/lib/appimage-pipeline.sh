@@ -42,8 +42,10 @@ pipeline_init() {
   PACKAGE_NAME="$(descriptor_field '.cask')"
   TARGET_ARCH="${TARGET_ARCH:-$(uname -m)}"
 
+  # The arch table lives in packaging/lib/architecture.ts (fbr arch), so the
+  # shell stages cannot disagree with the cask check about an arch spelling.
   local arch_line
-  arch_line="$(map_arch)"
+  arch_line="$(fbr arch --arch "${TARGET_ARCH}")"
   DEB_ARCH="${arch_line% *}"
   APPIMAGE_ARCH="${arch_line#* }"
 

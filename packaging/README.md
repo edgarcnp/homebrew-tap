@@ -110,6 +110,7 @@ fbr cask --action read|set-version|check     read, re-pin or check casks
 fbr neutralize --app X --appdir D            disable the in-AppDir updater
 fbr finalize --app X --appdir D              write .env and install the hook
 fbr render-desktop --app X --version V --appdir D
+fbr arch --arch S                            map amd64|x86_64|arm64|aarch64 to "<deb-arch> <appimage-arch>"
 fbr version-compare A B                      dpkg-equivalent comparison (-1|0|1)
 fbr version-compare --sort A B [C ...]       dpkg-order a list ascending, one per line
 ```
