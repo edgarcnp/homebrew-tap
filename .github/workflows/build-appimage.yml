@@ -163,45 +163,17 @@ jobs:
 
           matches=""
           if [[ "${release_exists}" = "true" && "${cask_version}" = "${version}" ]]; then
+            # The asset-vs-cask comparison is a unit-tested command: it prints
+            # true|false, or nothing when a shipped architecture has no single
+            # matching asset (could not compare) - exactly the gate's tri-state.
             tmp_dir="$(mktemp -d)"
             if timeout 60 gh release download "${TAG_PREFIX}${version}" \
               --repo "${GITHUB_REPOSITORY}" \
-              --pattern "${ASSET_PREFIX}-*-x86_64.AppImage" \
-              --pattern "${ASSET_PREFIX}-*-aarch64.AppImage" \
+              --pattern "${ASSET_PREFIX}-*.AppImage" \
               --dir "${tmp_dir}" --clobber
             then
-              shopt -s nullglob
-              x86_files=("${tmp_dir}/${ASSET_PREFIX}"-*-x86_64.AppImage)
-              arm_files=("${tmp_dir}/${ASSET_PREFIX}"-*-aarch64.AppImage)
-              # Single-arch apps publish one AppImage; compare only the
-              # architectures the descriptor ships. A missing expected asset
-              # leaves matches empty (could not compare); a hash mismatch
-              # sets it to false.
-              incomparable=false
-              amd64_ok=true
-              arm64_ok=true
-              if [[ "${APP_ARCHITECTURES}" == *amd64* ]]; then
-                if [[ "${#x86_files[@]}" -ne 1 ]]; then
-                  echo "expected exactly one x86_64 asset in release ${TAG_PREFIX}${version}" >&2
-                  incomparable=true
-                elif [[ "$(sha256sum "${x86_files[0]}" | awk '{print $1}')" != "$(jq -r '.sha256.amd64' <<<"${cask_json}")" ]]; then
-                  amd64_ok=false
-                fi
-              fi
-              if [[ "${APP_ARCHITECTURES}" == *arm64* ]]; then
-                if [[ "${#arm_files[@]}" -ne 1 ]]; then
-                  echo "expected exactly one aarch64 asset in release ${TAG_PREFIX}${version}" >&2
-                  incomparable=true
-                elif [[ "$(sha256sum "${arm_files[0]}" | awk '{print $1}')" != "$(jq -r '.sha256.arm64' <<<"${cask_json}")" ]]; then
-                  arm64_ok=false
-                fi
-              fi
-              if [[ "${incomparable}" = "false" ]]; then
-                matches=false
-                if [[ "${amd64_ok}" = "true" && "${arm64_ok}" = "true" ]]; then
-                  matches=true
-                fi
-              fi
+              matches="$(bun tap/packaging/bin/fbr.ts release-check \
+                --app "${APP_ID}" --tap "${GITHUB_WORKSPACE}/tap" --asset-dir "${tmp_dir}")"
             else
               echo "failed to download release ${TAG_PREFIX}${version}" >&2
             fi
