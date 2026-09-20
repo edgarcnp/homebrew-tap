@@ -1,22 +1,22 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { selectLatestPackage, verifyIndexedFile } from "./apt.ts";
-import { parseFinalUrl } from "./cdn-redirect.ts";
+import { selectLatestPackage, verifyIndexedFile } from "../../lib/oracles/apt.ts";
+import { parseFinalUrl } from "../../lib/oracles/cdn-redirect.ts";
 import {
   parseFeedRedirect,
   parseUpdateYml,
   requireGithubCoords,
   selectAsset,
   validateFeedRepository,
-} from "./electron-feed.ts";
-import { selectRelease } from "./github-release.ts";
-import { assertRepositoryUrl } from "./github-api.ts";
-import { normalizeTagVersion, parseSha256Digest } from "./release-common.ts";
+} from "../../lib/oracles/electron-feed.ts";
+import { selectRelease } from "../../lib/oracles/github-release.ts";
+import { assertRepositoryUrl } from "../../lib/oracles/github-api.ts";
+import { normalizeTagVersion, parseSha256Digest } from "../../lib/oracles/release-common.ts";
 import {
   selectManifestAsset,
   validateManifestEndpoint,
-} from "./update-manifest.ts";
-import { compareDebVersions } from "../core/version.ts";
+} from "../../lib/oracles/update-manifest.ts";
+import { compareDebVersions } from "../../lib/core/version.ts";
 
 const SHA512 = "A".repeat(86) + "==";
 const GITBUTLER_HOSTS = ["releases.gitbutler.com"];

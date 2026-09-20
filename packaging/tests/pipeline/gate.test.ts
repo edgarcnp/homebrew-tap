@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { isNewer, planGate } from "./gate.ts";
-import type { CaskState } from "../core/types.ts";
+import { isNewer, planGate } from "../../lib/pipeline/gate.ts";
+import type { CaskState } from "../../lib/core/types.ts";
 
 function cask(version: string): CaskState {
   return { version, sha256: { amd64: "a".repeat(64), arm64: "b".repeat(64) } };

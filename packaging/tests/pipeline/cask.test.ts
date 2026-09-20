@@ -3,9 +3,9 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { describe, it } from "node:test";
-import { checkCask, readCask, readCaskFile, updateCask, writeCask } from "./cask.ts";
-import { listApps, loadDescriptor } from "./descriptor.ts";
-import { caskPath } from "../core/paths.ts";
+import { checkCask, readCask, readCaskFile, updateCask, writeCask } from "../../lib/pipeline/cask.ts";
+import { listApps, loadDescriptor } from "../../lib/pipeline/descriptor.ts";
+import { caskPath } from "../../lib/core/paths.ts";
 
 const HASH_A = "a".repeat(64);
 const HASH_B = "b".repeat(64);

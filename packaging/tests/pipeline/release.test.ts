@@ -3,9 +3,9 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { describe, it } from "node:test";
-import { loadDescriptor } from "./descriptor.ts";
-import { sha256Hex } from "../core/http.ts";
-import { compareReleasedAssets, planReleasePrune, renderReleaseNotes } from "./release.ts";
+import { loadDescriptor } from "../../lib/pipeline/descriptor.ts";
+import { sha256Hex } from "../../lib/core/http.ts";
+import { compareReleasedAssets, planReleasePrune, renderReleaseNotes } from "../../lib/pipeline/release.ts";
 
 // vscode ships both architectures, so it exercises the dual-arch walk.
 const descriptor = loadDescriptor("vscode");

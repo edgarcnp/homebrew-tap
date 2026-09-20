@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { compareDebVersions, sortDebVersions, normalizeUpstreamVersion, parseDebVersion } from "./version.ts";
+import { compareDebVersions, sortDebVersions, normalizeUpstreamVersion, parseDebVersion } from "../../lib/core/version.ts";
 
 describe("compareDebVersions", () => {
   // Expectations follow dpkg's verrevcmp()/order() (libdpkg/version.c): the

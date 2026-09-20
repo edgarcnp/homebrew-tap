@@ -12,9 +12,9 @@ import {
   assertSameLength,
   assertSha256Hex,
   assertSingleLine,
-} from "./guards.ts";
-import { assertMetadata, METADATA_KEYS, metadataUrl, readMetadataField, writeMetadata } from "./metadata.ts";
-import type { Metadata } from "./types.ts";
+} from "../../lib/core/guards.ts";
+import { assertMetadata, METADATA_KEYS, metadataUrl, readMetadataField, writeMetadata } from "../../lib/core/metadata.ts";
+import type { Metadata } from "../../lib/core/types.ts";
 
 function validMetadata(): Metadata {
   return {

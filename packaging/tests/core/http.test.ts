@@ -12,7 +12,7 @@ import {
   sha256Digest,
   sha256Hex,
   writeFileAtomic,
-} from "./http.ts";
+} from "../../lib/core/http.ts";
 
 let server: http.Server;
 let baseUrl: string;

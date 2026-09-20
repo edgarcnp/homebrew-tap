@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import * as path from "node:path";
 import { describe, it } from "node:test";
-import { listApps } from "./pipeline/descriptor.ts";
-import { REPO_ROOT } from "./core/paths.ts";
+import { listApps } from "../lib/pipeline/descriptor.ts";
+import { REPO_ROOT } from "../lib/core/paths.ts";
 
 // The workflows call fbr with exact flag shapes; these tests run the real
 // entry point so a flag contract change cannot ship without CI noticing.
