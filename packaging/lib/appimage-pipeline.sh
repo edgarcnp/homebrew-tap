@@ -198,6 +198,57 @@ pipeline_install_icon() {
   cp -- "${APPDIR}/${PACKAGE_NAME}.png" "${APPDIR}/share/icons/hicolor/${size}/apps/${PACKAGE_NAME}.png"
 }
 
+# quick-sharun's _handle_nested_bins recursively replaces every nested
+# executable under bin/ whose basename also lands in shared/bin with an
+# in-place hardlink of sharun. A wrapper not directly under bin/ cannot map
+# back to shared/bin/<name>: sharun resolves its root from /proc/self/exe and
+# only accepts the bin/<name> <-> shared/bin/<name> contract, so a process
+# that spawns the sidecar by path -- e.g. opencode-desktop spawning
+# join(process.resourcesPath, "opencode-cli") -- fails with "Failed to find
+# '<name>' in PATH or <dir>/shared/bin" ("Interpreter not found!").
+#
+# sharun follows a symlink that resolves to the working bin/<name> wrapper
+# instead, so re-point every nested wrapper there. The target is computed
+# relative to the sidecar's own directory (and so survives a different mount
+# point and --appimage-extract). A nested wrapper that cannot be mapped is a
+# dead sidecar, which is the failure this stage exists to prevent, so it
+# fails the build rather than shipping.
+pipeline_reconcile_sharun_sidecars() {
+  local sharun sidecar rel name wrapper real up rest target reconciled
+  sharun="${APPDIR}/sharun"
+  [ -x "${sharun}" ] || return 0
+
+  reconciled=0
+  while IFS= read -r -d '' sidecar
+  do
+    # only the wrappers quick-sharun actually created (hardlinks of sharun);
+    # a real sidecar binary is a distinct inode and is left alone
+    [ "${sidecar}" -ef "${sharun}" ] || continue
+    name="${sidecar##*/}"
+    wrapper="${APPDIR}/bin/${name}"
+    real="${APPDIR}/shared/bin/${name}"
+    if [ -f "${wrapper}" ] && [ "${wrapper}" -ef "${sharun}" ] && [ -x "${real}" ]
+    then
+      rel="${sidecar#"${APPDIR}/bin/"}"
+      rel="${rel%/*}"
+      up=".."
+      rest="${rel}"
+      while [[ "${rest}" == */* ]]
+      do
+        up="../${up}"
+        rest="${rest#*/}"
+      done
+      target="${up}/${name}"
+      ln -sfn "${target}" "${sidecar}"
+      reconciled=$((reconciled + 1))
+      info "Relinked ${sidecar#"${APPDIR}/"} -> ${target}"
+      continue
+    fi
+    error "Nested sharun wrapper ${sidecar#"${APPDIR}/"} has no bin/${name} wrapper for shared/bin/${name}; it would fail at runtime"
+  done < <(find "${APPDIR}/bin" -mindepth 2 -type f -links +1 -print0)
+  [[ "${reconciled}" -eq 0 ]] || info "Reconciled ${reconciled} nested sharun sidecar(s)"
+}
+
 # Packages the AppDir: quick-sharun (which generates AppRun and bundles the
 # runtime closure including libc), then the pkgforge appimagetool (uruntime /
 # DWARFS) invoked through APPIMAGETOOL with no CLI args, then the smoke gate.
@@ -229,6 +280,7 @@ Install the Anylinux tools (packaging/scripts/install-anylinux-tools.sh) or add 
     targets=("${APPDIR}/bin/"*)
   fi
   quick-sharun "${targets[@]}"
+  pipeline_reconcile_sharun_sidecars
 
   # .env entries and the runtime hook belong to the finished AppDir, so they
   # are applied after quick-sharun generated AppRun.
