@@ -115,6 +115,8 @@ fbr cask --action read|set-version|check     read, re-pin or check casks
 fbr release-check --app X --asset-dir D      compare downloaded release assets to the
      [--tap T]                               cask pin (true|false, or nothing when it
                                              could not compare)
+fbr release-prune --prefix P --keep N TAGS   print the stale release versions to prune,
+                                             dpkg-ordered oldest first
 fbr neutralize --app X --appdir D            disable the in-AppDir updater
 fbr finalize --app X --appdir D              write .env and install the hook
 fbr render-desktop --app X --version V --appdir D

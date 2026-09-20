@@ -5,7 +5,7 @@ import * as path from "node:path";
 import { describe, it } from "node:test";
 import { loadDescriptor } from "./descriptor.ts";
 import { sha256Hex } from "./http.ts";
-import { compareReleasedAssets } from "./release.ts";
+import { compareReleasedAssets, planReleasePrune } from "./release.ts";
 
 // vscode ships both architectures, so it exercises the dual-arch walk.
 const descriptor = loadDescriptor("vscode");
@@ -101,5 +101,37 @@ describe("compareReleasedAssets", () => {
         assert.match(result.notes.join("; "), /cask does not pin the arm64 checksum/);
       },
     );
+  });
+});
+
+describe("planReleasePrune", () => {
+  it("returns the oldest versions beyond the keep window", () => {
+    const plan = planReleasePrune(
+      ["vscode-v1.9.0", "vscode-v1.137.0", "vscode-v1.10.0"],
+      "vscode-v",
+      2,
+    );
+    assert.deepEqual(plan.versions, ["1.9.0", "1.10.0", "1.137.0"]);
+    assert.deepEqual(plan.stale, ["1.9.0"]);
+  });
+
+  it("orders by dpkg, so a lettered version is not mistaken for the newest", () => {
+    const plan = planReleasePrune(
+      ["vscode-v1.0.109-1", "vscode-v1.0.109a", "vscode-v1.9.0"],
+      "vscode-v",
+      1,
+    );
+    assert.deepEqual(plan.stale, ["1.0.109-1", "1.0.109a"]);
+  });
+
+  it("ignores other tags and reports nothing stale within the window", () => {
+    const plan = planReleasePrune(["other-v9.9.9", "vscode-v1.0.0", ""], "vscode-v", 3);
+    assert.deepEqual(plan.versions, ["1.0.0"]);
+    assert.deepEqual(plan.stale, []);
+  });
+
+  it("fails on an empty or unparseable version under the prefix", () => {
+    assert.throws(() => planReleasePrune(["vscode-v"], "vscode-v", 1), /empty version/);
+    assert.throws(() => planReleasePrune(["vscode-v../etc"], "vscode-v", 1), /Invalid package version/);
   });
 });

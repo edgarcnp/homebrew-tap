@@ -430,38 +430,26 @@ jobs:
           # "Newest" is the pipeline's dpkg ordering, not `sort -V`: for shapes
           # upstreams publish (1.0.109a vs 1.0.109-1, 1.0+build vs 1.0-rc.1)
           # GNU's version sort and dpkg disagree about which is newer, and
-          # pruning must never drop the newest release. A failing gh call or an
-          # unparseable tag fails this step instead of pruning a short list.
+          # pruning must never drop the newest release. release-prune owns that
+          # ordering and the prefix/validation rules; it prints the stale
+          # versions (oldest first) and nothing when all are within the keep
+          # window. A failing gh call or an unparseable tag fails the step
+          # instead of pruning a short list.
           tags="$(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName \
             --jq '.[].tagName')"
+          mapfile -t tag_list <<< "${tags}"
 
-          versions=()
-          while IFS= read -r tag
-          do
-            [ -n "${tag}" ] || continue
-            stripped="${tag#"${TAG_PREFIX}"}"
-            [ "${stripped}" != "${tag}" ] || continue
-            [ -n "${stripped}" ] || { echo "::error::release tag ${tag} has an empty version" >&2; exit 1; }
-            versions+=("${stripped}")
-          done <<< "${tags}"
-
-          keep=3
-          if [ "${#versions[@]}" -le "${keep}" ]; then
-            printf 'retaining %s release(s); nothing stale\n' "${#versions[@]}"
+          stale="$(bun tap/packaging/bin/fbr.ts release-prune \
+            --prefix "${TAG_PREFIX}" --keep 3 "${tag_list[@]}")"
+          if [ -z "${stale}" ]; then
+            echo "retaining all releases; nothing stale"
             exit 0
           fi
-
-          ordered="$(bun tap/packaging/bin/fbr.ts version-compare --sort "${versions[@]}")"
-          [ -n "${ordered}" ] || { echo "::error::version-compare --sort produced no output" >&2; exit 1; }
-          mapfile -t sorted <<< "${ordered}"
-
-          stale=("${sorted[@]:0:$((${#sorted[@]} - keep))}")
-          printf 'retaining %s release(s); deleting %s stale release(s)\n' "${keep}" "${#stale[@]}"
-          for version in "${stale[@]}"
+          while IFS= read -r version
           do
             printf 'deleting release %s%s\n' "${TAG_PREFIX}" "${version}"
             gh release delete "${TAG_PREFIX}${version}" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag
-          done
+          done <<< "${stale}"
 
   # One job covers both gate outcomes: a fresh build (after publish) and a
   # cask-only repair (publish skipped). always() is what lets it run when

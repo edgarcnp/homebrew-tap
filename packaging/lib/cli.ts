@@ -11,7 +11,7 @@ import { checkCask, readCaskFile, writeCask } from "./cask.ts";
 import { descriptorLines, listApps, loadDescriptor, resolveApp } from "./descriptor.ts";
 import { planGate } from "./gate.ts";
 import { readMetadataField } from "./metadata.ts";
-import { compareReleasedAssets } from "./release.ts";
+import { compareReleasedAssets, planReleasePrune } from "./release.ts";
 import { finalizeApp, neutralizeUpdater } from "./neutralize.ts";
 import { resolveWith } from "./oracles/registry.ts";
 import { writeDesktopEntry } from "./render.ts";
@@ -319,6 +319,25 @@ const COMMANDS: Command[] = [
       // "no evidence" and catches the cask up rather than trusting it.
       if (matches === null) return 0;
       process.stdout.write(`${matches}\n`);
+      return 0;
+    },
+  },
+  {
+    name: "release-prune",
+    summary:
+      "Print the stale release versions to prune (--prefix, --keep, tags...), dpkg-ordered",
+    options: { prefix: { type: "string" }, keep: { type: "string" } },
+    positionals: true,
+    run: (flags, positionals) => {
+      const keep = Number(flags.str("keep"));
+      if (!Number.isSafeInteger(keep) || keep < 0) {
+        throw new UsageError("--keep must be a non-negative integer");
+      }
+      const { versions, stale } = planReleasePrune(positionals, flags.str("prefix"), keep);
+      process.stderr.write(
+        `[INFO] retaining the newest ${keep}; pruning ${stale.length} of ${versions.length} release(s)\n`,
+      );
+      for (const version of stale) process.stdout.write(`${version}\n`);
       return 0;
     },
   },
