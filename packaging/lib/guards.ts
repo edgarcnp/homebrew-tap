@@ -3,9 +3,16 @@
 // drift between oracles.
 
 import * as path from "node:path";
+import { SAFE_IDENTIFIER } from "./patterns.ts";
 
 export function fail(message: string): never {
   throw new Error(message);
+}
+
+// Narrowing helper for parsed JSON/API payloads: a plain object, not null or an
+// array. Arrays are excluded because every caller indexes by string key.
+export function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 // Hosts GitHub serves release assets from. Shared so an oracle cannot forget
@@ -31,7 +38,7 @@ export function assertMatches(value: string, pattern: RegExp, label: string): st
 
 // Package/cask/asset identifiers: no path separators, no leading dash.
 export function assertSafeName(value: string, label: string): string {
-  return assertMatches(value, /^[A-Za-z0-9][A-Za-z0-9._-]*$/, label);
+  return assertMatches(value, SAFE_IDENTIFIER, label);
 }
 
 export function assertSha256Hex(value: string, label: string): string {

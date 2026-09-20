@@ -2,10 +2,11 @@
 // electron-updater feed, which cross-checks against the same API).
 
 import { assertMatches } from "../guards.ts";
+import { DEB_VERSION } from "../patterns.ts";
 
 export function normalizeTagVersion(tag: string): string {
   const version = String(tag).replace(/^v/, "");
-  return assertMatches(version, /^[0-9][0-9A-Za-z.+~_-]*$/, "release tag version");
+  return assertMatches(version, DEB_VERSION, "release tag version");
 }
 
 // The one shape a GitHub release-asset digest may take. Tested without

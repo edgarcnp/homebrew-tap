@@ -18,6 +18,8 @@ import {
 } from "../guards.ts";
 import { MAX_PAYLOAD_BYTES, fetchWithRetry } from "../http.ts";
 import { makeMetadata, writeMetadata } from "../metadata.ts";
+import { SAFE_REFERENCE } from "../patterns.ts";
+import { substitutePlaceholders } from "../template.ts";
 import type { Architecture, ElectronFeedOracle, Metadata } from "../types.ts";
 import { downloadVerified, fetchVerified } from "./download.ts";
 import {
@@ -232,11 +234,7 @@ export async function resolveWithElectronFeed(
   const layout = ARCH_LAYOUT[request.architecture];
   const repository = validateFeedRepository(oracle.repository);
   const githubRepository = assertRepositoryUrl(oracle.githubRepository);
-  const tagPrefix = assertMatches(
-    oracle.tagPrefix,
-    /^[A-Za-z0-9][A-Za-z0-9._+-]*$/,
-    "tag prefix",
-  );
+  const tagPrefix = assertMatches(oracle.tagPrefix, SAFE_REFERENCE, "tag prefix");
   const { outputDir, metadataPath } = prepareOutput(request);
 
   // Redirect only: the Location header carries the exact release tag.
@@ -255,9 +253,10 @@ export async function resolveWithElectronFeed(
   const parsed = parseFeedRedirect(location, tagPrefix);
   requireGithubCoords(parsed, githubRepository);
 
-  const expectedAsset = oracle.assetNameTemplate
-    .replaceAll("{version}", parsed.version)
-    .replaceAll("{arch}", layout.assetArch);
+  const expectedAsset = substitutePlaceholders(oracle.assetNameTemplate, {
+    version: parsed.version,
+    arch: layout.assetArch,
+  });
   const yml = parseUpdateYml(await fetchYaml(location), parsed.version, expectedAsset);
 
   const release = await githubApiFetch(

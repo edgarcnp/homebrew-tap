@@ -9,18 +9,20 @@ import * as path from "node:path";
 import { GITHUB_ASSET_HOSTS, assertMatches, assertPositiveSize, fail } from "../guards.ts";
 import { MAX_PAYLOAD_BYTES } from "../http.ts";
 import { makeMetadata, writeMetadata } from "../metadata.ts";
+import { SAFE_REFERENCE } from "../patterns.ts";
+import { substitutePlaceholders } from "../template.ts";
 import type { Architecture, GithubReleaseOracle, Metadata } from "../types.ts";
 import { ARCHITECTURES } from "../types.ts";
 import { downloadVerified } from "./download.ts";
 import {
+  assertRepositoryUrl,
+  asReleaseList,
   githubApiFetch,
   githubDownloadBase,
-  asReleaseList,
   isPublishedRelease,
   releaseAssetMap,
   releaseTag,
   releasesApiUrl,
-  assertRepositoryUrl,
   type ReleaseAssetRecord,
 } from "./github-api.ts";
 import { isSha256Digest, normalizeTagVersion, parseSha256Digest } from "./release-common.ts";
@@ -95,7 +97,7 @@ export async function selectTemplatedRelease(
   architecture: Architecture,
   token: string,
 ): Promise<TemplatedSelection> {
-  const prefix = assertMatches(tagPrefix, /^[A-Za-z0-9][A-Za-z0-9._+-]*$/, "tag prefix");
+  const prefix = assertMatches(tagPrefix, SAFE_REFERENCE, "tag prefix");
   if (!assetNameTemplate.includes("{version}")) fail("assetNameTemplate must contain {version}");
   const releases = asReleaseList(await githubApiFetch(releasesApiUrl(repository), token));
   for (const release of releases) {
@@ -108,15 +110,13 @@ export async function selectTemplatedRelease(
     } catch {
       continue;
     }
-    const expected = assetNameTemplate
-      .replaceAll("{version}", version)
-      .replaceAll("{arch}", architecture);
+    const expected = substitutePlaceholders(assetNameTemplate, { version, arch: architecture });
     const asset = validatedAsset(releaseAssetMap(release).get(expected));
     if (asset === null) continue;
     return { tag, version, asset };
   }
   throw new Error(
-    `No GitHub release found carrying ${assetNameTemplate.replaceAll("{arch}", architecture)} with a SHA-256 digest under tag prefix ${prefix}`,
+    `No GitHub release found carrying ${substitutePlaceholders(assetNameTemplate, { arch: architecture })} with a SHA-256 digest under tag prefix ${prefix}`,
   );
 }
 
@@ -133,11 +133,7 @@ export async function resolveWithGithubRelease(
     if (oracle.tagPrefix === undefined || oracle.packageName === undefined) {
       fail("assetNameTemplate requires tagPrefix and packageName");
     }
-    const packageName = assertMatches(
-      oracle.packageName,
-      /^[A-Za-z0-9][A-Za-z0-9._+-]*$/,
-      "package name",
-    );
+    const packageName = assertMatches(oracle.packageName, SAFE_REFERENCE, "package name");
     const { tag, version, asset } = await selectTemplatedRelease(
       repository,
       oracle.assetNameTemplate,
@@ -172,11 +168,7 @@ export async function resolveWithGithubRelease(
   }
 
   if (oracle.assetPrefix === undefined) fail("github-release oracle requires assetPrefix or assetNameTemplate");
-  const assetPrefix = assertMatches(
-    oracle.assetPrefix,
-    /^[A-Za-z0-9][A-Za-z0-9._+-]*$/,
-    "asset prefix",
-  );
+  const assetPrefix = assertMatches(oracle.assetPrefix, SAFE_REFERENCE, "asset prefix");
   const { tag, assets } = await selectRelease(repository, assetPrefix, request.token);
   const asset = assets[architecture];
   const version = normalizeTagVersion(tag);

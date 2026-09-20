@@ -4,15 +4,13 @@
 // oracles use. Keeping them here means host pinning and pagination cannot
 // drift between the two resolvers.
 
-import { assertSingleLine, fail } from "../guards.ts";
+import { assertSingleLine, fail, isRecord } from "../guards.ts";
 import { fetchWithRetry } from "../http.ts";
+import { GITHUB_API_REPOSITORY } from "../patterns.ts";
 
 export const GITHUB_API_PREFIX = "https://api.github.com/repos/";
 export const GITHUB_DOWNLOAD_PREFIX = "https://github.com/";
 const RELEASES_PER_PAGE = 30;
-
-const REPOSITORY_PATTERN =
-  /^https:\/\/api\.github\.com\/repos\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 
 export interface RepositoryCoordinates {
   owner: string;
@@ -24,7 +22,7 @@ export interface RepositoryCoordinates {
 // attacker-controlled host.
 export function assertRepositoryUrl(repository: string): string {
   const normalized = repository.replace(/\/+$/, "");
-  if (!REPOSITORY_PATTERN.test(normalized)) {
+  if (!GITHUB_API_REPOSITORY.test(normalized)) {
     fail(`Unsafe GitHub API repository URL: ${repository}`);
   }
   return normalized;
@@ -76,10 +74,6 @@ export interface ReleaseAssetRecord {
   name: string;
   digest: string;
   size: number;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 // A release the pipeline may build from: neither a draft nor a prerelease.
