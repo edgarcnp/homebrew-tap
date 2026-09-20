@@ -6,24 +6,25 @@
 // ("<name>-<version>-<arch>.deb") under a pinned tag prefix.
 
 import * as path from "node:path";
-import {
-  GITHUB_ASSET_HOSTS,
-  assertMatches,
-  assertPositiveSize,
-  assertSingleLine,
-  fail,
-} from "../guards.ts";
-import { MAX_PAYLOAD_BYTES, fetchWithRetry } from "../http.ts";
+import { GITHUB_ASSET_HOSTS, assertMatches, assertPositiveSize, fail } from "../guards.ts";
+import { MAX_PAYLOAD_BYTES } from "../http.ts";
 import { writeMetadata } from "../metadata.ts";
 import type { Architecture, GithubReleaseOracle, Metadata } from "../types.ts";
 import { ARCHITECTURES } from "../types.ts";
 import { downloadVerified } from "./download.ts";
-import { parseSha256Digest, normalizeTagVersion } from "./release-common.ts";
+import {
+  githubApiFetch,
+  githubDownloadBase,
+  asReleaseList,
+  isPublishedRelease,
+  releaseAssetMap,
+  releaseTag,
+  releasesApiUrl,
+  assertRepositoryUrl,
+  type ReleaseAssetRecord,
+} from "./github-api.ts";
+import { isSha256Digest, normalizeTagVersion, parseSha256Digest } from "./release-common.ts";
 import { prepareOutput, type ResolveRequest } from "./shared.ts";
-
-const GITHUB_API_PREFIX = "https://api.github.com/repos/";
-const REPOSITORY_PATTERN =
-  /^https:\/\/api\.github\.com\/repos\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 
 interface ReleaseAsset {
   name: string;
@@ -31,29 +32,16 @@ interface ReleaseAsset {
   size: number;
 }
 
-export function assertRepositoryUrl(repository: string): string {
-  const normalized = repository.replace(/\/+$/, "");
-  if (!REPOSITORY_PATTERN.test(normalized)) {
-    fail(`Unsafe GitHub API repository URL: ${repository}`);
+// An asset is usable only when its digest is a real sha256 and its size is
+// sane; anything else counts as "not published", so a partial release is
+// skipped rather than half-trusted.
+function validatedAsset(record: ReleaseAssetRecord | undefined): ReleaseAsset | null {
+  if (record === undefined) return null;
+  if (!isSha256Digest(record.digest)) return null;
+  if (!Number.isSafeInteger(record.size) || record.size <= 0 || record.size > MAX_PAYLOAD_BYTES) {
+    return null;
   }
-  return normalized;
-}
-
-async function fetchJson(url: string, token: string): Promise<unknown> {
-  const parsed = new URL(url);
-  if (parsed.protocol !== "https:") fail(`URL must be https: ${url}`);
-  if (parsed.hostname !== "api.github.com") fail(`unexpected host: ${url}`);
-  if (parsed.hash !== "") fail(`URL must not contain a fragment: ${url}`);
-  const headers: Record<string, string> = {
-    "User-Agent": "homebrew-tap-appimage-builder",
-    Accept: "application/vnd.github+json",
-  };
-  if (token !== "") headers["Authorization"] = `Bearer ${assertSingleLine(token, "token")}`;
-  const response = await fetchWithRetry(url, { headers, redirect: "error", timeoutMs: 30000 });
-  if (!response.ok) {
-    throw new Error(`GitHub API request failed (${response.status}) for ${url}`);
-  }
-  return response.json();
+  return { name: record.name, digest: parseSha256Digest(record.digest), size: record.size };
 }
 
 interface ReleaseSelection {
@@ -66,47 +54,24 @@ export async function selectRelease(
   assetPrefix: string,
   token: string,
 ): Promise<ReleaseSelection> {
-  const releases = await fetchJson(`${repository}/releases?per_page=30`, token);
-  if (!Array.isArray(releases)) throw new Error("GitHub API did not return a release list");
-  for (const candidate of releases) {
-    const release = candidate as {
-      draft?: unknown;
-      prerelease?: unknown;
-      assets?: unknown;
-      tag_name?: unknown;
-    };
-    if (release.draft === true || release.prerelease === true) continue;
-    if (!Array.isArray(release.assets)) continue;
-    const byName = new Map<string, { name: string; digest: string; size: number }>();
-    for (const raw of release.assets) {
-      const asset = raw as { name?: unknown; digest?: unknown; size?: unknown };
-      if (typeof asset.name !== "string") continue;
-      if (typeof asset.digest !== "string" || typeof asset.size !== "number") continue;
-      byName.set(asset.name, { name: asset.name, digest: asset.digest, size: asset.size });
-    }
+  const releases = asReleaseList(await githubApiFetch(releasesApiUrl(repository), token));
+  for (const release of releases) {
+    if (!isPublishedRelease(release)) continue;
+    const byName = releaseAssetMap(release);
     const assets = {} as Record<Architecture, ReleaseAsset>;
     let complete = true;
     for (const architecture of ARCHITECTURES) {
-      const asset = byName.get(`${assetPrefix}-${architecture}.deb`);
-      if (
-        !asset ||
-        !/^sha256:/i.test(asset.digest) ||
-        !Number.isSafeInteger(asset.size) ||
-        asset.size <= 0 ||
-        asset.size > MAX_PAYLOAD_BYTES
-      ) {
+      const asset = validatedAsset(byName.get(`${assetPrefix}-${architecture}.deb`));
+      if (asset === null) {
         complete = false;
         break;
       }
-      assets[architecture] = {
-        name: asset.name,
-        digest: parseSha256Digest(asset.digest),
-        size: asset.size,
-      };
+      assets[architecture] = asset;
     }
     if (!complete) continue;
-    if (typeof release.tag_name !== "string") continue;
-    return { tag: release.tag_name, assets };
+    const tag = releaseTag(release);
+    if (tag === undefined) continue;
+    return { tag, assets };
   }
   throw new Error(
     `No GitHub release found carrying ${assetPrefix}-amd64.deb and ${assetPrefix}-arm64.deb with SHA-256 digests`,
@@ -117,23 +82,6 @@ export interface TemplatedSelection {
   tag: string;
   version: string;
   asset: ReleaseAsset;
-}
-
-function validAssetDigest(
-  byName: Map<string, { name: string; digest: string; size: number }>,
-  name: string,
-): ReleaseAsset | null {
-  const asset = byName.get(name);
-  if (
-    !asset ||
-    !/^sha256:/i.test(asset.digest) ||
-    !Number.isSafeInteger(asset.size) ||
-    asset.size <= 0 ||
-    asset.size > MAX_PAYLOAD_BYTES
-  ) {
-    return null;
-  }
-  return { name: asset.name, digest: parseSha256Digest(asset.digest), size: asset.size };
 }
 
 // Newest non-draft, non-prerelease release whose tag starts with tagPrefix and
@@ -149,38 +97,23 @@ export async function selectTemplatedRelease(
 ): Promise<TemplatedSelection> {
   const prefix = assertMatches(tagPrefix, /^[A-Za-z0-9][A-Za-z0-9._+-]*$/, "tag prefix");
   if (!assetNameTemplate.includes("{version}")) fail("assetNameTemplate must contain {version}");
-  const releases = await fetchJson(`${repository}/releases?per_page=30`, token);
-  if (!Array.isArray(releases)) throw new Error("GitHub API did not return a release list");
-  for (const candidate of releases) {
-    const release = candidate as {
-      draft?: unknown;
-      prerelease?: unknown;
-      assets?: unknown;
-      tag_name?: unknown;
-    };
-    if (release.draft === true || release.prerelease === true) continue;
-    if (typeof release.tag_name !== "string" || !release.tag_name.startsWith(prefix)) continue;
+  const releases = asReleaseList(await githubApiFetch(releasesApiUrl(repository), token));
+  for (const release of releases) {
+    if (!isPublishedRelease(release)) continue;
+    const tag = releaseTag(release);
+    if (tag === undefined || !tag.startsWith(prefix)) continue;
     let version: string;
     try {
-      version = normalizeTagVersion(release.tag_name.slice(prefix.length));
+      version = normalizeTagVersion(tag.slice(prefix.length));
     } catch {
       continue;
-    }
-    if (!Array.isArray(release.assets)) continue;
-    const byName = new Map<string, { name: string; digest: string; size: number }>();
-    for (const raw of release.assets) {
-      const asset = raw as { name?: unknown; digest?: unknown; size?: unknown };
-      if (typeof asset.name !== "string") continue;
-      if (typeof asset.digest !== "string" || typeof asset.size !== "number") continue;
-      byName.set(asset.name, { name: asset.name, digest: asset.digest, size: asset.size });
     }
     const expected = assetNameTemplate
       .replaceAll("{version}", version)
       .replaceAll("{arch}", architecture);
-    const asset = validAssetDigest(byName, expected);
+    const asset = validatedAsset(releaseAssetMap(release).get(expected));
     if (asset === null) continue;
-    if (typeof release.tag_name !== "string") continue;
-    return { tag: release.tag_name, version, asset };
+    return { tag, version, asset };
   }
   throw new Error(
     `No GitHub release found carrying ${assetNameTemplate.replaceAll("{arch}", architecture)} with a SHA-256 digest under tag prefix ${prefix}`,
@@ -194,7 +127,7 @@ export async function resolveWithGithubRelease(
   const repository = assertRepositoryUrl(oracle.repository);
   const { outputDir, metadataPath } = prepareOutput(request);
   const architecture = request.architecture;
-  const downloadBase = `${repository.replace(GITHUB_API_PREFIX, "https://github.com/")}/releases/download`;
+  const downloadBase = githubDownloadBase(repository);
 
   if (oracle.assetNameTemplate !== undefined) {
     if (oracle.tagPrefix === undefined || oracle.packageName === undefined) {

@@ -9,7 +9,8 @@ import {
   selectAsset,
   validateFeedRepository,
 } from "./oracles/electron-feed.ts";
-import { assertRepositoryUrl, selectRelease } from "./oracles/github-release.ts";
+import { selectRelease } from "./oracles/github-release.ts";
+import { assertRepositoryUrl } from "./oracles/github-api.ts";
 import { normalizeTagVersion, parseSha256Digest } from "./oracles/release-common.ts";
 import {
   selectManifestAsset,

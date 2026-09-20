@@ -14,15 +14,20 @@ import {
   GITHUB_ASSET_HOSTS,
   assertMatches,
   assertPositiveSize,
-  assertSingleLine,
   fail,
 } from "../guards.ts";
 import { MAX_PAYLOAD_BYTES, fetchWithRetry } from "../http.ts";
 import { writeMetadata } from "../metadata.ts";
 import type { Architecture, ElectronFeedOracle, Metadata } from "../types.ts";
 import { downloadVerified, fetchVerified } from "./download.ts";
-import { assertRepositoryUrl } from "./github-release.ts";
-import { normalizeTagVersion, parseSha256Digest } from "./release-common.ts";
+import {
+  assertRepositoryUrl,
+  githubApiFetch,
+  githubDownloadBase,
+  releaseByTagApiUrl,
+  repositoryCoordinates,
+} from "./github-api.ts";
+import { isSha256Digest, normalizeTagVersion, parseSha256Digest } from "./release-common.ts";
 import { prepareOutput, type ResolveRequest } from "./shared.ts";
 
 const MAX_YAML_BYTES = 64 * 1024;
@@ -92,11 +97,8 @@ export function parseFeedRedirect(locationUrl: string, tagPrefix: string): FeedR
 }
 
 export function requireGithubCoords(parsed: FeedRedirect, githubRepository: string): void {
-  const match =
-    /^https:\/\/api\.github\.com\/repos\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)$/.exec(
-      githubRepository,
-    );
-  if (!match || match[1] !== parsed.owner || match[2] !== parsed.repo) {
+  const { owner, repo } = repositoryCoordinates(githubRepository);
+  if (parsed.owner !== owner || parsed.repo !== repo) {
     fail(`Feed redirect ${parsed.owner}/${parsed.repo} does not match configured repository`);
   }
 }
@@ -185,25 +187,6 @@ async function fetchYaml(feedUrl: string): Promise<string> {
   return bytes.toString("utf8");
 }
 
-async function fetchReleaseForTag(
-  githubRepository: string,
-  tag: string,
-  token: string,
-): Promise<unknown> {
-  const url = new URL(`${githubRepository}/releases/tags/${encodeURIComponent(tag)}`);
-  if (url.hostname !== "api.github.com") fail(`unexpected host: ${String(url)}`);
-  const headers: Record<string, string> = {
-    "User-Agent": "homebrew-tap-appimage-builder",
-    Accept: "application/vnd.github+json",
-  };
-  if (token !== "") headers["Authorization"] = `Bearer ${assertSingleLine(token, "token")}`;
-  const response = await fetchWithRetry(url, { headers, redirect: "error", timeoutMs: 30000 });
-  if (!response.ok) {
-    throw new Error(`GitHub API request failed (${response.status}) for ${String(url)}`);
-  }
-  return response.json();
-}
-
 export interface SelectedAsset {
   name: string;
   sha256: string;
@@ -228,7 +211,7 @@ export function selectAsset(
   }) as { digest?: unknown; size?: unknown } | undefined;
   if (found === undefined) throw new Error(`Release ${tag} has no asset ${assetName}`);
   const digest = String(found.digest ?? "");
-  if (!/^sha256:[0-9a-f]{64}$/i.test(digest)) {
+  if (!isSha256Digest(digest)) {
     throw new Error(`Release asset digest is not a sha256 digest: ${digest}`);
   }
   const size = assertPositiveSize(
@@ -277,13 +260,13 @@ export async function resolveWithElectronFeed(
     .replaceAll("{arch}", layout.assetArch);
   const yml = parseUpdateYml(await fetchYaml(location), parsed.version, expectedAsset);
 
-  const release = await fetchReleaseForTag(githubRepository, parsed.tag, request.token);
+  const release = await githubApiFetch(
+    releaseByTagApiUrl(githubRepository, parsed.tag),
+    request.token,
+  );
   const asset = selectAsset(release, parsed.tag, expectedAsset, yml.size);
 
-  const downloadBase = `${githubRepository.replace(
-    "https://api.github.com/repos/",
-    "https://github.com/",
-  )}/releases/download`;
+  const downloadBase = githubDownloadBase(githubRepository);
   const metadata: Metadata = {
     package: oracle.packageName,
     version: parsed.version,
