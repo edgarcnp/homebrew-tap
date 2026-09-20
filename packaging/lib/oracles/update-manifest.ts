@@ -14,16 +14,10 @@ import {
   assertSha256Hex,
   fail,
 } from "../guards.ts";
-import {
-  MAX_PAYLOAD_BYTES,
-  digestMatchesHex,
-  fetchWithRetry,
-  readPayload,
-  sha256Digest,
-  writeFileAtomic,
-} from "../http.ts";
+import { MAX_PAYLOAD_BYTES, fetchWithRetry, readPayload } from "../http.ts";
 import { writeMetadata } from "../metadata.ts";
 import type { Metadata, UpdateManifestOracle } from "../types.ts";
+import { downloadVerified } from "./download.ts";
 import { prepareOutput, type ResolveRequest } from "./shared.ts";
 
 const MAX_MANIFEST_BYTES = 1024 * 1024;
@@ -113,34 +107,6 @@ async function fetchManifest(repository: string): Promise<unknown> {
   return JSON.parse(bytes.toString("utf8"));
 }
 
-async function downloadAndVerify(
-  oracle: UpdateManifestOracle,
-  url: string,
-  destination: string,
-  label: string,
-  expectedSha256: string,
-  expectedSize: number,
-): Promise<void> {
-  const response = await fetchWithRetry(url, { redirect: "follow", timeoutMs: 60000 });
-  if (!response.ok) throw new Error(`Download failed (${response.status}) for ${url}`);
-  const finalUrl = new URL(response.url);
-  if (finalUrl.protocol !== "https:") {
-    throw new Error(`Download redirected to non-HTTPS URL (${finalUrl.protocol}) for ${url}`);
-  }
-  assertHostAllowed(finalUrl, oracle.downloadHosts, "download");
-  const contentLength = Number(response.headers.get("content-length") ?? 0);
-  if (contentLength > MAX_PAYLOAD_BYTES) throw new Error("payload too large");
-  const bytes = await readPayload(response);
-  if (bytes.length !== expectedSize) {
-    throw new Error(`${label} size mismatch: expected ${expectedSize}, got ${bytes.length}`);
-  }
-  const actual = sha256Digest(bytes).toString("hex");
-  if (!digestMatchesHex(expectedSha256, sha256Digest(bytes))) {
-    throw new Error(`${label} SHA256 mismatch: expected ${expectedSha256}, got ${actual}`);
-  }
-  writeFileAtomic(destination, bytes);
-}
-
 export async function resolveWithUpdateManifest(
   oracle: UpdateManifestOracle,
   request: ResolveRequest,
@@ -178,13 +144,11 @@ export async function resolveWithUpdateManifest(
       outputDir,
       `${packageName}_${manifest.version}_${request.architecture}.deb`,
     );
-    await downloadAndVerify(
-      oracle,
+    await downloadVerified(
       manifest.asset.url,
       packagePath,
-      path.basename(packagePath),
-      manifest.asset.sha256,
-      manifest.asset.size,
+      { sha256: manifest.asset.sha256, size: manifest.asset.size },
+      { allowedHosts: oracle.downloadHosts, label: path.basename(packagePath) },
     );
     metadata.path = packagePath;
   }

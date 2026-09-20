@@ -8,23 +8,16 @@
 import * as path from "node:path";
 import {
   GITHUB_ASSET_HOSTS,
-  assertHostAllowed,
   assertMatches,
   assertPositiveSize,
   assertSingleLine,
   fail,
 } from "../guards.ts";
-import {
-  MAX_PAYLOAD_BYTES,
-  digestMatchesHex,
-  fetchWithRetry,
-  readPayload,
-  sha256Digest,
-  writeFileAtomic,
-} from "../http.ts";
+import { MAX_PAYLOAD_BYTES, fetchWithRetry } from "../http.ts";
 import { writeMetadata } from "../metadata.ts";
 import type { Architecture, GithubReleaseOracle, Metadata } from "../types.ts";
 import { ARCHITECTURES } from "../types.ts";
+import { downloadVerified } from "./download.ts";
 import { parseSha256Digest, normalizeTagVersion } from "./release-common.ts";
 import { prepareOutput, type ResolveRequest } from "./shared.ts";
 
@@ -194,34 +187,6 @@ export async function selectTemplatedRelease(
   );
 }
 
-export async function downloadAndVerify(
-  url: string,
-  destination: string,
-  expectedSha256: string,
-  expectedSize: number,
-  label: string,
-): Promise<void> {
-  const response = await fetchWithRetry(url, { redirect: "follow", timeoutMs: 60000 });
-  if (!response.ok) throw new Error(`Download failed (${response.status}) for ${url}`);
-  const finalUrl = new URL(response.url);
-  if (finalUrl.protocol !== "https:") {
-    throw new Error(`Download redirected to non-HTTPS URL (${finalUrl.protocol}) for ${url}`);
-  }
-  assertHostAllowed(finalUrl, GITHUB_ASSET_HOSTS, "download");
-  const contentLength = Number(response.headers.get("content-length") ?? 0);
-  if (contentLength > MAX_PAYLOAD_BYTES) throw new Error("payload too large");
-  const bytes = await readPayload(response);
-  if (bytes.length !== expectedSize) {
-    throw new Error(`${label} size mismatch: expected ${expectedSize}, got ${bytes.length}`);
-  }
-  if (!digestMatchesHex(expectedSha256, sha256Digest(bytes))) {
-    throw new Error(
-      `${label} SHA256 mismatch: expected ${expectedSha256}, got ${sha256Digest(bytes).toString("hex")}`,
-    );
-  }
-  writeFileAtomic(destination, bytes);
-}
-
 export async function resolveWithGithubRelease(
   oracle: GithubReleaseOracle,
   request: ResolveRequest,
@@ -262,12 +227,11 @@ export async function resolveWithGithubRelease(
     };
     if (!request.metadataOnly) {
       const packagePath = path.join(outputDir, `${packageName}_${version}_${architecture}.deb`);
-      await downloadAndVerify(
+      await downloadVerified(
         `${downloadBase}/${metadata.repositoryPath}`,
         packagePath,
-        metadata.sha256,
-        metadata.size,
-        path.basename(packagePath),
+        { sha256: metadata.sha256, size: metadata.size },
+        { allowedHosts: GITHUB_ASSET_HOSTS, label: path.basename(packagePath) },
       );
       metadata.path = packagePath;
     }
@@ -301,12 +265,11 @@ export async function resolveWithGithubRelease(
 
   if (!request.metadataOnly) {
     const packagePath = path.join(outputDir, `${assetPrefix}_${version}_${architecture}.deb`);
-    await downloadAndVerify(
+    await downloadVerified(
       `${downloadBase}/${metadata.repositoryPath}`,
       packagePath,
-      metadata.sha256,
-      metadata.size,
-      path.basename(packagePath),
+      { sha256: metadata.sha256, size: metadata.size },
+      { allowedHosts: GITHUB_ASSET_HOSTS, label: path.basename(packagePath) },
     );
     metadata.path = packagePath;
   }

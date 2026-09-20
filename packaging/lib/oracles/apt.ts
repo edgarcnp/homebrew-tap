@@ -13,14 +13,7 @@ import {
   assertSingleLine,
   fail,
 } from "../guards.ts";
-import {
-  MAX_PAYLOAD_BYTES,
-  digestMatchesHex,
-  fetchWithRetry,
-  readPayload,
-  sha256Digest,
-  writeFileAtomic,
-} from "../http.ts";
+import { MAX_PAYLOAD_BYTES, writeFileAtomic } from "../http.ts";
 import {
   assertReleaseFreshness,
   extractClearSignedPayload,
@@ -31,6 +24,7 @@ import { writeMetadata } from "../metadata.ts";
 import { REPO_ROOT } from "../paths.ts";
 import type { AptOracle, Architecture, Metadata } from "../types.ts";
 import { compareDebVersions, normalizeUpstreamVersion } from "../version.ts";
+import { fetchVerified, verifyPayload } from "./download.ts";
 import { prepareOutput, type ResolveRequest } from "./shared.ts";
 
 const MAX_KEY_BYTES = 1024 * 1024;
@@ -80,23 +74,16 @@ export function verifyInRelease(
   return extractClearSignedPayload(fs.readFileSync(inReleasePath, "utf8"));
 }
 
+// The apt repository pins itself: both the index and the payload must stay on
+// the host the descriptor named (no edge hosts are allowed).
 async function download(url: string, destination: string, timeoutMs = 30000): Promise<void> {
   const requestUrl = assertHttpsUrl(url, "download URL");
-  const expectedHost = requestUrl.hostname;
-  const response = await fetchWithRetry(url, { redirect: "follow", timeoutMs });
-  if (!response.ok) throw new Error(`Download failed (${response.status}) for ${url}`);
-  const finalUrl = new URL(response.url);
-  if (finalUrl.protocol !== "https:") {
-    throw new Error(`Download redirected to non-HTTPS URL (${finalUrl.protocol}) for ${url}`);
-  }
-  if (finalUrl.hostname !== expectedHost) {
-    throw new Error(`Download redirected to unexpected host (${finalUrl.hostname}) for ${url}`);
-  }
-  const contentLength = response.headers.get("content-length");
-  if (contentLength !== null && Number(contentLength) > MAX_PAYLOAD_BYTES) {
-    throw new Error(`Payload too large (${contentLength} bytes) for ${url}`);
-  }
-  writeFileAtomic(destination, await readPayload(response));
+  const { bytes } = await fetchVerified(url, {
+    allowedHosts: [requestUrl.hostname],
+    label: "Download",
+    timeoutMs,
+  });
+  writeFileAtomic(destination, bytes);
 }
 
 export function verifyIndexedFile(
@@ -104,16 +91,7 @@ export function verifyIndexedFile(
   expected: { sha256: string; size: number },
   label: string,
 ): void {
-  const stat = fs.statSync(filePath);
-  if (stat.size !== expected.size) {
-    throw new Error(`${label} size mismatch: expected ${expected.size}, got ${stat.size}`);
-  }
-  const actual = sha256Digest(fs.readFileSync(filePath));
-  if (!digestMatchesHex(expected.sha256, actual)) {
-    throw new Error(
-      `${label} SHA256 mismatch: expected ${expected.sha256}, got ${actual.toString("hex")}`,
-    );
-  }
+  verifyPayload(fs.readFileSync(filePath), expected, label);
 }
 
 interface SelectedPackage {
