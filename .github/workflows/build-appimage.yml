@@ -491,36 +491,16 @@ jobs:
             gh release delete "${TAG_PREFIX}${version}" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag
           done
 
-  update-cask:
+  # One job covers both gate outcomes: a fresh build (after publish) and a
+  # cask-only repair (publish skipped). always() is what lets it run when
+  # publish was skipped on the repair path; the condition still requires a
+  # successful publish for the build path. The two cases only differed in
+  # needs/if, so keeping them together removes a byte-identical duplicate.
+  pin-cask:
     needs: [detect, publish]
-    if: needs.detect.outputs.skipped == 'false' && needs.detect.outputs.repair_cask == 'false'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: write
-    concurrency:
-      group: push-casks
-      cancel-in-progress: false
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version: 1.4.2
-      - name: Pin cask to published release
-        uses: ./.github/actions/update-cask
-        with:
-          app: ${{ needs.detect.outputs.app_id }}
-          package_version: ${{ needs.detect.outputs.version }}
-          tag_prefix: ${{ needs.detect.outputs.tag_prefix }}
-          asset_prefix: ${{ needs.detect.outputs.asset_prefix }}
-          token: ${{ secrets.HOMEBREW_PAT }}
-          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
-
-  repair-cask:
-    needs: detect
-    if: needs.detect.outputs.skipped == 'false' && needs.detect.outputs.repair_cask == 'true'
+    if: >-
+      always() && needs.detect.outputs.skipped == 'false' &&
+      (needs.detect.outputs.repair_cask == 'true' || needs.publish.result == 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
