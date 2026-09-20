@@ -102,6 +102,64 @@ function reportCaskProblems(descriptor: AppDescriptor, file: string): number {
   return problems.length;
 }
 
+// The two architectures a cask can pin, with the flag that carries each one.
+// Kept as data so the set-version path has one loop instead of two mirrored
+// amd64/arm64 blocks.
+const CASK_SHA256_FLAGS: ReadonlyArray<{ architecture: Architecture; flag: string }> = [
+  { architecture: "amd64", flag: "sha256-x86-64" },
+  { architecture: "arm64", flag: "sha256-arm-64" },
+];
+
+function caskRead(flags: Flags): number {
+  const descriptor = descriptorFor(flags);
+  process.stdout.write(`${JSON.stringify(readCaskFile(caskFileFor(flags, descriptor)))}\n`);
+  return 0;
+}
+
+// Every app's cask against its descriptor; one problem anywhere fails the run.
+function caskCheckAll(flags: Flags): number {
+  let problems = 0;
+  for (const id of listApps()) {
+    const descriptor = loadDescriptor(id);
+    problems += reportCaskProblems(descriptor, caskFileFor(flags, descriptor));
+  }
+  return problems === 0 ? 0 : 1;
+}
+
+function caskCheck(flags: Flags): number {
+  if (flags.optStr("app") === undefined) return caskCheckAll(flags);
+  const descriptor = descriptorFor(flags);
+  return reportCaskProblems(descriptor, caskFileFor(flags, descriptor)) === 0 ? 0 : 1;
+}
+
+function caskSetVersion(flags: Flags): number {
+  const descriptor = descriptorFor(flags);
+  const sha256: Partial<Record<Architecture, string>> = {};
+  for (const { architecture, flag } of CASK_SHA256_FLAGS) {
+    const value = flags.optStr(flag);
+    if (descriptor.architectures.includes(architecture)) {
+      if (value === undefined) throw new UsageError(`Missing required flag --${flag}`);
+      sha256[architecture] = value;
+    } else if (value !== undefined) {
+      throw new UsageError(
+        `--${flag} is unexpected for single-arch (${descriptor.architectures.join(",")}) ${descriptor.id}`,
+      );
+    }
+  }
+  const file = caskFileFor(flags, descriptor);
+  writeCask(file, { version: flags.str("version"), sha256 });
+  process.stdout.write(`${file}\n`);
+  return 0;
+}
+
+function caskCommand(flags: Flags): number {
+  const action = flags.optStr("action") ?? "read";
+  if (action === "read") return caskRead(flags);
+  if (action === "check") return caskCheck(flags);
+  if (action === "set-version") return caskSetVersion(flags);
+  throw new UsageError(`Unknown cask action: ${action}`);
+}
+
 const COMMANDS: Command[] = [
   {
     name: "list-apps",
@@ -257,53 +315,7 @@ const COMMANDS: Command[] = [
       "sha256-x86-64": { type: "string" },
       "sha256-arm-64": { type: "string" },
     },
-    run: (flags) => {
-      const action = flags.optStr("action") ?? "read";
-      const app = flags.optStr("app");
-
-      if (action === "check" && app === undefined) {
-        let problems = 0;
-        for (const id of listApps()) {
-          const descriptor = loadDescriptor(id);
-          problems += reportCaskProblems(descriptor, caskFileFor(flags, descriptor));
-        }
-        return problems === 0 ? 0 : 1;
-      }
-
-      const descriptor = descriptorFor(flags);
-      const file = caskFileFor(flags, descriptor);
-      if (action === "read") {
-        process.stdout.write(`${JSON.stringify(readCaskFile(file))}\n`);
-        return 0;
-      }
-      if (action === "set-version") {
-        const sha256: Partial<Record<Architecture, string>> = {};
-        const x86 = flags.optStr("sha256-x86-64");
-        const arm = flags.optStr("sha256-arm-64");
-        if (descriptor.architectures.includes("amd64")) {
-          if (x86 === undefined) throw new UsageError("Missing required flag --sha256-x86-64");
-          sha256["amd64"] = x86;
-        } else if (x86 !== undefined) {
-          throw new UsageError(`--sha256-x86-64 is unexpected for single-arch (${descriptor.architectures.join(",")}) ${descriptor.id}`);
-        }
-        if (descriptor.architectures.includes("arm64")) {
-          if (arm === undefined) throw new UsageError("Missing required flag --sha256-arm-64");
-          sha256["arm64"] = arm;
-        } else if (arm !== undefined) {
-          throw new UsageError(`--sha256-arm-64 is unexpected for single-arch (${descriptor.architectures.join(",")}) ${descriptor.id}`);
-        }
-        writeCask(file, {
-          version: flags.str("version"),
-          sha256,
-        });
-        process.stdout.write(`${file}\n`);
-        return 0;
-      }
-      if (action === "check") {
-        return reportCaskProblems(descriptor, file) === 0 ? 0 : 1;
-      }
-      throw new UsageError(`Unknown cask action: ${action}`);
-    },
+    run: caskCommand,
   },
   {
     name: "neutralize",
