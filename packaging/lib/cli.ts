@@ -11,7 +11,12 @@ import { checkCask, readCaskFile, writeCask } from "./cask.ts";
 import { descriptorLines, listApps, loadDescriptor, resolveApp } from "./descriptor.ts";
 import { planGate } from "./gate.ts";
 import { readMetadataField } from "./metadata.ts";
-import { compareReleasedAssets, planReleasePrune } from "./release.ts";
+import {
+  compareReleasedAssets,
+  planReleasePrune,
+  renderReleaseNotes,
+  type UpstreamRecord,
+} from "./release.ts";
 import { finalizeApp, neutralizeUpdater } from "./neutralize.ts";
 import { resolveWith } from "./oracles/registry.ts";
 import { writeDesktopEntry } from "./render.ts";
@@ -60,6 +65,18 @@ class Flags {
     if (typeof value !== "boolean") throw new UsageError(`Flag --${name} is a flag`);
     return value;
   }
+
+  // A repeatable option: parseArgs returns an array when `multiple` is set, a
+  // bare string otherwise.
+  strList(name: string): string[] {
+    const value = this.values[name];
+    if (value === undefined) return [];
+    if (typeof value === "string") return [value];
+    if (Array.isArray(value) && value.every((entry) => typeof entry === "string")) {
+      return value as string[];
+    }
+    throw new UsageError(`Flag --${name} takes a value`);
+  }
 }
 
 const APP = { type: "string" } as const;
@@ -72,6 +89,20 @@ function parseReleaseMatch(value: string | undefined): boolean | null {
   if (value === "true") return true;
   if (value === "false") return false;
   throw new UsageError(`Flag --release-matches-cask must be "true" or "false", got "${value}"`);
+}
+
+// --upstream <arch>=<sha256>=<url>, one per shipped architecture.
+function parseUpstreamSpec(spec: string): [Architecture, UpstreamRecord] {
+  const first = spec.indexOf("=");
+  const second = spec.indexOf("=", first + 1);
+  if (first < 0 || second < 0) {
+    throw new UsageError(`--upstream must be <arch>=<sha256>=<url>, got "${spec}"`);
+  }
+  const architecture = spec.slice(0, first);
+  if (!isArchitecture(architecture)) {
+    throw new UsageError(`--upstream arch must be amd64 or arm64, got "${architecture}"`);
+  }
+  return [architecture, { sha256: spec.slice(first + 1, second), url: spec.slice(second + 1) }];
 }
 
 interface Command {
@@ -338,6 +369,30 @@ const COMMANDS: Command[] = [
         `[INFO] retaining the newest ${keep}; pruning ${stale.length} of ${versions.length} release(s)\n`,
       );
       for (const version of stale) process.stdout.write(`${version}\n`);
+      return 0;
+    },
+  },
+  {
+    name: "release-notes",
+    summary:
+      "Render the release-notes markdown (--app, --asset-dir, [--upstream arch=SHA=URL]..., [--output])",
+    options: {
+      app: APP,
+      "asset-dir": { type: "string" },
+      upstream: { type: "string", multiple: true },
+      output: { type: "string" },
+    },
+    run: (flags) => {
+      const descriptor = descriptorFor(flags);
+      const upstreams: Partial<Record<Architecture, UpstreamRecord>> = {};
+      for (const spec of flags.strList("upstream")) {
+        const [architecture, record] = parseUpstreamSpec(spec);
+        upstreams[architecture] = record;
+      }
+      const notes = renderReleaseNotes(descriptor, upstreams, flags.str("asset-dir"));
+      const output = flags.optStr("output");
+      if (output === undefined) process.stdout.write(notes);
+      else fs.writeFileSync(output, notes);
       return 0;
     },
   },

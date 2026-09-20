@@ -363,39 +363,24 @@ jobs:
           merge-multiple: true
           path: assets
       - name: Generate release notes
-        id: notes
         env:
           UPSTREAM_SHA_AMD64: ${{ needs.detect.outputs.upstream_sha256_amd64 }}
           UPSTREAM_SHA_ARM64: ${{ needs.detect.outputs.upstream_sha256_arm64 }}
           UPSTREAM_URL_AMD64: ${{ needs.detect.outputs.upstream_url_amd64 }}
           UPSTREAM_URL_ARM64: ${{ needs.detect.outputs.upstream_url_arm64 }}
-          APP_CASK: ${{ needs.detect.outputs.app_cask }}
-          ASSET_PREFIX: ${{ needs.detect.outputs.asset_prefix }}
+          APP_ID: ${{ needs.detect.outputs.app_id }}
         run: |
-          # shellcheck disable=SC2016 # printf format strings and GitHub Actions templates are intentional
-          {
-            printf '%s\n\n' '## Artifact checksums'
-            printf 'Upstream package integrity is verified against the release source (signed APT index or download-time SHA-256) before packaging; the AppImage hashes are enforced by the `%s` cask at install.\n' "${APP_CASK}"
-            printf '\n'
-            printf '%s\n' '| Artifact | SHA-256 |'
-            printf '%s\n' '| --- | --- |'
-            printf '| Upstream package (amd64) | `%s` |\n' "${UPSTREAM_SHA_AMD64:-n/a}"
-            if [ -n "${UPSTREAM_SHA_ARM64}" ]; then
-              printf '| Upstream package (arm64) | `%s` |\n' "${UPSTREAM_SHA_ARM64}"
-            fi
-            for file in assets/"${ASSET_PREFIX}"-*.AppImage; do
-              [ -e "$file" ] || continue
-              arch="${file##*-}"
-              arch="${arch%.AppImage}"
-              printf '| AppImage (%s) | `%s` |\n' "$arch" "$(sha256sum "$file" | awk '{print $1}')"
-            done
-            printf '\n'
-            printf '%s\n' '### Sources'
-            printf -- '- Upstream package (amd64): %s\n' "$UPSTREAM_URL_AMD64"
-            if [ -n "${UPSTREAM_URL_ARM64}" ]; then
-              printf -- '- Upstream package (arm64): %s\n' "$UPSTREAM_URL_ARM64"
-            fi
-          } > release-notes.md
+          # The checksum table and prose are rendered by a unit-tested command;
+          # this step only assembles the optional per-arch upstream rows.
+          upstream_args=(--upstream "amd64=${UPSTREAM_SHA_AMD64}=${UPSTREAM_URL_AMD64}")
+          if [ -n "${UPSTREAM_SHA_ARM64}" ]; then
+            upstream_args+=(--upstream "arm64=${UPSTREAM_SHA_ARM64}=${UPSTREAM_URL_ARM64}")
+          fi
+          bun tap/packaging/bin/fbr.ts release-notes \
+            --app "${APP_ID}" \
+            --asset-dir assets \
+            "${upstream_args[@]}" \
+            --output release-notes.md
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
