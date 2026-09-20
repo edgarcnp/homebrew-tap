@@ -226,5 +226,21 @@ export function checkCask(descriptor: AppDescriptor, source: string): string[] {
   require(source.includes(`~/${iconTarget}`), `zap does not remove ~/${iconTarget}`);
   require(source.includes(`~/${desktopTarget}`), `zap does not remove ~/${desktopTarget}`);
 
+  // The cask's postflight desktop entry repeats descriptor-derived strings that
+  // a standalone cask file cannot import; asserting them here keeps a
+  // displayName/comment change from silently drifting out of the cask.
+  require(
+    source.includes(`Name=${descriptor.displayName}`),
+    `desktop entry Name does not match displayName "${descriptor.displayName}"`,
+  );
+  require(
+    source.includes(`Comment=${descriptor.comment}`),
+    `desktop entry Comment does not match comment "${descriptor.comment}"`,
+  );
+  require(
+    source.includes(`Icon=${descriptor.cask}`),
+    `desktop entry Icon does not match "${descriptor.cask}"`,
+  );
+
   return problems;
 }
