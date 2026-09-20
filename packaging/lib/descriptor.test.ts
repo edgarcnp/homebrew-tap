@@ -133,9 +133,12 @@ describe("descriptor contents (regression against the previous per-app scripts)"
 });
 
 describe("quick-sharun configuration", () => {
-  it("deploys fix-namespaces for every app", () => {
+  it("deploys fix-namespaces and launch optimization for every app", () => {
     for (const app of APPS) {
-      assert.deepEqual(loadDescriptor(app).quickSharun, { hooks: ["fix-namespaces.hook"] });
+      assert.deepEqual(loadDescriptor(app).quickSharun, {
+        hooks: ["fix-namespaces.hook"],
+        env: { OPTIMIZE_LAUNCH: "1" },
+      });
     }
   });
 

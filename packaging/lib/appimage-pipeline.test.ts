@@ -106,6 +106,21 @@ describe(STAGE, () => {
     assert.match(stderr, /Nested sharun wrapper bin\/resources\/orphan has no bin\/orphan wrapper/);
   });
 
+  it("fails on a sharun hardlink outside the legal slots", () => {
+    makeSharun();
+    wrap("bin/command-code");
+    // a lib/gstreamer-* style wrapper: nothing resolves it from that location
+    wrap("lib/gstreamer-1.0/gst-plugin-scanner");
+    writeExecutable("shared/bin/gst-plugin-scanner");
+
+    const { status, stderr } = reconcile();
+    assert.equal(status, 1);
+    assert.match(
+      stderr,
+      /sharun hardlink outside the legal slots \(lib\/gstreamer-1\.0\/gst-plugin-scanner\)/,
+    );
+  });
+
   it("no-ops when the app was not built with sharun", () => {
     writeExecutable("bin/resources/opencode-cli");
 

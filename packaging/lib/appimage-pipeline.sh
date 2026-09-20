@@ -198,54 +198,69 @@ pipeline_install_icon() {
   cp -- "${APPDIR}/${PACKAGE_NAME}.png" "${APPDIR}/share/icons/hicolor/${size}/apps/${PACKAGE_NAME}.png"
 }
 
-# quick-sharun's _handle_nested_bins recursively replaces every nested
-# executable under bin/ whose basename also lands in shared/bin with an
-# in-place hardlink of sharun. A wrapper not directly under bin/ cannot map
-# back to shared/bin/<name>: sharun resolves its root from /proc/self/exe and
-# only accepts the bin/<name> <-> shared/bin/<name> contract, so a process
-# that spawns the sidecar by path -- e.g. opencode-desktop spawning
-# join(process.resourcesPath, "opencode-cli") -- fails with "Failed to find
-# '<name>' in PATH or <dir>/shared/bin" ("Interpreter not found!").
+# quick-sharun's _handle_nested_bins replaces every nested executable under
+# bin/ whose basename also lands in shared/bin with an in-place hardlink of
+# sharun. sharun resolves its runtime root from /proc/self/exe and then loads
+# shared/bin/<name>; only a wrapper directly under bin/ makes that resolve (the
+# parent's basename is "bin", so the root is the AppDir). A wrapper anywhere
+# else -- bin/resources/opencode-cli, which Electron spawns by
+# process.resourcesPath, or a lib/gstreamer-* executable -- looks for
+# <dir>/shared/bin/<name> and fails with "Failed to find '<name>' in PATH or
+# '<dir>/shared/bin'".
 #
-# sharun follows a symlink that resolves to the working bin/<name> wrapper
-# instead, so re-point every nested wrapper there. The target is computed
-# relative to the sidecar's own directory (and so survives a different mount
-# point and --appimage-extract). A nested wrapper that cannot be mapped is a
-# dead sidecar, which is the failure this stage exists to prevent, so it
-# fails the build rather than shipping.
+# This stage first re-points a nested wrapper under bin/ at the working
+# bin/<name> wrapper with a relative symlink (sharun follows a symlink that
+# resolves there; the target is relative so it survives a different mount point
+# and --appimage-extract), then asserts the contract for the whole AppDir: the
+# only sharun hardlinks left are sharun itself and the bin/<name> wrappers.
+# Anything else is a process path that cannot start, so the build fails instead
+# of shipping it.
 pipeline_reconcile_sharun_sidecars() {
-  local sharun sidecar rel name wrapper real up rest target reconciled
+  local sharun sidecar relative name wrapper real up rest target reconciled
   sharun="${APPDIR}/sharun"
   [ -x "${sharun}" ] || return 0
 
   reconciled=0
   while IFS= read -r -d '' sidecar
   do
-    # only the wrappers quick-sharun actually created (hardlinks of sharun);
-    # a real sidecar binary is a distinct inode and is left alone
-    [ "${sidecar}" -ef "${sharun}" ] || continue
-    name="${sidecar##*/}"
-    wrapper="${APPDIR}/bin/${name}"
-    real="${APPDIR}/shared/bin/${name}"
-    if [ -f "${wrapper}" ] && [ "${wrapper}" -ef "${sharun}" ] && [ -x "${real}" ]
+    # every hardlink of sharun in the AppDir; a real sidecar binary is a
+    # distinct inode and is never matched
+    if [ "${sidecar}" = "${sharun}" ]
     then
-      rel="${sidecar#"${APPDIR}/bin/"}"
-      rel="${rel%/*}"
-      up=".."
-      rest="${rel}"
-      while [[ "${rest}" == */* ]]
-      do
-        up="../${up}"
-        rest="${rest#*/}"
-      done
-      target="${up}/${name}"
-      ln -sfn "${target}" "${sidecar}"
-      reconciled=$((reconciled + 1))
-      info "Relinked ${sidecar#"${APPDIR}/"} -> ${target}"
       continue
     fi
-    error "Nested sharun wrapper ${sidecar#"${APPDIR}/"} has no bin/${name} wrapper for shared/bin/${name}; it would fail at runtime"
-  done < <(find "${APPDIR}/bin" -mindepth 2 -type f -links +1 -print0)
+    relative="${sidecar#"${APPDIR}/"}"
+    name="${sidecar##*/}"
+    # a wrapper directly under bin/ is the one slot sharun resolves
+    if [ "${sidecar%/*}" = "${APPDIR}/bin" ]
+    then
+      continue
+    fi
+    wrapper="${APPDIR}/bin/${name}"
+    real="${APPDIR}/shared/bin/${name}"
+    if [[ "${sidecar}" == "${APPDIR}/bin/"* ]]
+    then
+      if [ -f "${wrapper}" ] && [ "${wrapper}" -ef "${sharun}" ] && [ -x "${real}" ]
+      then
+        rel="${sidecar#"${APPDIR}/bin/"}"
+        rel="${rel%/*}"
+        up=".."
+        rest="${rel}"
+        while [[ "${rest}" == */* ]]
+        do
+          up="../${up}"
+          rest="${rest#*/}"
+        done
+        target="${up}/${name}"
+        ln -sfn "${target}" "${sidecar}"
+        reconciled=$((reconciled + 1))
+        info "Relinked ${relative} -> ${target}"
+        continue
+      fi
+      error "Nested sharun wrapper ${relative} has no bin/${name} wrapper for shared/bin/${name}; it would fail at runtime"
+    fi
+    error "sharun hardlink outside the legal slots (${relative}); only bin/<name> resolves shared/bin/${name}"
+  done < <(find "${APPDIR}" -xdev -type f -samefile "${sharun}" -print0)
   [[ "${reconciled}" -eq 0 ]] || info "Reconciled ${reconciled} nested sharun sidecar(s)"
 }
 

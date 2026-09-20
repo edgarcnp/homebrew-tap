@@ -166,25 +166,32 @@ AppRun, so the resulting AppImages have no host-libc dependency and run on
 musl, non-FHS and very old distros. The same setup installs pkgforge's
 debloated Arch packages (`get-debloated-pkgs`, flags per app via the
 descriptor) so the AppImages carry stripped `libicudata`, mesa without LLVM,
-and other size optimizations.
+and other size optimizations. The descriptors use `--prefer-nano`, i.e. the
+`-Os` variants that archlinux-pkgs-debloated warns can cost stability and
+performance — acceptable for these editors/agents, but not a default to copy
+into a performance-critical app.
 
 `quick-sharun` hardlinks `sharun` over every nested executable under `bin/`
-whose basename also lands in `shared/bin` (`_handle_nested_bins`). sharun maps
-only a wrapper directly under `bin/` to `shared/bin/<name>`, so a nested one —
-for example an Electron app spawning `bin/resources/opencode-cli` by path —
-fails at runtime with `Failed to find '<name>' in PATH or <dir>/shared/bin`.
-`pipeline_reconcile_sharun_sidecars` re-points each nested wrapper at the
-working `bin/<name>` wrapper with a relative symlink (sharun follows a symlink
-that resolves there) and fails the build when one cannot be mapped, so a dead
-sidecar cannot ship silently.
+whose basename also lands in `shared/bin` (`_handle_nested_bins`). sharun
+resolves its root from `/proc/self/exe` and loads `shared/bin/<name>`, so only
+a wrapper directly under `bin/` resolves; a nested one — for example an
+Electron app spawning `bin/resources/opencode-cli` by path — fails at runtime
+with `Failed to find '<name>' in PATH or <dir>/shared/bin`.
+`pipeline_reconcile_sharun_sidecars` re-points each nested wrapper under `bin/`
+at the working `bin/<name>` wrapper with a relative symlink (sharun follows a
+symlink that resolves there), then asserts the contract for the whole AppDir:
+the only sharun hardlinks left are `sharun` itself and the `bin/<name>`
+wrappers, and any other location fails the build as a process path that cannot
+start.
 
 The descriptor's `quickSharun` block is exported as environment variables
 before quick-sharun runs, so an app's pkgforge knobs (hooks, `OPTIMIZE_LAUNCH`,
 `DEPLOY_*`, `QUICK_SHARUN_SKIP_DEPS_FOR`) live with the app instead of in the
 workflow, and a local `build.sh` behaves like CI. Every app deploys pkgforge's
 `fix-namespaces.hook`, which detects the unprivileged-userns restriction some
-distros (Ubuntu 24.04+, secureblue) impose and offers to lift it; the hook is
-sourced by the generated `AppRun` and no-ops where userns already work.
+distros (Ubuntu 24.04+, secureblue) impose and offers to lift it (the hook is
+sourced by the generated `AppRun` and no-ops where userns already work), and
+sets `OPTIMIZE_LAUNCH=1` for the DWARFS launch profile.
 
 Three things stay in this pipeline rather than delegating to quick-sharun:
 updater neutralization (`fbr neutralize` fails the build when a declared
@@ -209,7 +216,10 @@ the `APPIMAGETOOL` env var with no CLI args; it reads
 `get-debloated-pkgs` from a raw URL addressed by a 40-character commit digest
 of pkgforge-dev/Anylinux-AppImages. That digest fixes the exact bytes of both
 tools, so there is no separate SHA-256 to co-update: Renovate owns the pin end
-to end.
+to end. It also fixes what quick-sharun downloads for itself at build time —
+the sharun runtime, onelf and cross-libc-dlopen — so bumping that one commit
+moves the runtime with it; only appimagetool is overridden, by the workflow's
+own pinned build.
 
 ## Local run (verification only)
 
