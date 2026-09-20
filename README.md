@@ -1,4 +1,4 @@
-# Edgarcnp Tap
+# edgarcnp/tap
 
 A Homebrew tap of Linux desktop apps, repackaged as AppImages.
 
@@ -22,7 +22,7 @@ brew install --cask <cask>
 | `gitbutler` | [GitButler](https://gitbutler.com/) | installs the GUI and the `but` CLI |
 | `commandcode-desktop` | [Command Code Desktop](https://commandcode.ai/desktop) | amd64 only |
 | `opencode-desktop` | [OpenCode Desktop](https://opencode.ai/) | |
-| `vscode` | [Visual Studio Code](https://code.visualstudio.com/) | conflicts with `visual-studio-code` |
+| `vscode` | [Visual Studio Code](https://code.visualstudio.com/) | |
 
 ## Requirements
 
