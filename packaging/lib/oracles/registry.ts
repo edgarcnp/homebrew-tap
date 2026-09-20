@@ -1,8 +1,8 @@
 // Oracle dispatch. The switch is exhaustive, so adding a resolver kind without
 // handling it here is a type error rather than a runtime surprise.
 
-import { fail } from "../guards.ts";
-import type { Metadata, Oracle, OracleKind } from "../types.ts";
+import { fail } from "../core/guards.ts";
+import type { Metadata, Oracle, OracleKind } from "../core/types.ts";
 import { resolveWithApt } from "./apt.ts";
 import { resolveWithCdnRedirect } from "./cdn-redirect.ts";
 import { resolveWithElectronFeed } from "./electron-feed.ts";

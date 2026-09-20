@@ -6,23 +6,23 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { parseArgs, type ParseArgsConfig } from "node:util";
-import { APPIMAGE_ARCH, resolveArchitecture } from "./architecture.ts";
-import { checkCask, readCaskFile, writeCask } from "./cask.ts";
-import { descriptorLines, listApps, loadDescriptor, resolveApp } from "./descriptor.ts";
-import { planGate } from "./gate.ts";
-import { readMetadataField } from "./metadata.ts";
+import { APPIMAGE_ARCH, resolveArchitecture } from "./core/architecture.ts";
+import { checkCask, readCaskFile, writeCask } from "./pipeline/cask.ts";
+import { descriptorLines, listApps, loadDescriptor, resolveApp } from "./pipeline/descriptor.ts";
+import { planGate } from "./pipeline/gate.ts";
+import { readMetadataField } from "./core/metadata.ts";
 import {
   compareReleasedAssets,
   planReleasePrune,
   renderReleaseNotes,
   type UpstreamRecord,
-} from "./release.ts";
-import { finalizeApp, neutralizeUpdater } from "./neutralize.ts";
+} from "./pipeline/release.ts";
+import { finalizeApp, neutralizeUpdater } from "./pipeline/neutralize.ts";
 import { resolveWith } from "./oracles/registry.ts";
-import { writeDesktopEntry } from "./render.ts";
-import type { AppDescriptor, Architecture } from "./types.ts";
-import { ARCHITECTURES, isArchitecture } from "./types.ts";
-import { compareDebVersions, sortDebVersions } from "./version.ts";
+import { writeDesktopEntry } from "./pipeline/render.ts";
+import type { AppDescriptor, Architecture } from "./core/types.ts";
+import { ARCHITECTURES, isArchitecture } from "./core/types.ts";
+import { compareDebVersions, sortDebVersions } from "./core/version.ts";
 
 type Options = NonNullable<ParseArgsConfig["options"]>;
 type Values = Record<string, unknown>;

@@ -6,13 +6,13 @@
 // ("<name>-<version>-<arch>.deb") under a pinned tag prefix.
 
 import * as path from "node:path";
-import { GITHUB_ASSET_HOSTS, assertMatches, assertPositiveSize, fail } from "../guards.ts";
-import { MAX_PAYLOAD_BYTES } from "../http.ts";
-import { makeMetadata, writeMetadata } from "../metadata.ts";
-import { SAFE_REFERENCE } from "../patterns.ts";
-import { substitutePlaceholders } from "../template.ts";
-import type { Architecture, GithubReleaseOracle, Metadata } from "../types.ts";
-import { ARCHITECTURES } from "../types.ts";
+import { GITHUB_ASSET_HOSTS, assertMatches, assertPositiveSize, fail } from "../core/guards.ts";
+import { MAX_PAYLOAD_BYTES } from "../core/http.ts";
+import { makeMetadata, writeMetadata } from "../core/metadata.ts";
+import { SAFE_REFERENCE } from "../core/patterns.ts";
+import { substitutePlaceholders } from "../core/template.ts";
+import type { Architecture, GithubReleaseOracle, Metadata } from "../core/types.ts";
+import { ARCHITECTURES } from "../core/types.ts";
 import { downloadVerified } from "./download.ts";
 import {
   assertRepositoryUrl,

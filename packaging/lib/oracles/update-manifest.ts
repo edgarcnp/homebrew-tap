@@ -14,12 +14,12 @@ import {
   assertSha256Hex,
   fail,
   isRecord,
-} from "../guards.ts";
-import { MAX_PAYLOAD_BYTES, fetchWithRetry, readPayload } from "../http.ts";
-import { makeMetadata, writeMetadata } from "../metadata.ts";
-import { DEB_VERSION } from "../patterns.ts";
-import { substitutePlaceholders } from "../template.ts";
-import type { Metadata, UpdateManifestOracle } from "../types.ts";
+} from "../core/guards.ts";
+import { MAX_PAYLOAD_BYTES, fetchWithRetry, readPayload } from "../core/http.ts";
+import { makeMetadata, writeMetadata } from "../core/metadata.ts";
+import { DEB_VERSION } from "../core/patterns.ts";
+import { substitutePlaceholders } from "../core/template.ts";
+import type { Metadata, UpdateManifestOracle } from "../core/types.ts";
 import { downloadVerified } from "./download.ts";
 import { prepareOutput, type ResolveRequest } from "./shared.ts";
 

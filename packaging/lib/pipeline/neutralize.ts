@@ -6,9 +6,9 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { assertSameLength, assertSingleLine, fail } from "./guards.ts";
-import { appDir } from "./paths.ts";
-import type { AppDescriptor, EndpointPatch } from "./types.ts";
+import { assertSameLength, assertSingleLine, fail } from "../core/guards.ts";
+import { appDir } from "../core/paths.ts";
+import type { AppDescriptor, EndpointPatch } from "../core/types.ts";
 
 // Vendored dependency trees are never patched (unchanged from the previous
 // implementation), but they are still scanned for survivors.

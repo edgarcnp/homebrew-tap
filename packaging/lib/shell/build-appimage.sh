@@ -5,11 +5,11 @@ set -Eeuo pipefail
 # per-app behavior comes from packaging/apps/<app>/app.json. Invoked through
 # the thin packaging/apps/<app>/build.sh shims.
 #
-# Usage: packaging/lib/build-appimage.sh <app-id>
+# Usage: packaging/lib/shell/build-appimage.sh <app-id>
 
 LIB_DIR="$(cd "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091 # sourced file is followed only when shellcheck runs with -x
-# shellcheck source=lib/appimage-pipeline.sh
+# shellcheck source=lib/shell/appimage-pipeline.sh
 . "${LIB_DIR}/appimage-pipeline.sh"
 
 APP_ID="${1:?usage: build-appimage.sh <app-id>}"

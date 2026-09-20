@@ -4,9 +4,9 @@
 // oracles use. Keeping them here means host pinning and pagination cannot
 // drift between the two resolvers.
 
-import { assertSingleLine, fail, isRecord } from "../guards.ts";
-import { fetchWithRetry } from "../http.ts";
-import { GITHUB_API_REPOSITORY } from "../patterns.ts";
+import { assertSingleLine, fail, isRecord } from "../core/guards.ts";
+import { fetchWithRetry } from "../core/http.ts";
+import { GITHUB_API_REPOSITORY } from "../core/patterns.ts";
 
 export const GITHUB_API_PREFIX = "https://api.github.com/repos/";
 export const GITHUB_DOWNLOAD_PREFIX = "https://github.com/";

@@ -2,8 +2,8 @@
 // pin. Extracted from the workflow's shell so the decision table is unit
 // tested rather than re-read in a YAML file before every change.
 
-import { compareDebVersions } from "./version.ts";
-import type { GateDecision, GateInput } from "./types.ts";
+import { compareDebVersions } from "../core/version.ts";
+import type { GateDecision, GateInput } from "../core/types.ts";
 
 // A cask version that is empty or non-numeric cannot be compared; treat it as
 // "needs building" so a broken pin is repaired rather than skipped.
