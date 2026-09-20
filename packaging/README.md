@@ -46,6 +46,7 @@ upstream source kind behind a shared interface, dispatched exhaustively
    the descriptor's icon into the hicolor tree.
 7. **pack** — `normalize_package_payload_permissions`, `quick-sharun` (generates
    AppRun, bundles the runtime closure including glibc and ld-linux),
+   `pipeline_reconcile_sharun_sidecars` (repairs nested sharun wrappers, below),
    `fbr finalize` (AppDir `.env` entries and the runtime hook), then pkgforge's
    `appimagetool` through `APPIMAGETOOL`, and finally the smoke test.
 
@@ -165,6 +166,16 @@ musl, non-FHS and very old distros. The same setup installs pkgforge's
 debloated Arch packages (`get-debloated-pkgs`, flags per app via the
 descriptor) so the AppImages carry stripped `libicudata`, mesa without LLVM,
 and other size optimizations.
+
+`quick-sharun` hardlinks `sharun` over every nested executable under `bin/`
+whose basename also lands in `shared/bin` (`_handle_nested_bins`). sharun maps
+only a wrapper directly under `bin/` to `shared/bin/<name>`, so a nested one —
+for example an Electron app spawning `bin/resources/opencode-cli` by path —
+fails at runtime with `Failed to find '<name>' in PATH or <dir>/shared/bin`.
+`pipeline_reconcile_sharun_sidecars` re-points each nested wrapper at the
+working `bin/<name>` wrapper with a relative symlink (sharun follows a symlink
+that resolves there) and fails the build when one cannot be mapped, so a dead
+sidecar cannot ship silently.
 
 The workflow installs the webkit2gtk/GTK deps only for apps whose descriptor
 sets `needsWebkit` (gitbutler) — vscode, opencode-desktop and commandcode-desktop are
