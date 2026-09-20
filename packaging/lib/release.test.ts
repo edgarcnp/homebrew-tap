@@ -5,7 +5,7 @@ import * as path from "node:path";
 import { describe, it } from "node:test";
 import { loadDescriptor } from "./descriptor.ts";
 import { sha256Hex } from "./http.ts";
-import { compareReleasedAssets, planReleasePrune } from "./release.ts";
+import { compareReleasedAssets, planReleasePrune, renderReleaseNotes } from "./release.ts";
 
 // vscode ships both architectures, so it exercises the dual-arch walk.
 const descriptor = loadDescriptor("vscode");
@@ -133,5 +133,37 @@ describe("planReleasePrune", () => {
   it("fails on an empty or unparseable version under the prefix", () => {
     assert.throws(() => planReleasePrune(["vscode-v"], "vscode-v", 1), /empty version/);
     assert.throws(() => planReleasePrune(["vscode-v../etc"], "vscode-v", 1), /Invalid package version/);
+  });
+});
+
+describe("renderReleaseNotes", () => {
+  const assets = {
+    "vscode-1.0.0-x86_64.AppImage": "amd64-bytes",
+    "vscode-1.0.0-aarch64.AppImage": "arm64-bytes",
+  };
+
+  it("tables the upstream and AppImage checksums and the sources", () => {
+    withAssets(assets, (dir) => {
+      const notes = renderReleaseNotes(descriptor, {
+        amd64: { sha256: "a".repeat(64), url: "https://example.test/amd64" },
+        arm64: { sha256: "b".repeat(64), url: "https://example.test/arm64" },
+      }, dir);
+      assert.match(notes, /\| Artifact \| SHA-256 \|/);
+      assert.match(notes, new RegExp(`\\| Upstream package \\(amd64\\) \\| \`${"a".repeat(64)}\` \\|`));
+      assert.match(notes, new RegExp(`\\| Upstream package \\(arm64\\) \\| \`${"b".repeat(64)}\` \\|`));
+      assert.match(notes, new RegExp(`\\| AppImage \\(aarch64\\) \\| \`${sha256Hex("arm64-bytes")}\` \\|`));
+      assert.match(notes, new RegExp(`\\| AppImage \\(x86_64\\) \\| \`${sha256Hex("amd64-bytes")}\` \\|`));
+      assert.match(notes, /- Upstream package \(amd64\): https:\/\/example\.test\/amd64/);
+      assert.match(notes, /- Upstream package \(arm64\): https:\/\/example\.test\/arm64/);
+      assert.equal(notes.endsWith("\n"), true);
+    });
+  });
+
+  it("marks a missing upstream amd64 checksum n/a and omits the arm64 rows", () => {
+    withAssets({ "vscode-1.0.0-x86_64.AppImage": "amd64-bytes" }, (dir) => {
+      const notes = renderReleaseNotes(descriptor, {}, dir);
+      assert.match(notes, /\| Upstream package \(amd64\) \| `n\/a` \|/);
+      assert.doesNotMatch(notes, /Upstream package \(arm64\)/);
+    });
   });
 });

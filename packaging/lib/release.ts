@@ -11,6 +11,47 @@ import { sha256Hex } from "./http.ts";
 import type { AppDescriptor, Architecture, CaskState } from "./types.ts";
 import { sortDebVersions } from "./version.ts";
 
+export interface UpstreamRecord {
+  sha256: string;
+  url: string;
+}
+
+// The release body: a checksum table (upstream packages the AppImages were
+// built from, plus the published AppImage hashes the cask pins) and the source
+// URLs. Rendered here, not in the workflow, so the prose is one place and the
+// arch walk reuses the same table as the rest of the pipeline.
+export function renderReleaseNotes(
+  descriptor: AppDescriptor,
+  upstreams: Partial<Record<Architecture, UpstreamRecord>>,
+  assetDir: string,
+): string {
+  const lines: string[] = [];
+  const upstreamSha = (architecture: Architecture): string =>
+    upstreams[architecture]?.sha256 || "n/a";
+
+  lines.push("## Artifact checksums", "");
+  lines.push(
+    `Upstream package integrity is verified against the release source (signed APT index or download-time SHA-256) before packaging; the AppImage hashes are enforced by the \`${descriptor.cask}\` cask at install.`,
+    "",
+  );
+  lines.push("| Artifact | SHA-256 |", "| --- | --- |");
+  lines.push(`| Upstream package (amd64) | \`${upstreamSha("amd64")}\` |`);
+  if (upstreams.arm64 !== undefined) {
+    lines.push(`| Upstream package (arm64) | \`${upstreamSha("arm64")}\` |`);
+  }
+  for (const file of releasedAssets(assetDir, descriptor.assetPrefix)) {
+    lines.push(
+      `| AppImage (${appimageArchOf(file)}) | \`${sha256Hex(fs.readFileSync(path.join(assetDir, file)))}\` |`,
+    );
+  }
+  lines.push("", "### Sources");
+  lines.push(`- Upstream package (amd64): ${upstreams.amd64?.url ?? ""}`);
+  if (upstreams.arm64 !== undefined) {
+    lines.push(`- Upstream package (arm64): ${upstreams.arm64.url}`);
+  }
+  return `${lines.join("\n")}\n`;
+}
+
 export interface PrunePlan {
   // Every version found under the tag prefix, dpkg-ordered ascending.
   versions: string[];
@@ -49,12 +90,27 @@ export interface AssetComparison {
   notes: string[];
 }
 
-// Every asset in `assetDir` named "<assetPrefix>-<...>-<appimageArch>.AppImage".
-function releasedAssets(assetDir: string, assetPrefix: string, architecture: Architecture): string[] {
-  const suffix = `-${APPIMAGE_ARCH[architecture]}.AppImage`;
+// Every AppImage asset in `assetDir` for this prefix, optionally narrowed to
+// one architecture, in stable (sorted) order.
+function releasedAssets(
+  assetDir: string,
+  assetPrefix: string,
+  architecture?: Architecture,
+): string[] {
+  const suffix =
+    architecture === undefined ? ".AppImage" : `-${APPIMAGE_ARCH[architecture]}.AppImage`;
   return fs
     .readdirSync(assetDir)
-    .filter((name) => name.startsWith(`${assetPrefix}-`) && name.endsWith(suffix));
+    .filter((name) => name.startsWith(`${assetPrefix}-`) && name.endsWith(suffix))
+    .sort();
+}
+
+// "<prefix>-<version>-<appimageArch>.AppImage" -> "<appimageArch>".
+function appimageArchOf(fileName: string): string {
+  const base = fileName.endsWith(".AppImage")
+    ? fileName.slice(0, -".AppImage".length)
+    : fileName;
+  return base.slice(base.lastIndexOf("-") + 1);
 }
 
 // Compares the downloaded release assets for every architecture the descriptor

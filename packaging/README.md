@@ -117,6 +117,8 @@ fbr release-check --app X --asset-dir D      compare downloaded release assets t
                                              could not compare)
 fbr release-prune --prefix P --keep N TAGS   print the stale release versions to prune,
                                              dpkg-ordered oldest first
+fbr release-notes --app X --asset-dir D      render the release-notes markdown
+     [--upstream arch=SHA=URL]... [--output F]
 fbr neutralize --app X --appdir D            disable the in-AppDir updater
 fbr finalize --app X --appdir D              write .env and install the hook
 fbr render-desktop --app X --version V --appdir D
