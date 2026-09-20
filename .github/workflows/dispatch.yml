@@ -1,13 +1,29 @@
 name: Dispatch build
 
-# Sole repository_dispatch subscriber: a trigger-build event names the app to
-# build, by app id or cask token (or "all"). Routing lives in the build
-# workflow's plan job, so an unknown or missing app fails loudly instead of
-# matching no job at all.
+# Entry point for programmatic builds: a trigger-build repository_dispatch
+# event, or a workflow_dispatch run, names the app to build by app id or cask
+# token (or "all"). workflow_dispatch is the API's path — it returns a run id
+# (return_run_details), so the caller polls this one run. Routing lives in the
+# build workflow's plan job, so an unknown or missing app fails loudly instead
+# of matching no job at all.
 
 on:
   repository_dispatch:
     types: [trigger-build]
+  workflow_dispatch:
+    inputs:
+      app:
+        description: App id or cask token to build, or "all"
+        required: true
+        type: string
+      version:
+        description: Informational; the pipeline resolves the upstream version itself
+        required: false
+        type: string
+      trigger_repo:
+        description: Informational; the repo requesting the build
+        required: false
+        type: string
 
 permissions: {}
 
@@ -20,4 +36,4 @@ jobs:
     uses: ./.github/workflows/build.yml
     secrets: inherit
     with:
-      app: ${{ github.event.client_payload.app }}
+      app: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.app || github.event.client_payload.app }}
