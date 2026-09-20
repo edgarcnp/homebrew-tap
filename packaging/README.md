@@ -25,7 +25,12 @@ packaging/
 `packaging/lib/` is a library: nothing in it has side effects at import, and
 the CLI is the only entry point. `packaging/lib/oracles/` holds one module per
 upstream source kind behind a shared interface, dispatched exhaustively
-(`registry.ts`), so adding a kind without handling it is a compile error.
+(`registry.ts`), so adding a kind without handling it is a compile error. The
+oracles share one download path (`download.ts`: fetch, host pin, size cap,
+digest check, atomic write) and one GitHub API client (`github-api.ts`), so a
+resolver only supplies its URL, expected content and hosts; shared regexes
+(`patterns.ts`), the arch table (`architecture.ts`) and name templating
+(`template.ts`) live at the top level.
 
 ## Pipeline stages
 
