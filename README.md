@@ -1,17 +1,19 @@
 # Edgarcnp Tap
 
-Homebrew tap with Linux desktop apps, repackaged as AppImages and built automatically by this repository's CI.
+A Homebrew tap of Linux desktop apps, repackaged as AppImages and built
+automatically by this repository's CI.
 
-## Supported platforms
+## Platform notes
 
-> [!Note]
-> All casks work on both Wayland and X11. Nothing in the casks forces a backend: the bundled apps' own toolkits (Electron, Tauri) detect Wayland and fall back to X11 themselves.
+All casks work on Wayland and X11 — nothing forces a backend; the apps' own
+toolkits (Electron, Tauri) detect Wayland and fall back to X11.
 
-Casks should work on any Linux distro with Homebrew, but this tap is mainly supported on Fedora Linux, including the Atomic flavor. All casks ship AppImages and rely on unprivileged user namespaces (enabled by default on Fedora) for the Chromium sandbox.
+The tap targets any Linux distro with Homebrew, but is mainly supported on
+Fedora (including the Atomic flavor). Every cask ships an AppImage and relies on
+unprivileged user namespaces (on by default on Fedora) for the Chromium/WebKit
+sandbox.
 
-## Installation
-
-Install any cask directly:
+## Install
 
 ```sh
 brew install --cask edgarcnp/tap/<cask>
@@ -24,7 +26,7 @@ brew tap edgarcnp/tap
 brew install --cask <cask>
 ```
 
-Or in a `brew bundle` `Brewfile`:
+In a `Brewfile`:
 
 ```ruby
 tap "edgarcnp/tap"
@@ -33,46 +35,47 @@ cask "<cask>"
 
 ## Casks
 
+| Cask | Upstream | Notes |
+| --- | --- | --- |
+| `gitbutler` | [GitButler](https://gitbutler.com/) | Tauri; bundles webkit2gtk/GTK3, installs the GUI and the `but` CLI |
+| `commandcode-desktop` | [Command Code Desktop](https://commandcode.ai/desktop) | amd64-only; updater feed removed |
+| `opencode-desktop` | [OpenCode Desktop](https://opencode.ai/) | version and digest from OpenCode's update manifest |
+| `vscode` | [Visual Studio Code](https://code.visualstudio.com/) | built from Microsoft's signed APT repo |
+
 ### gitbutler
 
-Repackage of [GitButler](https://gitbutler.com/) as an AppImage, built from the checksum-pinned `.deb` published through GitButler's download CDN. GitButler is a Tauri app; the AppImage bundles the webkit runtime (`libwebkit2gtk-4.1`) and GTK3 dependencies, so no webkit libraries are required on the host. The cask installs the GUI as `gitbutler-tauri` and the `but` CLI (same binary, dispatched by name), matching upstream.
-
-```sh
-brew install --cask edgarcnp/tap/gitbutler
-```
-
-Shares the standard GitButler profile and the `but://` URL scheme with the app.
+Repackage of GitButler, built from the `.deb` served through GitButler's
+download CDN. The AppImage bundles the webkit runtime (`libwebkit2gtk-4.1`) and
+GTK3, so no webkit libraries are needed on the host. Installs the GUI as
+`gitbutler-tauri` and the `but` CLI (same binary, dispatched by name), matching
+upstream. Shares the standard GitButler profile and the `but://` URL scheme.
 
 ### commandcode-desktop
 
-Repackage of [Command Code Desktop](https://commandcode.ai/desktop) as an AppImage, built from the checksum-pinned amd64 `.deb` published on the [CommandCodeAI/desktop](https://github.com/CommandCodeAI/desktop) GitHub releases and verified against the release's SHA-256 asset digests. Upstream publishes Linux builds only for x64, so this cask is amd64-only (`depends_on arch: :x86_64`). The embedded auto-updater feed is removed and update checks are gated by `CC_DISABLE_AUTO_UPDATE=1`.
-
-```sh
-brew install --cask edgarcnp/tap/commandcode-desktop
-```
+Repackage of Command Code Desktop, from the amd64 `.deb` on the
+[CommandCodeAI/desktop](https://github.com/CommandCodeAI/desktop) releases,
+verified against the release's SHA-256 asset digests. Upstream ships Linux
+builds for x64 only, so this cask is amd64-only (`depends_on arch: :x86_64`).
+The embedded updater feed is removed and update checks are gated by
+`CC_DISABLE_AUTO_UPDATE=1`.
 
 ### opencode-desktop
 
-Repackage of [OpenCode Desktop](https://opencode.ai/) as an AppImage, built from the `.deb` served by OpenCode's v2 desktop update API (`https://opencode.ai/update/api/latest/desktop/opencode`) and verified against the manifest's SHA-256 asset digest. v2 binary distributions are no longer published as GitHub release assets, so the manifest is both the version source and the digest source.
-
-```sh
-brew install --cask edgarcnp/tap/opencode-desktop
-```
+Repackage of OpenCode Desktop, built from the `.deb` served by OpenCode's v2
+desktop update API, verified against the manifest's SHA-256 digest. v2 binaries
+are no longer published as GitHub release assets, so the manifest is both the
+version and the digest source.
 
 ### vscode
 
-Repackage of [Visual Studio Code](https://code.visualstudio.com/) as an AppImage, built from Microsoft's signed APT repository.
+Repackage of Visual Studio Code, built from Microsoft's signed APT repository.
 
-```sh
-brew install --cask edgarcnp/tap/vscode
-```
+## What a cask installs
 
-## General notes (applies to all casks)
-
-### What a cask installs
-
-- The AppImage, copied into the configured AppImage directory (default `~/Applications`; override with `brew install --cask --appimagedir=<dir>`).
-- A launcher binary on your PATH and a desktop entry in `~/.local/share/applications/`, with its icon in `~/.local/share/icons/`.
+- The AppImage, in the AppImage directory (default `~/Applications`; override
+  with `brew install --cask --appimagedir=<dir>`).
+- A launcher on your `PATH`, plus a desktop entry in
+  `~/.local/share/applications/` and an icon in `~/.local/share/icons/`.
 
 ## Uninstall
 
@@ -80,46 +83,55 @@ brew install --cask edgarcnp/tap/vscode
 brew uninstall --cask <cask>
 ```
 
-Add `--zap` to also remove the desktop entry and icon:
+`--zap` also removes the desktop entry and icon:
 
 ```sh
 brew uninstall --cask --zap <cask>
 ```
 
-If you already uninstalled without `--zap`, use `--force` (needed because the cask is no longer installed):
+Already uninstalled without `--zap`? The cask is gone, so `--force` is needed:
 
 ```sh
 brew uninstall --cask --zap --force <cask>
 ```
 
-## How these AppImages differ from the official ones
+## How these AppImages differ
 
-Official AppImages are usually built with AppImageKit's `appimagetool`: squashfs + the classic type-2 runtime. The AppImages in this tap are built with [pkgforge `appimagetool`](https://github.com/pkgforge-dev/appimagetool), which uses:
+Official AppImages usually use AppImageKit's `appimagetool` (squashfs + the
+classic type-2 runtime). This tap builds with
+[pkgforge `appimagetool`](https://github.com/pkgforge-dev/appimagetool):
 
-- **uruntime** (from the [Anylinux-AppImages](https://github.com/pkgforge-dev/Anylinux-AppImages) project) as the runtime instead of the classic type-2 runtime. FUSE3-compatible.
-- **DWARFS** compression instead of squashfs — smaller, delta-friendly images, plus built-in zsync.
-- A single Rust binary with no Python/C++ toolchain dependencies.
+- **uruntime** (from
+  [Anylinux-AppImages](https://github.com/pkgforge-dev/Anylinux-AppImages))
+  instead of the type-2 runtime. FUSE3-compatible.
+- **DWARFS** compression instead of squashfs — smaller, delta-friendly images
+  with built-in zsync.
+- A single Rust binary, no Python/C++ toolchain.
 
-The binaries inside are the official upstream releases; only the packaging toolchain differs.
+The binaries inside are the official upstream releases; only the packaging
+toolchain differs.
 
-### How the AppImages run
+### Running
 
-The uruntime first tries to **mount** the embedded filesystem via FUSE3; if FUSE is unavailable, it falls back to **extract-and-run** (extracting the image to a temp dir and running from there). So the AppImages work even on systems without FUSE.
+The runtime first tries to **mount** the embedded filesystem via FUSE3 and falls
+back to **extract-and-run** (unpack to a temp dir), so the AppImages work even
+without FUSE.
 
 ### Sandboxing
 
-AppImage builds never add `--no-sandbox`. The AppImages bundle pkgforge's
-`fix-namespaces` hook, which detects a distribution that restricts
-unprivileged user namespaces (Ubuntu since 24.04, secureblue) and offers to
-lift the restriction so the Chromium/WebKit sandbox can be used. If it cannot
-help on your system, use the `.deb`/`.rpm` packages instead.
+Builds never add `--no-sandbox`. The AppImages bundle pkgforge's
+`fix-namespaces` hook, which detects a distro that restricts unprivileged user
+namespaces (Ubuntu 24.04+, secureblue) and offers to lift the restriction so the
+Chromium/WebKit sandbox works. If it can't help on your system, use the upstream
+`.deb`/`.rpm` instead.
 
 ## Documentation
 
-How the AppImages are built (pipeline layout, app descriptors, verification
-model and how to add an app): [`packaging/README.md`](packaging/README.md).
+How the AppImages are built — pipeline, descriptors, verification and adding an
+app: [`packaging/README.md`](packaging/README.md).
 
-`brew help`, `man brew` or check [Homebrew's documentation](https://docs.brew.sh).
+For Homebrew itself: `brew help`, `man brew`, or
+[docs.brew.sh](https://docs.brew.sh).
 
 ## License
 
