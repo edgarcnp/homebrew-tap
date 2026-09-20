@@ -17,7 +17,7 @@ import {
   fail,
 } from "../guards.ts";
 import { MAX_PAYLOAD_BYTES, fetchWithRetry } from "../http.ts";
-import { writeMetadata } from "../metadata.ts";
+import { makeMetadata, writeMetadata } from "../metadata.ts";
 import type { Architecture, ElectronFeedOracle, Metadata } from "../types.ts";
 import { downloadVerified, fetchVerified } from "./download.ts";
 import {
@@ -267,31 +267,26 @@ export async function resolveWithElectronFeed(
   const asset = selectAsset(release, parsed.tag, expectedAsset, yml.size);
 
   const downloadBase = githubDownloadBase(githubRepository);
-  const metadata: Metadata = {
+  const packagePath = request.metadataOnly
+    ? null
+    : path.join(outputDir, `${oracle.packageName}_${parsed.version}_${request.architecture}.AppImage`);
+  const metadata = makeMetadata({
     package: oracle.packageName,
     version: parsed.version,
-    packageVersion: parsed.version,
     architecture: request.architecture,
     repositoryPath: `${parsed.tag}/${asset.name}`,
     sha256: asset.sha256,
     size: asset.size,
-    depends: "",
     repository: downloadBase,
-    path: null,
-  };
-
-  if (!request.metadataOnly) {
-    const packagePath = path.join(
-      outputDir,
-      `${oracle.packageName}_${parsed.version}_${request.architecture}.AppImage`,
-    );
+    path: packagePath,
+  });
+  if (packagePath !== null) {
     await downloadVerified(
       `${downloadBase}/${metadata.repositoryPath}`,
       packagePath,
       { sha256: asset.sha256, sha512: yml.sha512, size: asset.size },
       { allowedHosts: GITHUB_ASSET_HOSTS, label: path.basename(packagePath) },
     );
-    metadata.path = packagePath;
   }
   writeMetadata(metadataPath, metadata);
   return metadata;
