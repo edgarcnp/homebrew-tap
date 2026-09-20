@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { substitutePlaceholders } from "./template.ts";
+import { substitutePlaceholders } from "../../lib/core/template.ts";
 
 describe("substitutePlaceholders", () => {
   it("replaces every declared token", () => {

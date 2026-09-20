@@ -5,7 +5,7 @@ import {
   extractClearSignedPayload,
   parseDeb822,
   parseReleaseSha256,
-} from "./deb822.ts";
+} from "../../lib/core/deb822.ts";
 
 const IN_RELEASE = `-----BEGIN PGP SIGNED MESSAGE-----
 Hash: SHA512

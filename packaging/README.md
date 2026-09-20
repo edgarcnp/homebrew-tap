@@ -23,14 +23,17 @@ packaging/
                              release, neutralize, render)
   lib/oracles/               one module per upstream source kind
   lib/shell/                 the bash pipeline (build driver, stages, primitives)
+  tests/                     unit tests, mirroring lib/'s groups (run by `bun test`)
   scripts/                   repo-level tooling (tool installer, local style gate)
 ```
 
 `packaging/lib/` is a library: nothing in it has side effects at import, and
 the CLI is the only entry point. The folders group by role, not by file kind:
 `core/` holds helpers that know nothing about a cask, `pipeline/` implements
-the descriptor-driven steps, and `oracles/` resolves upstream sources. Tests
-sit next to their module (`*.test.ts`, run by `bun test`).
+the descriptor-driven steps, and `oracles/` resolves upstream sources.
+`packaging/tests/` holds the unit suite, mirroring those groups
+(`tests/core/`, `tests/pipeline/`, `tests/oracles/`, `tests/shell/`), so a
+module's test lives at the same relative path under `tests/`.
 
 `packaging/lib/oracles/` holds one module per upstream source kind behind a
 shared interface, dispatched exhaustively (`registry.ts`), so adding a kind

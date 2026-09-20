@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import { describe, it } from "node:test";
-import { descriptorLines, listApps, loadDescriptor, resolveApp, validateDescriptor } from "./descriptor.ts";
-import { descriptorPath } from "../core/paths.ts";
+import { descriptorLines, listApps, loadDescriptor, resolveApp, validateDescriptor } from "../../lib/pipeline/descriptor.ts";
+import { descriptorPath } from "../../lib/core/paths.ts";
 
 const APPS = listApps();
 

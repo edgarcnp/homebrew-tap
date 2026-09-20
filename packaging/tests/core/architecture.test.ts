@@ -5,7 +5,7 @@ import {
   BREW_ARCH,
   resolveArchitecture,
   resolveBrewArch,
-} from "./architecture.ts";
+} from "../../lib/core/architecture.ts";
 
 describe("architecture table", () => {
   it("maps every deb arch to its AppImage and Brew spellings", () => {

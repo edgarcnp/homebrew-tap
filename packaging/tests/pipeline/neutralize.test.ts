@@ -3,8 +3,8 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
-import { finalizeApp, isElf, neutralizeUpdater } from "./neutralize.ts";
-import type { AppDescriptor, UpdaterConfig } from "../core/types.ts";
+import { finalizeApp, isElf, neutralizeUpdater } from "../../lib/pipeline/neutralize.ts";
+import type { AppDescriptor, UpdaterConfig } from "../../lib/core/types.ts";
 
 const ENDPOINT = "update.code.visualstudio.com";
 const BINARY_REPLACEMENT = "update.invalidupdate.invalid";
