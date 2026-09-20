@@ -72,19 +72,6 @@ ensure_file_exists() {
   [[ -f "${path}" ]] || error "Missing ${label}: ${path}"
 }
 
-# Echoes "<deb_arch> <appimage_arch>" for the TARGET_ARCH global.
-map_arch() {
-  case "${TARGET_ARCH}" in
-    amd64 | x86_64)
-      echo "amd64 x86_64"
-      ;;
-    arm64 | aarch64)
-      echo "arm64 aarch64"
-      ;;
-    *) error "Unsupported AppImage architecture: ${TARGET_ARCH} (upstream packages support amd64 and arm64 only)" ;;
-  esac
-}
-
 normalize_package_payload_permissions() {
   local root="$1"
 

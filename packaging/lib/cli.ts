@@ -6,6 +6,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { parseArgs, type ParseArgsConfig } from "node:util";
+import { APPIMAGE_ARCH, resolveArchitecture } from "./architecture.ts";
 import { checkCask, readCaskFile, writeCask } from "./cask.ts";
 import { descriptorLines, listApps, loadDescriptor, resolveApp } from "./descriptor.ts";
 import { planGate } from "./gate.ts";
@@ -343,6 +344,16 @@ const COMMANDS: Command[] = [
       const destination = path.join(flags.str("appdir"), `${descriptor.cask}.desktop`);
       writeDesktopEntry(descriptor, flags.str("version"), destination);
       process.stdout.write(`${destination}\n`);
+      return 0;
+    },
+  },
+  {
+    name: "arch",
+    summary: `Map an arch spelling to "<deb-arch> <appimage-arch>" (--arch ${ARCHITECTURES.join("|")}|x86_64|aarch64)`,
+    options: { arch: { type: "string" } },
+    run: (flags) => {
+      const architecture = resolveArchitecture(flags.str("arch"));
+      process.stdout.write(`${architecture} ${APPIMAGE_ARCH[architecture]}\n`);
       return 0;
     },
   },
