@@ -34,6 +34,7 @@ function descriptorWith(updater: UpdaterConfig, id = "vscode"): AppDescriptor {
     icon: { source: "usr/share/pixmaps/vscode.png", size: "256x256" },
     desktopTemplate: "templates/vscode.desktop",
     updater,
+    quickSharun: {},
   };
 }
 

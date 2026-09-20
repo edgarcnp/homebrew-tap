@@ -47,5 +47,8 @@
       "patterns": ["https://opencode.ai/update/api/"],
       "severity": "warning"
     }
+  },
+  "quickSharun": {
+    "hooks": ["fix-namespaces.hook"]
   }
 }

@@ -47,5 +47,8 @@
       "patterns": ["CommandCodeAI/gui"],
       "severity": "error"
     }
+  },
+  "quickSharun": {
+    "hooks": ["fix-namespaces.hook"]
   }
 }

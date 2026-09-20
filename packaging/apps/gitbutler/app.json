@@ -48,5 +48,8 @@
       "patterns": ["https://app.gitbutler.com/releases/release/"],
       "severity": "warning"
     }
+  },
+  "quickSharun": {
+    "hooks": ["fix-namespaces.hook"]
   }
 }

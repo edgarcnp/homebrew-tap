@@ -108,7 +108,11 @@ The uruntime first tries to **mount** the embedded filesystem via FUSE3; if FUSE
 
 ### Sandboxing
 
-AppImage builds never add `--no-sandbox`. If your distribution disables unprivileged user namespaces, use the `.deb`/`.rpm` packages instead.
+AppImage builds never add `--no-sandbox`. The AppImages bundle pkgforge's
+`fix-namespaces` hook, which detects a distribution that restricts
+unprivileged user namespaces (Ubuntu since 24.04, secureblue) and offers to
+lift the restriction so the Chromium/WebKit sandbox can be used. If it cannot
+help on your system, use the `.deb`/`.rpm` packages instead.
 
 ## Documentation
 

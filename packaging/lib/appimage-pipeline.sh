@@ -249,6 +249,29 @@ pipeline_reconcile_sharun_sidecars() {
   [[ "${reconciled}" -eq 0 ]] || info "Reconciled ${reconciled} nested sharun sidecar(s)"
 }
 
+# quick-sharun reads its configuration from the environment (ADD_HOOKS,
+# OPTIMIZE_LAUNCH, DEPLOY_*, QUICK_SHARUN_SKIP_DEPS_FOR, ...). The descriptor is
+# the source of truth for the app's knobs, so export them here: the CI build
+# step and a local build.sh then apply the same configuration instead of the
+# app's needs living in the workflow.
+pipeline_export_quick_sharun_env() {
+  local hooks key value line
+  hooks="$(descriptor_field '.quickSharun.hooks // [] | join(":")')"
+  if [[ -n "${hooks}" ]]
+  then
+    export ADD_HOOKS="${ADD_HOOKS:+${ADD_HOOKS}:}${hooks}"
+    info "quick-sharun ADD_HOOKS=${ADD_HOOKS}"
+  fi
+  while IFS= read -r line
+  do
+    [[ -n "${line}" ]] || continue
+    key="${line%%=*}"
+    value="${line#*=}"
+    export "${key}=${value}"
+    info "quick-sharun ${key}=${value}"
+  done < <(descriptor_field '.quickSharun.env // {} | to_entries[] | "\(.key)=\(.value)"')
+}
+
 # Packages the AppDir: quick-sharun (which generates AppRun and bundles the
 # runtime closure including libc), then the pkgforge appimagetool (uruntime /
 # DWARFS) invoked through APPIMAGETOOL with no CLI args, then the smoke gate.
@@ -279,6 +302,7 @@ Install the Anylinux tools (packaging/scripts/install-anylinux-tools.sh) or add 
     # the staged tree and deploys its support libraries.
     targets=("${APPDIR}/bin/"*)
   fi
+  pipeline_export_quick_sharun_env
   quick-sharun "${targets[@]}"
   pipeline_reconcile_sharun_sidecars
 
