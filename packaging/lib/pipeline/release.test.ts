@@ -4,7 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { describe, it } from "node:test";
 import { loadDescriptor } from "./descriptor.ts";
-import { sha256Hex } from "./http.ts";
+import { sha256Hex } from "../core/http.ts";
 import { compareReleasedAssets, planReleasePrune, renderReleaseNotes } from "./release.ts";
 
 // vscode ships both architectures, so it exercises the dual-arch walk.

@@ -1,8 +1,8 @@
 // Helpers shared by the GitHub-backed oracles (release assets and the
 // electron-updater feed, which cross-checks against the same API).
 
-import { assertMatches } from "../guards.ts";
-import { DEB_VERSION } from "../patterns.ts";
+import { assertMatches } from "../core/guards.ts";
+import { DEB_VERSION } from "../core/patterns.ts";
 
 export function normalizeTagVersion(tag: string): string {
   const version = String(tag).replace(/^v/, "");

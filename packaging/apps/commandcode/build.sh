@@ -1,7 +1,7 @@
 #!/bin/bash
 set -Eeuo pipefail
 
-# Thin shim: the pipeline lives in packaging/lib/build-appimage.sh and this
+# Thin shim: the pipeline lives in packaging/lib/shell/build-appimage.sh and this
 # app's configuration in app.json.
-# shellcheck source=lib/build-appimage.sh
-exec "$(cd "$(dirname -- "${BASH_SOURCE[0]:-$0}")/../../lib" && pwd)/build-appimage.sh" commandcode
+# shellcheck source=lib/shell/build-appimage.sh
+exec "$(cd "$(dirname -- "${BASH_SOURCE[0]:-$0}")/../../lib/shell" && pwd)/build-appimage.sh" commandcode

@@ -3,10 +3,10 @@
 // here, so a new app is data plus its templates, not a fork of the pipeline.
 
 import * as fs from "node:fs";
-import { assertSameLength, assertSingleLine, fail } from "./guards.ts";
-import { APPS_DIR, descriptorPath } from "./paths.ts";
-import { GITHUB_API_REPOSITORY, SAFE_IDENTIFIER, SAFE_REFERENCE } from "./patterns.ts";
-import { ARCHITECTURES, isArchitecture } from "./types.ts";
+import { assertSameLength, assertSingleLine, fail } from "../core/guards.ts";
+import { APPS_DIR, descriptorPath } from "../core/paths.ts";
+import { GITHUB_API_REPOSITORY, SAFE_IDENTIFIER, SAFE_REFERENCE } from "../core/patterns.ts";
+import { ARCHITECTURES, isArchitecture } from "../core/types.ts";
 import type {
   AppDescriptor,
   Architecture,
@@ -17,7 +17,7 @@ import type {
   ResidualScan,
   UpdaterConfig,
   WatchConfig,
-} from "./types.ts";
+} from "../core/types.ts";
 
 const SAFE_ENV_KEY = /^[A-Z][A-Z0-9_]*$/;
 

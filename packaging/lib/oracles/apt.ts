@@ -12,18 +12,18 @@ import {
   assertSha256Hex,
   assertSingleLine,
   fail,
-} from "../guards.ts";
-import { MAX_PAYLOAD_BYTES, writeFileAtomic } from "../http.ts";
+} from "../core/guards.ts";
+import { MAX_PAYLOAD_BYTES, writeFileAtomic } from "../core/http.ts";
 import {
   assertReleaseFreshness,
   extractClearSignedPayload,
   parseDeb822,
   parseReleaseSha256,
-} from "../deb822.ts";
-import { makeMetadata, writeMetadata } from "../metadata.ts";
-import { REPO_ROOT } from "../paths.ts";
-import type { AptOracle, Architecture, Metadata } from "../types.ts";
-import { compareDebVersions, normalizeUpstreamVersion } from "../version.ts";
+} from "../core/deb822.ts";
+import { makeMetadata, writeMetadata } from "../core/metadata.ts";
+import { REPO_ROOT } from "../core/paths.ts";
+import type { AptOracle, Architecture, Metadata } from "../core/types.ts";
+import { compareDebVersions, normalizeUpstreamVersion } from "../core/version.ts";
 import { fetchVerified, verifyPayload } from "./download.ts";
 import { prepareOutput, type ResolveRequest } from "./shared.ts";
 

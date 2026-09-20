@@ -5,11 +5,11 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { APPIMAGE_ARCH } from "./architecture.ts";
-import { fail } from "./guards.ts";
-import { sha256Hex } from "./http.ts";
-import type { AppDescriptor, Architecture, CaskState } from "./types.ts";
-import { sortDebVersions } from "./version.ts";
+import { APPIMAGE_ARCH } from "../core/architecture.ts";
+import { fail } from "../core/guards.ts";
+import { sha256Hex } from "../core/http.ts";
+import type { AppDescriptor, Architecture, CaskState } from "../core/types.ts";
+import { sortDebVersions } from "../core/version.ts";
 
 export interface UpstreamRecord {
   sha256: string;

@@ -11,11 +11,11 @@ import {
   assertSafeName,
   assertSha256Hex,
   fail,
-} from "../guards.ts";
-import { digestMatchesHex, sha256Digest, sha256Hex, writeFileAtomic } from "../http.ts";
-import { makeMetadata, writeMetadata } from "../metadata.ts";
-import type { Architecture, CdnRedirectOracle, Metadata } from "../types.ts";
-import { normalizeUpstreamVersion } from "../version.ts";
+} from "../core/guards.ts";
+import { digestMatchesHex, sha256Digest, sha256Hex, writeFileAtomic } from "../core/http.ts";
+import { makeMetadata, writeMetadata } from "../core/metadata.ts";
+import type { Architecture, CdnRedirectOracle, Metadata } from "../core/types.ts";
+import { normalizeUpstreamVersion } from "../core/version.ts";
 import { fetchVerified } from "./download.ts";
 import { prepareOutput, type ResolveRequest } from "./shared.ts";
 

@@ -3,8 +3,8 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { assertInside } from "../guards.ts";
-import type { Architecture } from "../types.ts";
+import { assertInside } from "../core/guards.ts";
+import type { Architecture } from "../core/types.ts";
 
 export interface ResolveRequest {
   architecture: Architecture;

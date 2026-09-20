@@ -15,11 +15,11 @@
 (return 0 2>/dev/null) || exit 1
 
 PIPELINE_LIB_DIR="$(cd "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-PIPELINE_REPO_DIR="$(cd "${PIPELINE_LIB_DIR}/../.." && pwd)"
+PIPELINE_REPO_DIR="$(cd "${PIPELINE_LIB_DIR}/../../.." && pwd)"
 FBR_ENTRY="${FBR_ENTRY:-${PIPELINE_REPO_DIR}/packaging/bin/fbr.ts}"
 
 # shellcheck disable=SC1091 # sourced file is followed only when shellcheck runs with -x
-# shellcheck source=lib/shell-common.sh
+# shellcheck source=lib/shell/shell-common.sh
 . "${PIPELINE_LIB_DIR}/shell-common.sh"
 
 fbr() {
@@ -42,7 +42,7 @@ pipeline_init() {
   PACKAGE_NAME="$(descriptor_field '.cask')"
   TARGET_ARCH="${TARGET_ARCH:-$(uname -m)}"
 
-  # The arch table lives in packaging/lib/architecture.ts (fbr arch), so the
+  # The arch table lives in packaging/lib/core/architecture.ts (fbr arch), so the
   # shell stages cannot disagree with the cask check about an arch spelling.
   local arch_line
   arch_line="$(fbr arch --arch "${TARGET_ARCH}")"

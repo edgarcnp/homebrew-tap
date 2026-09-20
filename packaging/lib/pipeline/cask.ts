@@ -4,10 +4,10 @@
 // every cask agrees with its app descriptor.
 
 import * as fs from "node:fs";
-import { APPIMAGE_ARCH, BREW_ARCH, resolveBrewArch } from "./architecture.ts";
-import { assertSha256Hex, fail } from "./guards.ts";
-import { writeFileAtomic } from "./http.ts";
-import type { AppDescriptor, Architecture, CaskState } from "./types.ts";
+import { APPIMAGE_ARCH, BREW_ARCH, resolveBrewArch } from "../core/architecture.ts";
+import { assertSha256Hex, fail } from "../core/guards.ts";
+import { writeFileAtomic } from "../core/http.ts";
+import type { AppDescriptor, Architecture, CaskState } from "../core/types.ts";
 
 const VERSION_STANZA = /^[ \t]*version "([^"]*)"/gm;
 const ARM64_SHA256 = /arm64_linux:[ \t]*"([0-9a-f]{64})"/g;

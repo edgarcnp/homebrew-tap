@@ -11,30 +11,39 @@ used for `tsc --noEmit` and editor support.
 ```
 packaging/
   apps/<app>/app.json        app descriptor: the single source of truth
-  apps/<app>/build.sh        thin shim -> packaging/lib/build-appimage.sh <app>
+  apps/<app>/build.sh        thin shim -> packaging/lib/shell/build-appimage.sh <app>
   apps/<app>/templates/      app's desktop entry (and runtime hook)
   apps/<app>/assets/         app's pinned signing key material
   apps/<app>/README.md       app-specific notes
   bin/fbr.ts                 the one CLI (resolve, gate, cask, neutralize, render)
-  lib/*.ts                   pipeline core, one responsibility per module
-  lib/*.test.ts              unit tests (bun test)
-  lib/*.sh                   shared bash: build driver, pipeline stages, primitives
+  lib/cli.ts                 the CLI: composition root, imports every group below
+  lib/core/                  domain-free primitives (paths, types, guards, regexes,
+                             version, arch table, templating, http, deb822, metadata)
+  lib/pipeline/              descriptor-driven domain (descriptor, cask, gate,
+                             release, neutralize, render)
+  lib/oracles/               one module per upstream source kind
+  lib/shell/                 the bash pipeline (build driver, stages, primitives)
   scripts/                   repo-level tooling (tool installer, local style gate)
 ```
 
 `packaging/lib/` is a library: nothing in it has side effects at import, and
-the CLI is the only entry point. `packaging/lib/oracles/` holds one module per
-upstream source kind behind a shared interface, dispatched exhaustively
-(`registry.ts`), so adding a kind without handling it is a compile error. The
-oracles share one download path (`download.ts`: fetch, host pin, size cap,
-digest check, atomic write) and one GitHub API client (`github-api.ts`), so a
-resolver only supplies its URL, expected content and hosts; shared regexes
-(`patterns.ts`), the arch table (`architecture.ts`) and name templating
-(`template.ts`) live at the top level.
+the CLI is the only entry point. The folders group by role, not by file kind:
+`core/` holds helpers that know nothing about a cask, `pipeline/` implements
+the descriptor-driven steps, and `oracles/` resolves upstream sources. Tests
+sit next to their module (`*.test.ts`, run by `bun test`).
+
+`packaging/lib/oracles/` holds one module per upstream source kind behind a
+shared interface, dispatched exhaustively (`registry.ts`), so adding a kind
+without handling it is a compile error. The oracles share one download path
+(`download.ts`: fetch, host pin, size cap, digest check, atomic write) and one
+GitHub API client (`github-api.ts`), so a resolver only supplies its URL,
+expected content and hosts; shared regexes (`core/patterns.ts`), the arch table
+(`core/architecture.ts`) and name templating (`core/template.ts`) live in
+`core/`.
 
 ## Pipeline stages
 
-`packaging/lib/build-appimage.sh <app>` runs, in order:
+`packaging/lib/shell/build-appimage.sh <app>` runs, in order:
 
 1. **init** — load and validate the descriptor, resolve the architecture
    (`TARGET_ARCH` → `amd64`/`arm64` + the AppImage arch), set up the scratch
@@ -162,7 +171,7 @@ place:
 1. `packaging/apps/<app>/app.json` — copy a similar descriptor and adjust the
    oracle, payload, icon and updater sections.
 2. `packaging/apps/<app>/templates/<name>.desktop`, plus `build.sh` (four lines:
-   `exec ../../lib/build-appimage.sh <app>`).
+   `exec ../../lib/shell/build-appimage.sh <app>`).
 3. `Casks/<cask>.rb` with zero placeholder checksums; the first publish fills
    them in.
 4. Nothing else: the build matrix and the dispatch route read the descriptor

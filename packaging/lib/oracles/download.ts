@@ -3,7 +3,7 @@
 // atomically. Oracles supply only the URL, the expected content and the hosts,
 // so host pinning and hashing cannot drift between resolvers.
 
-import { assertHostAllowed } from "../guards.ts";
+import { assertHostAllowed } from "../core/guards.ts";
 import {
   MAX_PAYLOAD_BYTES,
   digestMatchesHex,
@@ -12,7 +12,7 @@ import {
   sha256Digest,
   sha512Base64,
   writeFileAtomic,
-} from "../http.ts";
+} from "../core/http.ts";
 
 // What the caller knows about the payload before downloading it. Every field
 // is optional: the CDN oracle publishes no checksum and only the size is known

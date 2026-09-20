@@ -10,9 +10,9 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
-import { REPO_ROOT } from "./paths.ts";
+import { REPO_ROOT } from "../core/paths.ts";
 
-const PIPELINE_LIB = path.join(REPO_ROOT, "packaging", "lib", "appimage-pipeline.sh");
+const PIPELINE_LIB = path.join(REPO_ROOT, "packaging", "lib", "shell", "appimage-pipeline.sh");
 const STAGE = "pipeline_reconcile_sharun_sidecars";
 
 let appDir: string;

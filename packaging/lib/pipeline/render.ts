@@ -3,10 +3,10 @@
 // validated, so a descriptor cannot inject extra keys or lines.
 
 import * as fs from "node:fs";
-import { assertSingleLine, fail } from "./guards.ts";
-import { writeFileAtomic } from "./http.ts";
-import { appDir } from "./paths.ts";
-import type { AppDescriptor } from "./types.ts";
+import { assertSingleLine, fail } from "../core/guards.ts";
+import { writeFileAtomic } from "../core/http.ts";
+import { appDir } from "../core/paths.ts";
+import type { AppDescriptor } from "../core/types.ts";
 
 const REQUIRED_KEYS = ["Name=", "Comment=", "Exec=", "Icon=", "Type=Application"];
 
