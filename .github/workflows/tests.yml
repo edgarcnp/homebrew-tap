@@ -28,10 +28,9 @@ jobs:
     strategy:
       matrix:
         os: [ ubuntu-latest ]
-        # macOS: all casks are Linux-only (depends_on :linux); the Ubuntu
-        # container leg below runs shellcheck, actionlint, the TypeScript
-        # typecheck and unit tests, brew style/audit and the test-bot
-        # tap-syntax check.
+        # macOS is out: all casks are Linux-only. The container leg runs
+        # shellcheck, actionlint, typecheck, tests, brew style/audit and the
+        # test-bot tap-syntax check.
         # os: [ macos-26 ]
         include:
           - container:
@@ -60,9 +59,8 @@ jobs:
           restore-keys: ${{ matrix.os }}-rubygems-
 
       - name: Save Homebrew Bundler RubyGems
-        # PR runs only restore the cache; saving is skipped so fork-PR runs
-        # can never write attacker-injected Ruby into a shared cache entry
-        # that main-branch runs would later restore (cache poisoning).
+        # PR runs only restore; saving is skipped so a fork PR cannot write
+        # attacker Ruby into a cache entry main would later restore (poisoning).
         if: github.event_name != 'pull_request'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -78,8 +76,7 @@ jobs:
         env:
           TAP_REPO: ${{ github.repository }}
         run: |
-          # in the brew container the tap checkout lives in the tap
-          # directory, not under GITHUB_WORKSPACE
+          # In the brew container the tap lives in the tap dir, not GITHUB_WORKSPACE.
           cd "$(brew --repository "$TAP_REPO")"
           bun install --frozen-lockfile --ignore-scripts
 
@@ -101,8 +98,7 @@ jobs:
         env:
           TAP_REPO: ${{ github.repository }}
         run: |
-          # one parser for Casks/*.rb, shared with the publish pipeline; it
-          # fails when a cask drifts from packaging/apps/<app>/app.json
+          # One parser for Casks/*.rb; fails when a cask drifts from its app.json.
           cd "$(brew --repository "$TAP_REPO")"
           bun packaging/bin/fbr.ts cask --action check
 
@@ -118,21 +114,19 @@ jobs:
             apt-get install -y shellcheck
           fi
           cd "$(brew --repository "$TAP_REPO")"
-          # globbed, so a new script is linted without editing this file; -x
-          # follows the sourced pipeline libraries
+          # Globbed, so a new script is linted automatically; -x follows the
+          # sourced pipeline libraries.
           find packaging -name '*.sh' -print0 | xargs -0 shellcheck -x -P packaging
 
       - name: Actionlint workflow lint
         env:
           TAP_REPO: ${{ github.repository }}
         run: |
-          # Renovate owns ACTIONLINT_VERSION (renovate.json customManagers); it
-          # cannot recompute the tarball hash, so update ACTIONLINT_SHA256 in
-          # the same PR - the check below prints the hash it measured.
-          # rhysd/actionlint v1.7.12
+          # Renovate owns ACTIONLINT_VERSION but cannot recompute the tarball
+          # hash, so update ACTIONLINT_SHA256 in its PR (this check prints the
+          # measured hash). rhysd/actionlint v1.7.12; sha256 of
+          # actionlint_<version>_linux_amd64.tar.gz from the release checksums.
           ACTIONLINT_VERSION="1.7.12"
-          # sha256 of actionlint_<version>_linux_amd64.tar.gz, from the release's
-          # own _checksums.txt
           ACTIONLINT_SHA256="8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
           curl -fL --retry 5 --retry-all-errors --retry-delay 5 \
             -o /tmp/actionlint.tar.gz \
@@ -145,17 +139,15 @@ jobs:
           fi
           tar -C /tmp -xzf /tmp/actionlint.tar.gz actionlint
           cd "$(brew --repository "$TAP_REPO")"
-          # no arguments: actionlint discovers .github/workflows/*.yml itself,
-          # so a new workflow is covered without editing this file
+          # No arguments: actionlint discovers .github/workflows/*.yml itself.
           /tmp/actionlint -color
 
       - name: Style and audit casks
         env:
           TAP_REPO: ${{ github.repository }}
         run: |
-          # the tap is already checked out by setup-homebrew
-          # no --fix: corrections in the sandbox are discarded, so they would
-          # mask style regressions instead of failing the run
+          # The tap is already checked out by setup-homebrew. No --fix:
+          # sandbox corrections are discarded and would mask regressions.
           brew style edgarcnp/tap
           tap_dir="$(brew --repository "$TAP_REPO")"
           for cask in "$tap_dir"/Casks/*.rb; do

@@ -1,10 +1,6 @@
-// Debian version comparison, a faithful port of dpkg's verrevcmp()/order()
-// (libdpkg/version.c): digit characters and the end of a part weigh 0, '~'
-// weighs -1, letters weigh their ASCII value, and every other character
-// weighs its value plus 256. So letters sort before all other punctuation, a
-// tilde sorts before the end of a part, and digit runs compare numerically
-// with leading zeros ignored. Comparing raw strings instead (what this
-// replaced) ordered letters after punctuation and got those picks wrong.
+// Debian version comparison: a faithful port of dpkg's verrevcmp()/order()
+// (libdpkg/version.c). Letters sort before punctuation, '~' before the end of a
+// part, and digit runs compare numerically with leading zeros ignored.
 
 import { fail } from "./guards.ts";
 
@@ -101,18 +97,12 @@ export function compareDebVersions(a: string, b: string): Ordering {
   return compareParts(pa.revision, pb.revision);
 }
 
-// Ascending sort under the same ordering the gate and the casks use. Callers
-// that publish or prune releases must not re-derive an order from `sort -V`:
-// GNU's version sort and dpkg disagree about which of two versions is newer.
-// For "1.0.109a" vs "1.0.109-1" sort -V ranks the lettered version first,
-// while dpkg splits the hyphen into upstream+revision, compares the upstream
-// parts ("1.0.109" < "1.0.109a", because an ended part sorts before a letter)
-// and so ranks it second - and pruning must never drop the newest release.
+// Ascending sort under dpkg's ordering. Use it instead of `sort -V`: the two
+// disagree (for "1.0.109a" vs "1.0.109-1", sort -V ranks the lettered version
+// first), and pruning must never drop the newest release.
 export function sortDebVersions(versions: readonly string[]): string[] {
-  // Validate every entry up front: comparing alone would never look at a
-  // version that the sort leaves uncompared (a single-element list, or an
-  // element that happens to need no comparison), and a caller that prunes by
-  // index must not receive a list holding an unparseable version.
+  // Validate up front: the sort never compares some entries, and a caller that
+  // prunes by index must not receive an unparseable version.
   for (const version of versions) parseDebVersion(version);
   return [...versions].sort(compareDebVersions);
 }

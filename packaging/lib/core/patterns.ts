@@ -1,6 +1,4 @@
-// Regexes that more than one module must agree on. Sharing them stops a check
-// in an oracle from drifting from the identical check in the descriptor
-// validator or the metadata writer.
+// Regexes more than one module must agree on.
 
 // A safe identifier: starts alphanumeric, then letters/digits/._- . Used for
 // package, cask and asset basenames (no path separators, no leading dash).

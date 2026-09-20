@@ -1,5 +1,4 @@
-// Repository layout, defined once. Every containment check derives from these
-// so a module move cannot silently change what counts as "inside the repo".
+// Repository layout, defined once for every containment check.
 
 import * as fs from "node:fs";
 import * as path from "node:path";

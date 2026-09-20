@@ -1,16 +1,15 @@
 #!/bin/bash
 
 # The AppImage build pipeline, driven by the app descriptor. Every app's
-# build.sh calls these stages in order; anything app specific lives in
-# packaging/apps/<app>/app.json rather than in a forked copy of this script.
+# build.sh calls these stages in order; per-app behavior lives in app.json.
 #
-# Globals produced here (consumed by the stages below and by the caller):
+# Globals produced here (consumed below and by the caller):
 #   APP_ID APP_JSON PACKAGE_NAME PACKAGE_VERSION
 #   TARGET_ARCH DEB_ARCH APPIMAGE_ARCH
 #   WORK_DIR DIST_DIR APPDIR METADATA_PATH PAYLOAD_PATH PAYLOAD_ROOT
 #
-# Requires: bash, jq, bun (for the fbr CLI), plus the app's own tooling
-# (dpkg-deb for .deb payloads, quick-sharun and APPIMAGETOOL for packing).
+# Requires: bash, jq, bun (the fbr CLI), and the app's own tooling (dpkg-deb,
+# quick-sharun, APPIMAGETOOL).
 # shellcheck disable=SC2154 # globals are provided by pipeline_init
 (return 0 2>/dev/null) || exit 1
 
@@ -42,8 +41,7 @@ pipeline_init() {
   PACKAGE_NAME="$(descriptor_field '.cask')"
   TARGET_ARCH="${TARGET_ARCH:-$(uname -m)}"
 
-  # The arch table lives in packaging/lib/core/architecture.ts (fbr arch), so the
-  # shell stages cannot disagree with the cask check about an arch spelling.
+  # The one arch mapping lives in fbr arch (core/architecture.ts).
   local arch_line
   arch_line="$(fbr arch --arch "${TARGET_ARCH}")"
   DEB_ARCH="${arch_line% *}"
@@ -123,8 +121,8 @@ is_excluded_payload_entry() {
   return 1
 }
 
-# Stages the payload into AppDir/bin (and AppDir/usr when the descriptor says
-# the vendored usr/ belongs at the AppDir root).
+# Stages the payload into AppDir/bin (and AppDir/usr when the descriptor moves
+# the vendored usr/ to the AppDir root).
 pipeline_stage() {
   local kind
   kind="$(descriptor_field '.payload.kind')"
@@ -148,10 +146,8 @@ pipeline_stage() {
       done < <(descriptor_field '.payload.files[]')
       ;;
     appimage-tree)
-      # Stage the upstream payload entry by entry, renaming the scoped
-      # executable to the package name and dropping the upstream AppDir
-      # furniture that this pipeline replaces (AppRun, desktop entries,
-      # icons, and usr/ when the descriptor moves it to the AppDir root).
+      # Entry by entry, renaming the scoped executable and dropping the upstream
+      # AppDir furniture this pipeline replaces.
       local entry name target
       while IFS= read -r entry
       do
@@ -176,8 +172,7 @@ pipeline_stage() {
   esac
 }
 
-# Neutralizes the app's own updater (endpoint patches, feed removal, product
-# .json keys) and fails when a residual updater endpoint survives.
+# Neutralizes the app's own updater and fails when a declared endpoint survives.
 pipeline_neutralize() {
   fbr neutralize --app "${APP_ID}" --appdir "${APPDIR}"
 }
@@ -200,23 +195,13 @@ pipeline_install_icon() {
   cp -- "${APPDIR}/${PACKAGE_NAME}.png" "${APPDIR}/share/icons/hicolor/${size}/apps/${PACKAGE_NAME}.png"
 }
 
-# quick-sharun's _handle_nested_bins replaces every nested executable under
-# bin/ whose basename also lands in shared/bin with an in-place hardlink of
-# sharun. sharun resolves its runtime root from /proc/self/exe and then loads
-# shared/bin/<name>; only a wrapper directly under bin/ makes that resolve (the
-# parent's basename is "bin", so the root is the AppDir). A wrapper anywhere
-# else -- bin/resources/opencode-cli, which Electron spawns by
-# process.resourcesPath, or a lib/gstreamer-* executable -- looks for
-# <dir>/shared/bin/<name> and fails with "Failed to find '<name>' in PATH or
-# '<dir>/shared/bin'".
-#
-# This stage first re-points a nested wrapper under bin/ at the working
-# bin/<name> wrapper with a relative symlink (sharun follows a symlink that
-# resolves there; the target is relative so it survives a different mount point
-# and --appimage-extract), then asserts the contract for the whole AppDir: the
-# only sharun hardlinks left are sharun itself and the bin/<name> wrappers.
-# Anything else is a process path that cannot start, so the build fails instead
-# of shipping it.
+# quick-sharun hardlinks sharun over every nested bin/ executable whose basename
+# also lands in shared/bin. sharun resolves its root from /proc/self/exe, so only
+# a wrapper directly under bin/ resolves; a nested one (e.g. an Electron app
+# spawning bin/resources/<name>) fails at runtime. This stage re-points each
+# nested wrapper under bin/ at the working bin/<name> wrapper with a relative
+# symlink (which sharun follows), then asserts the whole AppDir: the only sharun
+# hardlinks left are sharun itself and the bin/<name> wrappers.
 pipeline_reconcile_sharun_sidecars() {
   local sharun sidecar relative name wrapper real up rest target reconciled
   sharun="${APPDIR}/sharun"
@@ -225,8 +210,7 @@ pipeline_reconcile_sharun_sidecars() {
   reconciled=0
   while IFS= read -r -d '' sidecar
   do
-    # every hardlink of sharun in the AppDir; a real sidecar binary is a
-    # distinct inode and is never matched
+    # every hardlink of sharun (a real sidecar binary is a distinct inode)
     if [ "${sidecar}" = "${sharun}" ]
     then
       continue
@@ -266,11 +250,8 @@ pipeline_reconcile_sharun_sidecars() {
   [[ "${reconciled}" -eq 0 ]] || info "Reconciled ${reconciled} nested sharun sidecar(s)"
 }
 
-# quick-sharun reads its configuration from the environment (ADD_HOOKS,
-# OPTIMIZE_LAUNCH, DEPLOY_*, QUICK_SHARUN_SKIP_DEPS_FOR, ...). The descriptor is
-# the source of truth for the app's knobs, so export them here: the CI build
-# step and a local build.sh then apply the same configuration instead of the
-# app's needs living in the workflow.
+# quick-sharun reads its knobs from the environment; export the descriptor's so
+# CI and a local build.sh apply the same configuration.
 pipeline_export_quick_sharun_env() {
   local hooks key value line
   hooks="$(descriptor_field '.quickSharun.hooks // [] | join(":")')"
@@ -289,9 +270,8 @@ pipeline_export_quick_sharun_env() {
   done < <(descriptor_field '.quickSharun.env // {} | to_entries[] | "\(.key)=\(.value)"')
 }
 
-# Packages the AppDir: quick-sharun (which generates AppRun and bundles the
-# runtime closure including libc), then the pkgforge appimagetool (uruntime /
-# DWARFS) invoked through APPIMAGETOOL with no CLI args, then the smoke gate.
+# Packages the AppDir: quick-sharun (AppRun + the runtime closure including
+# libc), then the pkgforge appimagetool via APPIMAGETOOL, then the smoke gate.
 pipeline_pack() {
   normalize_package_payload_permissions "${APPDIR}"
 
@@ -315,16 +295,15 @@ Install the Anylinux tools (packaging/scripts/install-anylinux-tools.sh) or add 
       targets+=("${APPDIR}/bin/$(basename -- "${file}")")
     done < <(descriptor_field '.payload.files[]')
   else
-    # Electron payloads: quick-sharun auto-detects the electron binary from
-    # the staged tree and deploys its support libraries.
+    # Electron payloads: quick-sharun auto-detects the electron binary from the
+    # staged tree and deploys its support libraries.
     targets=("${APPDIR}/bin/"*)
   fi
   pipeline_export_quick_sharun_env
   quick-sharun "${targets[@]}"
   pipeline_reconcile_sharun_sidecars
 
-  # .env entries and the runtime hook belong to the finished AppDir, so they
-  # are applied after quick-sharun generated AppRun.
+  # .env and the runtime hook belong to the finished AppDir (after AppRun exists).
   fbr finalize --app "${APP_ID}" --appdir "${APPDIR}"
 
   if ! "${APPIMAGETOOL}"

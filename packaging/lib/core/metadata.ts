@@ -1,5 +1,5 @@
-// The metadata document every oracle emits and the shell pipeline consumes.
-// One validator here means the build scripts can trust the JSON they read.
+// The metadata document oracles emit and the shell pipeline reads; one
+// validator here means the scripts can trust the JSON.
 
 import * as fs from "node:fs";
 import {

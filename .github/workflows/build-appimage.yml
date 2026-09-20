@@ -1,9 +1,7 @@
 name: AppImage build
 
-# Reusable pipeline for one app. Everything app specific (resolver, repository
-# pins, staging, updater neutralization, debloat flags) comes from
-# packaging/apps/<app>/app.json, so adding an app means adding a descriptor
-# and a template directory - not a fork of this file.
+# Reusable pipeline for one app. Everything app-specific comes from
+# packaging/apps/<app>/app.json, so adding an app needs no workflow edit.
 
 on:
   workflow_call:
@@ -59,17 +57,15 @@ jobs:
         env:
           APP: ${{ inputs.app }}
         run: |
-          # descriptor-env validates the descriptor and emits the pipeline's
-          # variables: uppercase for shell steps ($GITHUB_ENV) and lowercase
-          # for job outputs, which cannot read the env context.
+          # descriptor-env emits the pipeline's variables: uppercase to
+          # $GITHUB_ENV, lowercase to $GITHUB_OUTPUT (which cannot read env).
           bun tap/packaging/bin/fbr.ts descriptor-env --app "${APP}" >> "${GITHUB_ENV}"
           bun tap/packaging/bin/fbr.ts descriptor-env --app "${APP}" --format output >> "${GITHUB_OUTPUT}"
       - name: Plan the build matrix
         id: matrix
         run: |
-          # Single-arch apps (e.g. CommandCode, amd64-only upstream) build one
-          # AppImage; dual-arch apps build both. The matrix is derived from the
-          # descriptor so adding a single-arch app needs no workflow edit.
+          # Single-arch apps build one AppImage, dual-arch both; the matrix
+          # comes from the descriptor, so no workflow edit is needed.
           matrix="$(jq -c '{include: [.[] | select(. == "amd64" or . == "arm64") | if . == "amd64" then {architecture: ., runner: "ubuntu-latest", appimage_arch: "x86_64"} else {architecture: ., runner: "ubuntu-24.04-arm", appimage_arch: "aarch64"} end]}' <<<"${APP_ARCHITECTURES}")"
           [ "$(jq '.include | length' <<<"${matrix}")" -gt 0 ] || { echo "::error::no supported architectures in ${APP_ARCHITECTURES}" >&2; exit 1; }
           echo "matrix=${matrix}" >> "${GITHUB_OUTPUT}"
@@ -147,11 +143,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # The gate decision itself is a unit-tested pure function; this step
-          # only gathers its inputs (cask pin, release existence, and whether
-          # the published assets still match the cask's checksums - DWARFS
-          # images are not byte reproducible, so a rebuild can change them
-          # without a version bump).
+          # The gate decision is a unit-tested pure function; this step gathers
+          # its inputs (cask pin, release existence, and whether the published
+          # assets still match the cask pin).
           cask_json="$(bun tap/packaging/bin/fbr.ts cask --action read --app "${APP_ID}" --tap "${GITHUB_WORKSPACE}/tap")"
           cask_version="$(jq -r '.version' <<<"${cask_json}")"
           version="${{ steps.resolve.outputs.version }}"
@@ -163,9 +157,8 @@ jobs:
 
           matches=""
           if [[ "${release_exists}" = "true" && "${cask_version}" = "${version}" ]]; then
-            # The asset-vs-cask comparison is a unit-tested command: it prints
-            # true|false, or nothing when a shipped architecture has no single
-            # matching asset (could not compare) - exactly the gate's tri-state.
+            # release-check prints true|false, or nothing when it could not
+            # compare (a shipped arch with no single asset).
             tmp_dir="$(mktemp -d)"
             if timeout 60 gh release download "${TAG_PREFIX}${version}" \
               --repo "${GITHUB_REPOSITORY}" \
@@ -208,13 +201,9 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: read
-    # Builds run inside pkgforge's Arch Linux container: AppImages are built
-    # with sharun/quick-sharun, which bundle the app + libc + everything else
-    # from the build system, so the build OS must be Arch for correct 32-bit
-    # lib layout and access to pkgforge's debloated packages via pacman.
-    # Pinned by digest, not just the (mutable) date tag; Renovate's
-    # github-actions manager reads this job-level container and bumps both
-    # together. pacman -Syu runs on every build anyway.
+    # pkgforge's Arch container: sharun/quick-sharun bundle libc and everything
+    # else from the build system, so the build OS must be Arch. Pinned by digest
+    # (Renovate bumps tag and digest together).
     container:
       image: ghcr.io/pkgforge-dev/archlinux:v2026.09.05@sha256:b2507f1964270cab3cc190aa8df858521f6a7e45e969146a012877891d5dfc9b
     steps:
@@ -229,9 +218,8 @@ jobs:
           persist-credentials: false
       - name: Prepare Arch container
         run: |
-          # Bun is set up only after this step: setup-bun extracts its download
-          # with unzip, which this step installs. The rest of the toolchain the
-          # pipeline shells out to (jq, dpkg, curl, ...) is installed here too.
+          # setup-bun needs unzip (installed here); the rest is the toolchain
+          # the pipeline shells out to.
           pacman-key --init
           pacman -Syy --noconfirm archlinux-keyring
           pacman -Syu --noconfirm \
@@ -255,14 +243,12 @@ jobs:
         env:
           APP: ${{ inputs.app }}
         run: |
-          # The tap is the pipeline's source of truth for the build flags; the
-          # build script itself reads the descriptor from the source checkout.
+          # The tap is the source of truth for the build flags.
           bun "${GITHUB_WORKSPACE}/tap/packaging/bin/fbr.ts" descriptor-env --app "${APP}" >> "${GITHUB_ENV}"
       - name: Install webkit2gtk build dependencies
         if: needs.detect.outputs.needs_webkit == 'true'
         run: |
-          # webkit2gtk runtime closure for the gitbutler AppImage build;
-          # sharun bundles these libs into the AppImage from this system
+          # webkit2gtk closure for the gitbutler build; sharun bundles it.
           pacman -S --noconfirm \
             gdk-pixbuf2 \
             glib-networking \
@@ -270,19 +256,10 @@ jobs:
             webkit2gtk-4.1
       - name: Install appimagetool
         run: |
-          # Renovate owns the 0.5.1 version below (renovate.json
-          # customManagers); it cannot recompute the per-arch hashes, so update
-          # them in the same PR - the check prints the hash it measured.
-          # Hashes come from the pkgforge 0.5.1 release assets. This is the
-          # plain (non -full) build: it downloads uruntime/mkdwarfs at build
-          # time and verifies them against its own pinned digests, exactly as
-          # the 0.4.2 build it replaces did.
-          # quick-sharun's pinned commit still defaults to 0.4.2 with matching
-          # hashes, but the APPIMAGETOOL override below means its copy is never
-          # downloaded or used.
-          # quick-sharun invokes this binary via the APPIMAGETOOL env var with
-          # no CLI args; it reads APPDIR/OUTPATH/OUTNAME/ARCH/VERSION from the
-          # environment.
+          # Pinned pkgforge appimagetool (plain build). Renovate owns the 0.5.1
+          # version but cannot recompute these per-arch hashes, so update them in
+          # its PR - the check prints the hash it measured. quick-sharun invokes
+          # it via APPIMAGETOOL with no args (it reads the APPDIR/OUT* env).
           curl -fL --retry 5 --retry-all-errors --retry-delay 5 \
             -o /tmp/appimagetool-uruntime \
             "https://github.com/pkgforge-dev/appimagetool/releases/download/0.5.1/appimagetool-${{ matrix.appimage_arch }}-linux"
@@ -302,29 +279,22 @@ jobs:
           mv /tmp/appimagetool-uruntime /opt/appimagetool-uruntime
       - name: Install Anylinux build tools
         run: |
-          # quick-sharun + get-debloated-pkgs, pinned to a commit digest of
-          # pkgforge-dev/Anylinux-AppImages; Renovate owns the pin end to end
-          # (see packaging/scripts/install-anylinux-tools.sh)
+          # quick-sharun + get-debloated-pkgs, pinned to a commit digest;
+          # Renovate owns the pin (packaging/scripts/install-anylinux-tools.sh).
           "${GITHUB_WORKSPACE}/tap/packaging/scripts/install-anylinux-tools.sh"
       - name: Install debloated packages
         run: |
-          # Debloated Arch packages (mesa without LLVM, stripped libicudata,
-          # ffmpeg-mini, etc.) shrink the final AppImages; per-app flags come
-          # from the app descriptor.
+          # Debloated Arch packages shrink the AppImage; flags are per app.
           read -r -a flags <<<"${DEBLOAT_ARGS}"
           get-debloated-pkgs "${flags[@]}"
       - name: Build AppImage
         env:
           TARGET_ARCH: ${{ matrix.architecture }}
           PACKAGE_VERSION: ${{ needs.detect.outputs.version }}
-          # quick-sharun drives the pkgforge appimagetool via env vars,
-          # not CLI args
+          # quick-sharun drives appimagetool via env vars, not CLI args.
           APPIMAGETOOL: /opt/appimagetool-uruntime
-          # brew owns updates, so no AppImage self-update information ships.
-          # quick-sharun treats an empty UPINFO as "guess it from
-          # GITHUB_REPOSITORY" (quick-sharun.sh, pinned commit), but the guess
-          # does not reach the AppImage: published artifacts carry an empty
-          # .upd_info section and no zsync string.
+          # brew owns updates: UPINFO="" keeps an update-info section out of the
+          # artifact (quick-sharun would otherwise guess one from the repo).
           UPINFO: ""
         run: |
           cd source
@@ -347,9 +317,8 @@ jobs:
       contents: write
       id-token: write
     steps:
-      # Release retention sorts tags with the pipeline's own dpkg ordering, so
-      # this job needs the tap and the CLI (unlike the release steps, which
-      # only need gh).
+      # Retention sorts tags with the pipeline's dpkg ordering, so it needs the
+      # tap and the CLI.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: tap
@@ -370,8 +339,8 @@ jobs:
           UPSTREAM_URL_ARM64: ${{ needs.detect.outputs.upstream_url_arm64 }}
           APP_ID: ${{ needs.detect.outputs.app_id }}
         run: |
-          # The checksum table and prose are rendered by a unit-tested command;
-          # this step only assembles the optional per-arch upstream rows.
+          # The table and prose come from a unit-tested command; only the
+          # optional per-arch upstream rows are assembled here.
           upstream_args=(--upstream "amd64=${UPSTREAM_SHA_AMD64}=${UPSTREAM_URL_AMD64}")
           if [ -n "${UPSTREAM_SHA_ARM64}" ]; then
             upstream_args+=(--upstream "arm64=${UPSTREAM_SHA_ARM64}=${UPSTREAM_URL_ARM64}")
@@ -412,14 +381,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG_PREFIX: ${{ needs.detect.outputs.tag_prefix }}
         run: |
-          # "Newest" is the pipeline's dpkg ordering, not `sort -V`: for shapes
-          # upstreams publish (1.0.109a vs 1.0.109-1, 1.0+build vs 1.0-rc.1)
-          # GNU's version sort and dpkg disagree about which is newer, and
-          # pruning must never drop the newest release. release-prune owns that
-          # ordering and the prefix/validation rules; it prints the stale
-          # versions (oldest first) and nothing when all are within the keep
-          # window. A failing gh call or an unparseable tag fails the step
-          # instead of pruning a short list.
+          # release-prune picks the stale versions by dpkg ordering (never
+          # `sort -V`, which disagrees) and prints them oldest first, or nothing
+          # when all are within the window. A failing gh call or unparseable tag
+          # fails the step instead of pruning a short list.
           tags="$(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName \
             --jq '.[].tagName')"
           mapfile -t tag_list <<< "${tags}"
@@ -436,11 +401,9 @@ jobs:
             gh release delete "${TAG_PREFIX}${version}" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag
           done <<< "${stale}"
 
-  # One job covers both gate outcomes: a fresh build (after publish) and a
-  # cask-only repair (publish skipped). always() is what lets it run when
-  # publish was skipped on the repair path; the condition still requires a
-  # successful publish for the build path. The two cases only differed in
-  # needs/if, so keeping them together removes a byte-identical duplicate.
+  # Covers both gate outcomes: a fresh build (after publish) and a cask-only
+  # repair (publish skipped). always() runs it when publish was skipped; the
+  # build path still requires publish to succeed.
   pin-cask:
     needs: [detect, publish]
     if: >-

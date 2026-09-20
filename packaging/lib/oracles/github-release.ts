@@ -1,9 +1,6 @@
-// GitHub release asset oracle: release listing -> per-asset SHA-256 digest from
-// the GitHub API -> download-time verification. Legacy layout picks the newest
-// non-draft, non-prerelease release carrying both architecture .deb assets
-// ("<assetPrefix>-<arch>.deb"); the versioned-asset flavor picks the newest
-// release carrying the requested architecture's templated asset
-// ("<name>-<version>-<arch>.deb") under a pinned tag prefix.
+// GitHub release asset oracle: the newest published release carrying the
+// requested architecture's `.deb` with a SHA-256 digest, verified at download.
+// The versioned-asset flavor picks by tag prefix and `assetNameTemplate`.
 
 import * as path from "node:path";
 import { GITHUB_ASSET_HOSTS, assertMatches, assertPositiveSize, fail } from "../core/guards.ts";

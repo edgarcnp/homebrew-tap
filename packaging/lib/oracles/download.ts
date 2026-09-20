@@ -1,7 +1,5 @@
-// The one download path every oracle shares: fetch with retry, enforce the
-// host allow-list and the size cap, verify the published digest(s), then write
-// atomically. Oracles supply only the URL, the expected content and the hosts,
-// so host pinning and hashing cannot drift between resolvers.
+// The one download path every oracle shares: fetch with retry, enforce the host
+// allow-list and size cap, verify the digest(s), write atomically.
 
 import { assertHostAllowed } from "../core/guards.ts";
 import {
@@ -14,10 +12,9 @@ import {
   writeFileAtomic,
 } from "../core/http.ts";
 
-// What the caller knows about the payload before downloading it. Every field
-// is optional: the CDN oracle publishes no checksum and only the size is known
-// after the fact, while the GitHub-backed oracles carry a SHA-256 (and the
-// electron feed a cross-checked SHA-512).
+// What the caller knows before downloading. All optional: the CDN oracle has
+// no checksum, while the GitHub-backed ones carry a SHA-256 (the electron feed
+// also a SHA-512).
 export interface PayloadExpectation {
   sha256?: string;
   sha512?: string;
@@ -70,9 +67,8 @@ export async function fetchVerified(
   return { bytes: await readPayload(response, maxBytes), finalUrl };
 }
 
-// Verifies the payload against whatever the caller could pin. Checks run in a
-// fixed order (size, then SHA-256, then SHA-512) so a mismatch reports the
-// cheapest failing expectation first.
+// Verifies against whatever the caller could pin, checking size → SHA-256 →
+// SHA-512 so the cheapest failing expectation reports first.
 export function verifyPayload(bytes: Buffer, expected: PayloadExpectation, label: string): void {
   if (expected.size !== undefined && bytes.length !== expected.size) {
     throw new Error(`${label} size mismatch: expected ${expected.size}, got ${bytes.length}`);
@@ -87,8 +83,8 @@ export function verifyPayload(bytes: Buffer, expected: PayloadExpectation, label
   }
 }
 
-// The common case: download, verify, write. Bytes are never returned, so a
-// caller that does not need them cannot accidentally pin unverified content.
+// The common case: download, verify, write. Bytes are not returned, so a caller
+// cannot pin unverified content by accident.
 export async function downloadVerified(
   url: string,
   destination: string,

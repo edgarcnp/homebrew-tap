@@ -1,6 +1,5 @@
-// The cask gate: decides whether a run builds, skips, or only repairs the cask
-// pin. Extracted from the workflow's shell so the decision table is unit
-// tested rather than re-read in a YAML file before every change.
+// The cask gate: whether a run builds, skips, or only repairs the cask pin.
+// A unit-tested decision table, so the workflow needs no shell for it.
 
 import { compareDebVersions } from "../core/version.ts";
 import type { GateDecision, GateInput } from "../core/types.ts";

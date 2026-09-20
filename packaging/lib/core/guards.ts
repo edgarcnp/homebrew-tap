@@ -1,6 +1,5 @@
-// Centralized input validation. Every resolver and command validates through
-// these helpers so host pinning, path containment and single-line rules cannot
-// drift between oracles.
+// Centralized input validation, so host pinning, path containment and
+// single-line rules cannot drift between callers.
 
 import * as path from "node:path";
 import { SAFE_IDENTIFIER } from "./patterns.ts";
