@@ -11,6 +11,7 @@ import {
   fail,
 } from "./guards.ts";
 import { MAX_PAYLOAD_BYTES, writeFileAtomic } from "./http.ts";
+import { DEB_VERSION } from "./patterns.ts";
 import type { Architecture, Metadata } from "./types.ts";
 import { isArchitecture } from "./types.ts";
 
@@ -68,7 +69,7 @@ export function assertMetadata(value: unknown, label = "metadata"): Metadata {
   };
   const packageName = assertSafeName(string("package"), `${label}.package`);
   const version = assertSingleLine(string("version"), `${label}.version`);
-  if (!/^[0-9][0-9A-Za-z.+~_-]*$/.test(version)) fail(`Invalid ${label}.version: ${version}`);
+  if (!DEB_VERSION.test(version)) fail(`Invalid ${label}.version: ${version}`);
   const packageVersion = assertSingleLine(string("packageVersion"), `${label}.packageVersion`);
   const architecture = record["architecture"];
   if (!isArchitecture(architecture)) fail(`Invalid ${label}.architecture: ${String(architecture)}`);

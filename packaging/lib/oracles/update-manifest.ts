@@ -13,22 +13,17 @@ import {
   assertSafeName,
   assertSha256Hex,
   fail,
+  isRecord,
 } from "../guards.ts";
 import { MAX_PAYLOAD_BYTES, fetchWithRetry, readPayload } from "../http.ts";
 import { makeMetadata, writeMetadata } from "../metadata.ts";
+import { DEB_VERSION } from "../patterns.ts";
+import { substitutePlaceholders } from "../template.ts";
 import type { Metadata, UpdateManifestOracle } from "../types.ts";
 import { downloadVerified } from "./download.ts";
 import { prepareOutput, type ResolveRequest } from "./shared.ts";
 
 const MAX_MANIFEST_BYTES = 1024 * 1024;
-
-// Deb versions: leading digit, then [0-9A-Za-z.+~_-]*. "2.0.8" is fine and
-// must appear verbatim as a path segment of the asset URL below.
-const MANIFEST_VERSION = /^[0-9][0-9A-Za-z.+~_-]*$/;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 export function validateManifestEndpoint(repository: string): string {
   const url = assertHttpsUrl(repository, "update manifest endpoint");
@@ -59,7 +54,7 @@ export function selectManifestAsset(
 ): SelectedManifest {
   if (!isRecord(body)) fail("Update manifest is not an object");
   const version = body["version"];
-  if (typeof version !== "string" || !MANIFEST_VERSION.test(version)) {
+  if (typeof version !== "string" || !DEB_VERSION.test(version)) {
     fail(`Update manifest has no sane version: ${String(version)}`);
   }
   const metadata = body["metadata"];
@@ -118,7 +113,9 @@ export async function resolveWithUpdateManifest(
   if (!oracle.assetTemplate.includes("{arch}")) {
     fail("update-manifest oracle requires an assetTemplate containing {arch}");
   }
-  const assetName = oracle.assetTemplate.replaceAll("{arch}", request.architecture);
+  const assetName = substitutePlaceholders(oracle.assetTemplate, {
+    arch: request.architecture,
+  });
   const { outputDir, metadataPath } = prepareOutput(request);
   const manifest = selectManifestAsset(
     await fetchManifest(repository),

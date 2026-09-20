@@ -5,6 +5,7 @@
 import * as fs from "node:fs";
 import { assertSameLength, assertSingleLine, fail } from "./guards.ts";
 import { APPS_DIR, descriptorPath } from "./paths.ts";
+import { GITHUB_API_REPOSITORY, SAFE_IDENTIFIER, SAFE_REFERENCE } from "./patterns.ts";
 import { ARCHITECTURES, isArchitecture } from "./types.ts";
 import type {
   AppDescriptor,
@@ -19,7 +20,6 @@ import type {
 } from "./types.ts";
 
 const SAFE_ENV_KEY = /^[A-Z][A-Z0-9_]*$/;
-const PACKAGE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 type Json = Record<string, unknown>;
 
@@ -82,7 +82,7 @@ function validateOracle(raw: unknown, label: string): Oracle {
       };
     case "github-release": {
       const repository = str(source, "repository", label);
-      if (!/^https:\/\/api\.github\.com\/repos\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) {
+      if (!GITHUB_API_REPOSITORY.test(repository)) {
         fail(`${label}.repository must be a GitHub API repository URL: ${repository}`);
       }
       const hasPrefix = source["assetPrefix"] !== undefined;
@@ -95,7 +95,7 @@ function validateOracle(raw: unknown, label: string): Oracle {
           fail(`${label}: assetNameTemplate, tagPrefix and packageName must be set together`);
         }
         const tagPrefix = str(source, "tagPrefix", label);
-        if (!/^[A-Za-z0-9][A-Za-z0-9._+-]*$/.test(tagPrefix)) {
+        if (!SAFE_REFERENCE.test(tagPrefix)) {
           fail(`${label}.tagPrefix is not a safe tag prefix: ${tagPrefix}`);
         }
         const assetNameTemplate = str(source, "assetNameTemplate", label);
@@ -395,7 +395,7 @@ export function validateDescriptor(raw: unknown, expectedId: string): AppDescrip
     ["assetPrefix", descriptor.assetPrefix],
     ["tagPrefix", descriptor.tagPrefix],
   ] as const) {
-    if (!PACKAGE_NAME.test(value)) fail(`${label}.${field} is not a safe name: ${value}`);
+    if (!SAFE_IDENTIFIER.test(value)) fail(`${label}.${field} is not a safe name: ${value}`);
   }
   if (!descriptor.sourceRepo.includes("/")) {
     fail(`${label}.sourceRepo must be "owner/repo"`);
@@ -414,7 +414,7 @@ export function validateDescriptor(raw: unknown, expectedId: string): AppDescrip
 
 export function loadDescriptor(app: string): AppDescriptor {
   const file = descriptorPath(app);
-  if (!PACKAGE_NAME.test(app)) fail(`Invalid app name: ${app}`);
+  if (!SAFE_IDENTIFIER.test(app)) fail(`Invalid app name: ${app}`);
   if (!fs.existsSync(file)) fail(`Unknown app "${app}" (no ${file})`);
   return validateDescriptor(JSON.parse(fs.readFileSync(file, "utf8")), app);
 }
