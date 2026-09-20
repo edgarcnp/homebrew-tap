@@ -100,8 +100,7 @@ export interface FreshnessOptions {
   warn?: (message: string) => void;
 }
 
-// Enforces apt-style freshness on the verified payload: a replayed old signed
-// index must not silently downgrade the resolved package.
+// Rejects a replayed old signed index, so it cannot downgrade the package.
 export function assertReleaseFreshness(
   payload: string,
   options: FreshnessOptions = {},

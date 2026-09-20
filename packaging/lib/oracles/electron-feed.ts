@@ -1,13 +1,6 @@
-// electron-updater feed oracle. The app's own update feed is the version
-// source (the upstream repository interleaves unrelated releases that share a
-// single created_at, so the /releases listing order is unusable):
-//
-//   GET <feed>/<linux-x64|linux-arm64>/latest-linux[-arm64].yml
-//     -> 302 https://github.com/<owner>/<repo>/releases/download/<tag>/<name>.yml
-//
-// The yml carries the AppImage filename, SHA-512 and size; the GitHub API
-// release for that exact tag carries the SHA-256 asset digest. Both hashes and
-// the size are verified at download time.
+// electron-updater feed oracle. The feed's 302 names the exact release tag; the
+// yml supplies filename, SHA-512 and size, and the GitHub API for that tag
+// supplies the SHA-256. All three are verified at download time.
 
 import * as path from "node:path";
 import {

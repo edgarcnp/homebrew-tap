@@ -1,9 +1,8 @@
 #!/bin/bash
 
-# Shared bash primitives for the in-tap build scripts: logging, scratch/work
-# directory handling, path guards, architecture mapping, payload permission
-# normalization and the post-build smoke test. Sourced by
-# appimage-pipeline.sh; not used directly by app build scripts.
+# Shared bash primitives for the build scripts: logging, work-dir handling,
+# path guards, permission normalization and the post-build smoke test. Sourced
+# by appimage-pipeline.sh.
 # shellcheck disable=SC2154 # globals are provided by the sourcing script
 (return 0 2>/dev/null) || exit 1
 
@@ -11,8 +10,8 @@ info() {
   printf '[INFO] %s\n' "$*" >&2
 }
 
-# Requires callers to run under `set -Eeuo pipefail`; error() exits and
-# `set -E` makes the failure visible to the caller's ERR trap.
+# Callers run under `set -Eeuo pipefail`; `set -E` makes this exit visible to
+# the caller's ERR trap.
 error() {
   printf '[ERROR] %s\n' "$*" >&2
   exit 1
@@ -25,8 +24,7 @@ setup_work_dir() {
   WORK_DIR="${WORK_DIR_OVERRIDE:-$(mktemp -d "${TMPDIR:-/tmp}/${prefix}.XXXXXX")}" || error "mktemp failed"
   if [[ -z "${WORK_DIR_OVERRIDE:-}" ]]
   then
-    # Clean up the temp dir we created; an explicit WORK_DIR_OVERRIDE is
-    # caller-owned and left alone.
+    # An explicit WORK_DIR_OVERRIDE is caller-owned and left alone.
     trap 'rm -rf -- "${WORK_DIR}"' EXIT
   fi
 }
@@ -40,9 +38,8 @@ validate_absolute_override() {
   [[ "${value}" != "/" ]] || error "refusing ${label}=/"
 }
 
-# Resolves APPDIR from APPIMAGE_APPDIR_OVERRIDE or the default inside
-# DIST_DIR, refusing repo/dist roots and paths escaping DIST_DIR. Echoes the
-# resolved path.
+# Resolves APPDIR from APPIMAGE_APPDIR_OVERRIDE or the default inside DIST_DIR,
+# refusing repo/dist roots and paths escaping it. Echoes the resolved path.
 resolve_appdir_override() {
   local repo_dir="$1"
   local dist_dir="$2"
@@ -82,12 +79,9 @@ normalize_package_payload_permissions() {
   find "${root}" -type f ! \( -perm /u=x -o -perm /g=x -o -perm /o=x \) -exec chmod 0644 {} +
 }
 
-# Runs the built AppImage briefly, headless, and fails on dynamic-loader
-# errors (missing shared libraries, unresolved symbols). Mirrors pkgforge's
-# quick-sharun --simple-test release gate. Uses xvfb-run when available.
-# APPIMAGE_EXTRACT_AND_RUN=1 forces extraction so the gate never depends on
-# FUSE availability in CI. Override the kill timeout with SMOKE_TIMEOUT
-# (default 20s).
+# Runs the built AppImage headless and fails on dynamic-loader errors, mirroring
+# quick-sharun --simple-test. APPIMAGE_EXTRACT_AND_RUN=1 avoids a FUSE
+# dependency; SMOKE_TIMEOUT (default 20s) sets the kill timeout.
 smoke_test_appimage() {
   local appimage="$1"
   local output

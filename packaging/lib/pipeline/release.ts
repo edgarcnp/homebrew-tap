@@ -1,7 +1,6 @@
-// Release-asset comparison for the cask gate. DWARFS AppImages are not byte
-// reproducible, so a rebuild can change a published asset without a version
-// bump; the gate compares the release's assets against the cask's pinned
-// checksums to decide whether the cask needs repairing.
+// Release concerns for the cask gate: comparing published assets against the
+// cask pin, and rendering/pruning the release set. DWARFS AppImages are not
+// byte reproducible, so a rebuild can change an asset without a version bump.
 
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -16,10 +15,8 @@ export interface UpstreamRecord {
   url: string;
 }
 
-// The release body: a checksum table (upstream packages the AppImages were
-// built from, plus the published AppImage hashes the cask pins) and the source
-// URLs. Rendered here, not in the workflow, so the prose is one place and the
-// arch walk reuses the same table as the rest of the pipeline.
+// The release body: a checksum table (upstream packages plus the AppImage
+// hashes the cask pins) and the source URLs.
 export function renderReleaseNotes(
   descriptor: AppDescriptor,
   upstreams: Partial<Record<Architecture, UpstreamRecord>>,
@@ -59,11 +56,9 @@ export interface PrunePlan {
   stale: string[];
 }
 
-// Selects which releases to prune. "Newest" is the pipeline's dpkg ordering,
-// not `sort -V`: for shapes upstreams publish (1.0.109a vs 1.0.109-1, 1.0+build
-// vs 1.0-rc.1) GNU's version sort and dpkg disagree about which is newer, and
-// pruning must never drop the newest release. An unparseable version fails
-// here instead of silently pruning a short list.
+// Selects which releases to prune, newest by dpkg ordering (never `sort -V`,
+// which disagrees) so the newest is never dropped. An unparseable version
+// fails here rather than silently pruning a short list.
 export function planReleasePrune(
   tags: readonly string[],
   prefix: string,

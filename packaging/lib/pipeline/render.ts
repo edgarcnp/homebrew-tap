@@ -1,5 +1,4 @@
-// Desktop entry rendering. Replaces the shell's sed-based render_template:
-// substitutions are literal (no regex or sed escaping) and every token is
+// Desktop entry rendering: literal substitution (no regex/sed), every token
 // validated, so a descriptor cannot inject extra keys or lines.
 
 import * as fs from "node:fs";

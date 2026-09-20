@@ -1,5 +1,4 @@
-// Shared types for the tap's build tooling: the app descriptor (the single
-// source of truth for one package) and the metadata every resolver emits.
+// The app descriptor and the metadata every resolver emits.
 
 export type Architecture = "amd64" | "arm64";
 
@@ -9,8 +8,8 @@ export function isArchitecture(value: unknown): value is Architecture {
   return value === "amd64" || value === "arm64";
 }
 
-// Emitted by every resolver and consumed by the build scripts and CI.
-// JSON key names are part of the contract with the shell pipeline.
+// Emitted by every resolver; the JSON key names are the contract with the
+// shell pipeline.
 export interface Metadata {
   package: string;
   version: string;
@@ -39,13 +38,10 @@ export interface AptOracle {
 export interface GithubReleaseOracle {
   kind: "github-release";
   repository: string;
-  // Legacy layout: "<assetPrefix>-<arch>.deb". Absent in the versioned-asset
-  // flavor, where assetNameTemplate names the file instead.
+  // Legacy layout: "<assetPrefix>-<arch>.deb".
   assetPrefix?: string;
-  // Optional versioned-asset flavor (e.g. CommandCode, whose filenames embed
-  // the version): when assetNameTemplate is present, tagPrefix and packageName
-  // must be present and assetPrefix must be absent; when absent, the legacy
-  // layout applies. {version} and {arch} (deb arch) are substituted.
+  // Versioned-asset flavor (e.g. CommandCode), set together with tagPrefix and
+  // packageName and instead of assetPrefix. {version} and {arch} substitute.
   assetNameTemplate?: string;
   tagPrefix?: string;
   packageName?: string;
@@ -75,11 +71,9 @@ export interface CdnRedirectOracle {
   debName: string;
 }
 
-// A JSON update manifest pinned at an https endpoint that is itself the
-// version source, e.g. opencode's v2 desktop update API:
-//   {version, metadata: {files: {<name>: {url, sha256, size}}}}
-// The manifest publishes the SHA-256 and size that the payload is verified
-// against at download time, so metadata-only resolve needs no download.
+// A pinned https JSON manifest that is itself the version source, e.g.
+// opencode's update API: {version, metadata: {files: {<name>: {url, sha256,
+// size}}}}. The digest verifies the payload at download time.
 export interface UpdateManifestOracle {
   kind: "update-manifest";
   // Pinned https endpoint returning the update manifest.
@@ -169,10 +163,8 @@ export interface UpdaterConfig {
 // quick-sharun build configuration
 // ---------------------------------------------------------------------------
 
-// pkgforge's quick-sharun reads its knobs from the environment (ADD_HOOKS,
-// OPTIMIZE_LAUNCH, DEPLOY_*, QUICK_SHARUN_SKIP_DEPS_FOR, ANYLINUX_LIB, ...).
-// This block is the descriptor's typed view of the ones an app needs; the
-// pipeline exports them so the CI build and a local build.sh behave alike.
+// quick-sharun reads its knobs from the environment; this is the descriptor's
+// typed view, exported at pack time so CI and a local build.sh agree.
 export interface QuickSharunConfig {
   // pkgforge hooks to deploy (ADD_HOOKS), e.g. ["fix-namespaces.hook"].
   // quick-sharun itself rejects a name it does not know.
@@ -192,9 +184,8 @@ export interface IconConfig {
   size: string;
 }
 
-// Release-watch block: where the API's release watcher looks for this app's
-// upstream versions. The pattern is matched against the atom entry *title*
-// (the GitHub release name, not the tag) and capture group 1 is the version.
+// Release-watch block. versionPattern matches the atom entry *title* (the
+// GitHub release name, not the tag); capture group 1 is the version.
 export interface WatchConfig {
   feedUrl: string;
   versionPattern: string;
@@ -233,9 +224,8 @@ export interface AppDescriptor {
   debloatArgs: string;
   // Whether the build needs the webkit2gtk/GTK build dependencies.
   needsWebkit: boolean;
-  // Architectures this app ships (subset of ["amd64", "arm64"]). Single-arch
-  // apps (e.g. CommandCode, amd64-only upstream) ship one AppImage and pin one
-  // checksum; the pipeline builds, publishes and checks only these arches.
+  // Architectures this app ships; the pipeline builds, publishes and checks
+  // only these.
   architectures: Architecture[];
   // Names the cask must expose on PATH (checkCask asserts the agreement).
   binaryTargets: string[];

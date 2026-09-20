@@ -1,8 +1,6 @@
-// Updater neutralization: one implementation, four descriptor-selected
-// configurations. Covers removing the electron-updater feed, deleting update
-// keys from product.json, rewriting a compiled endpoint in place (same-length
-// for ELF files, where shifting bytes would corrupt the image), and asserting
-// that nothing survived anywhere in the AppDir.
+// Updater neutralization: one implementation, descriptor-selected behavior —
+// feed removal, JSON key removal, in-place endpoint patching (same-length for
+// ELF) and a residual scan that fails when a declared endpoint survives.
 
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -10,8 +8,7 @@ import { assertSameLength, assertSingleLine, fail } from "../core/guards.ts";
 import { appDir } from "../core/paths.ts";
 import type { AppDescriptor, EndpointPatch } from "../core/types.ts";
 
-// Vendored dependency trees are never patched (unchanged from the previous
-// implementation), but they are still scanned for survivors.
+// Vendored trees are never patched, but are still scanned for survivors.
 const PATCH_SKIP_DIRS = new Set(["node_modules", ".git"]);
 const ELF_MAGIC = Buffer.from([0x7f, 0x45, 0x4c, 0x46]);
 
@@ -193,8 +190,7 @@ export function neutralizeUpdater(descriptor: AppDescriptor, appDirPath: string)
   return report;
 }
 
-// Runs after quick-sharun: the AppDir's .env and the runtime hook both belong
-// to the finished AppDir.
+// Runs after quick-sharun: .env and the runtime hook belong to the finished AppDir.
 export function finalizeApp(descriptor: AppDescriptor, appDirPath: string): string[] {
   const notes: string[] = [];
   const updater = descriptor.updater;

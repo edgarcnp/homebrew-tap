@@ -1,6 +1,5 @@
-// Shared network layer: bounded downloads with retry/backoff, streaming reads
-// under a hard size cap, hashing helpers and atomic writes. Every oracle goes
-// through this module so download safety lives in exactly one place.
+// Network layer: bounded downloads with retry/backoff, capped streaming reads,
+// hashing helpers and atomic writes.
 
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
@@ -28,10 +27,10 @@ function isTimeout(error: unknown): boolean {
   return name === "TimeoutError" || name === "AbortError";
 }
 
-// 429/5xx retry with backoff, honoring Retry-After, capped at 30s; the final
-// attempt's response is returned so callers' `response.ok` checks stay the one
-// place that reports failure. Network errors retry and throw on the last
-// attempt; a timeout throws immediately (retrying an abort is pointless).
+// Retries 429/5xx with backoff (honoring Retry-After, capped at 30s) and
+// returns the final attempt's response, so callers keep their one
+// `response.ok` failure check. A timeout throws immediately; other network
+// errors retry.
 export async function fetchWithRetry(
   url: string | URL,
   options: FetchOptions = {},
@@ -75,8 +74,7 @@ export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// maxBytes is a parameter so the cap is testable without allocating the full
-// 512 MiB; callers use the default.
+// maxBytes is a parameter so the cap is testable without allocating 512 MiB.
 export async function readPayload(
   response: Response,
   maxBytes: number = MAX_PAYLOAD_BYTES,

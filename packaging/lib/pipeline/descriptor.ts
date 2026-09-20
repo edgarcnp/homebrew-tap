@@ -1,6 +1,5 @@
-// App descriptors: packaging/apps/<id>/app.json is the single source of truth
-// for one packaged app. Everything the pipeline does to an app is derived from
-// here, so a new app is data plus its templates, not a fork of the pipeline.
+// App descriptors: apps/<id>/app.json is the single source of truth for one
+// app, so a new app is data plus templates, not a fork of the pipeline.
 
 import * as fs from "node:fs";
 import { assertSameLength, assertSingleLine, fail } from "../core/guards.ts";
@@ -272,9 +271,8 @@ function validateUpdater(raw: unknown, label: string): UpdaterConfig {
   return updater;
 }
 
-// Hook entries are colon-joined into ADD_HOOKS, so an entry must not contain
-// the separator or whitespace that would split the list; quick-sharun itself
-// rejects a hook name it does not know at build time.
+// Hooks are colon-joined into ADD_HOOKS, so a name must not contain ":" or
+// whitespace that would split the list.
 function validateQuickSharun(raw: unknown, label: string): QuickSharunConfig {
   if (raw === undefined) return {};
   const source = asObject(raw, label);
@@ -330,9 +328,8 @@ function validateIcon(raw: unknown, label: string): IconConfig {
   };
 }
 
-// The release watcher compiles these as RegExp when it polls, so a malformed
-// pattern must fail the descriptor here instead of silently leaving the app
-// unwatched (the watcher drops an invalid block and reports it skipped).
+// The watcher compiles these as RegExp when it polls, so a malformed pattern
+// must fail here rather than silently leaving the app unwatched.
 function compiledPattern(value: string, label: string): string {
   try {
     new RegExp(value);
@@ -400,16 +397,13 @@ export function validateDescriptor(raw: unknown, expectedId: string): AppDescrip
   if (!descriptor.sourceRepo.includes("/")) {
     fail(`${label}.sourceRepo must be "owner/repo"`);
   }
-  // The pipeline names the built artifact after the cask token (so the cask
-  // can pin its own release URL), while CI uploads and looks up release assets
-  // by assetPrefix. They must be the same string or the build is unfindable.
+  // The artifact is named after the cask token; CI looks it up by assetPrefix.
+  // They must match or the build is unfindable.
   if (descriptor.assetPrefix !== descriptor.cask) {
     fail(`${label}.assetPrefix (${descriptor.assetPrefix}) must equal cask (${descriptor.cask})`);
   }
-  // The app id is the directory name (asserted above) and the cask token is the
-  // Casks/<cask>.rb name; dispatch reaches the app by either, so they must also
-  // be the same string. That keeps "app id", "cask token" and "asset prefix"
-  // one name end to end.
+  // Dispatch reaches the app by id or cask token, so they must be one string —
+  // keeping app id, cask token and asset prefix the same name.
   if (descriptor.id !== descriptor.cask) {
     fail(`${label}.id (${descriptor.id}) must equal cask (${descriptor.cask})`);
   }
@@ -435,11 +429,8 @@ export function listApps(): string[] {
     .sort();
 }
 
-// The build entry point accepts an app id (a directory under packaging/apps,
-// as workflow_dispatch and the smoke test use). The API's watcher dispatches
-// builds by cask token, and validateDescriptor requires the id and the cask
-// token to be the same string, so both callers pass the same name and this is
-// a single lookup.
+// Dispatch passes an app id or a cask token; validateDescriptor requires them
+// to be the same string, so this is a single lookup.
 export function resolveApp(name: string): string | undefined {
   return listApps().includes(name) ? name : undefined;
 }
@@ -479,9 +470,8 @@ export function descriptorExport(descriptor: AppDescriptor): DescriptorExport {
   };
 }
 
-// KEY=VALUE lines for the two consumers in CI: `env` (uppercase) is written to
-// $GITHUB_ENV so shell steps read plain variables, `output` (lowercase) is
-// written to $GITHUB_OUTPUT because job outputs cannot read the env context.
+// KEY=VALUE lines for CI: `env` (uppercase) goes to $GITHUB_ENV for shell
+// steps, `output` (lowercase) to $GITHUB_OUTPUT, which cannot read env.
 export function descriptorLines(
   descriptor: AppDescriptor,
   format: "env" | "output" = "env",

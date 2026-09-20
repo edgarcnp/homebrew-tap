@@ -1,18 +1,12 @@
 #!/bin/bash
 set -Eeuo pipefail
 
-# Downloads the pkgforge Anylinux build tools pinned to a commit of
-# pkgforge-dev/Anylinux-AppImages. Must run inside the Arch Linux container
-# used by the CI build job.
+# Downloads the pkgforge Anylinux build tools, pinned to a commit of
+# pkgforge-dev/Anylinux-AppImages. Runs inside the Arch container used by CI.
 #
-# PINNED_COMMIT below tracks Anylinux-AppImages main and is owned by Renovate
-# (renovate.json customManagers). The download URL is addressed by that
-# 40-character commit digest, which fixes the exact bytes of every tool, so
-# there is no separate SHA-256 to co-update.
-#
-# Since the restructure, quick-sharun ships prebuilt helper libs
-# (sharun+helper-libs-$ARCH.tar from Anylinux-sharun releases) instead of
-# compiling useful-tools/lib/anylinux.c, which upstream deleted.
+# PINNED_COMMIT tracks main and is owned by Renovate. The URL is addressed by
+# that digest, so it fixes the exact bytes of every tool — including what
+# quick-sharun fetches for itself — with no separate SHA-256 to co-update.
 
 info() { printf '[INFO] %s\n' "$*" >&2; }
 error() {

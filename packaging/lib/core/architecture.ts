@@ -1,8 +1,5 @@
-// The pipeline's architecture table. Descriptors name architectures by their
-// deb spelling (amd64/arm64); every other layer spells them differently (the
-// AppImage suffix, the Homebrew cask symbol, a host's uname). This is the one
-// place that maps between them, so the cask check, the shell stages and the
-// CLI cannot disagree about which arch a build is for.
+// The one place that maps between the arch spellings (deb, AppImage, Homebrew
+// cask, uname), so no two layers can disagree about a build's architecture.
 
 import { fail } from "./guards.ts";
 import type { Architecture } from "./types.ts";

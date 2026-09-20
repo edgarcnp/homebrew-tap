@@ -1,9 +1,7 @@
-// Update-manifest oracle. A pinned https JSON endpoint is the version source:
-// it returns {version, metadata: {files: {<name>: {url, sha256, size}}}}, e.g.
-// opencode's v2 desktop update API (GET
-// https://opencode.ai/update/api/latest/desktop/opencode). Unlike the CDN
-// redirect oracle the manifest publishes the SHA-256 and size the payload is
-// verified against, so --metadata-only resolve needs no download.
+// Update-manifest oracle: a pinned https JSON endpoint is the version source
+// ({version, metadata: {files: {<name>: {url, sha256, size}}}}), e.g.
+// opencode's update API. Unlike cdn-redirect it publishes the digest, so
+// --metadata-only resolve needs no download.
 
 import * as path from "node:path";
 import {
@@ -43,10 +41,8 @@ export interface SelectedManifest {
   asset: ManifestAsset;
 }
 
-// Parses the update-manifest body and selects the asset named by assetName.
-// Every field the pipeline trusts — version, url, host, sha256, size — is
-// validated here so an upstream layout change fails loudly instead of
-// producing a wrong download. Pure of network side effects for testing.
+// Parses the manifest and selects the asset named by assetName, validating
+// every trusted field (version, url, host, sha256, size). Pure, for testing.
 export function selectManifestAsset(
   body: unknown,
   assetName: string,
@@ -69,9 +65,8 @@ export function selectManifestAsset(
   }
   const url = assertHttpsUrl(rawUrl, `Update manifest ${assetName} url`);
   assertHostAllowed(url, downloadHosts, "update manifest asset");
-  // The file server pins the exact version in the download path; an entry
-  // pointing at a different version fails loudly rather than quietly
-  // downgrading or mixing versions.
+  // The file server pins the version in the path; an entry for another version
+  // fails loudly instead of silently downgrading or mixing versions.
   if (!url.pathname.split("/").includes(version)) {
     fail(`Update manifest ${assetName} url does not carry version ${version}: ${rawUrl}`);
   }

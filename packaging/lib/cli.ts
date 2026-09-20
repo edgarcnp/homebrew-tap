@@ -1,7 +1,5 @@
-// `fbr`: the single command-line entry point for the packaging pipeline. Every
-// command declares its flags, so an unknown or duplicate flag is a usage error
-// instead of a silently ignored argument (the old per-resolver parsers each
-// behaved differently).
+// `fbr`: the packaging pipeline's CLI. Every command declares its flags, so an
+// unknown or duplicate flag is a usage error (exit 2), never ignored.
 
 import * as fs from "node:fs";
 import * as path from "node:path";

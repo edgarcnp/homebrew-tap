@@ -1,11 +1,9 @@
 name: Pin cask to published release
 description: >-
-  Verify a release was published by this pipeline's own bot account as a final
-  (non-draft, non-prerelease) release, download its AppImage assets, update the
-  cask's version and SHA-256 stanzas with the fbr CLI, then commit and push the
-  change with rebase-on-conflict retry. Shared by the update-cask and
-  repair-cask jobs so the release-trust check and the push logic live in one
-  place.
+  Verify a release was published by this pipeline's bot account as a final
+  release, download its AppImage assets, update the cask's version and SHA-256
+  with the fbr CLI, then commit and push (retrying on a non-fast-forward).
+  Shared by the pin-cask paths so the trust check and the push live in one place.
 inputs:
   app:
     description: App id whose cask to update (a directory under packaging/apps)
@@ -43,18 +41,16 @@ runs:
         GH_TOKEN: ${{ inputs.token }}
       run: |
         [[ "$PACKAGE_VERSION" =~ ^[0-9A-Za-z._-]+$ ]] || { echo "invalid version: $PACKAGE_VERSION" >&2; exit 1; }
-        # fbr validates the tag/asset prefixes, cask token and checksum shapes
-        # before touching the file, and fails rather than half-updating it.
+        # fbr validates the prefixes and checksum shapes, failing rather than
+        # half-updating the file.
         cask="$(bun packaging/bin/fbr.ts descriptor --app "${APP}" --field cask)"
         tag_prefix="$(bun packaging/bin/fbr.ts descriptor --app "${APP}" --field tagPrefix)"
         asset_prefix="$(bun packaging/bin/fbr.ts descriptor --app "${APP}" --field assetPrefix)"
         [[ "$tag_prefix" == "$TAG_PREFIX" && "$asset_prefix" == "$ASSET_PREFIX" ]] \
           || { echo "descriptor prefixes disagree with the workflow inputs" >&2; exit 1; }
         echo "cask=${cask}" >> "$GITHUB_OUTPUT"
-        # Only trust release assets from a release this pipeline's own bot
-        # account published as a final (non-draft, non-prerelease) release;
-        # assets re-uploaded by anyone with contents:write have no
-        # provenance and must never be pinned into the cask.
+        # Only trust assets from a final release this pipeline's bot published;
+        # anyone with contents:write could otherwise re-upload and be pinned.
         release_meta="$(gh release view "${TAG_PREFIX}${PACKAGE_VERSION}" \
           --repo "$GITHUB_REPOSITORY" --json author,isDraft,isPrerelease \
           --jq '[.author.login, (.isDraft|tostring), (.isPrerelease|tostring)] | join(" ")')"
@@ -65,9 +61,8 @@ runs:
           echo "warning: release ${TAG_PREFIX}${PACKAGE_VERSION} (author=${release_author}, draft=${release_draft}, prerelease=${release_prerelease}) is not a trusted bot release; not pinning cask, rebuild required" >&2
           exit 1
         fi
-        # hash the released assets, not the run artifacts, so the cask
-        # always matches what the release actually hosts. Single-arch apps
-        # publish one AppImage; only their architectures are pinned.
+        # Hash the released assets (not the run artifacts) so the cask matches
+        # the release. Single-arch apps publish one AppImage.
         arches="$(bun packaging/bin/fbr.ts descriptor --app "${APP}" --field architectures)"
         patterns=()
         [[ "${arches}" == *amd64* ]] && patterns+=(--pattern "${ASSET_PREFIX}-*-x86_64.AppImage")
@@ -113,8 +108,7 @@ runs:
         GPG_NAME: ${{ steps.import-gpg.outputs.gpg_name }}
         GPG_EMAIL: ${{ steps.import-gpg.outputs.gpg_email }}
       run: |
-        # commit locally so the change is GPG-signed; the committer identity is
-        # derived from the imported key so the email matches a verified address
+        # Commit locally to sign with the imported key's identity.
         gh auth setup-git
         git config gpg.format openpgp
         git config user.name "${GPG_NAME}"
@@ -128,8 +122,7 @@ runs:
             echo "pushed cask update $(git rev-parse HEAD)"
             exit 0
           fi
-          # concurrent runs may advance the branch between read and write;
-          # rebase onto the new head and retry (non-fast-forward rejection)
+          # A concurrent run may advance the branch; rebase and retry.
           sleep 10
           git fetch origin main
           git rebase FETCH_HEAD

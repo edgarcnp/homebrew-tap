@@ -1,7 +1,5 @@
-// The one place that reads or writes a cask file. The publish pipeline, the
-// version gate and the smoke test each used to parse Casks/*.rb with their own
-// sed, grep or Python regexes; they now share this module, and CI checks that
-// every cask agrees with its app descriptor.
+// The one place that reads or writes a cask file (Casks/*.rb). `checkCask` ties
+// each cask to its app descriptor, so the publish pipeline and CI agree.
 
 import * as fs from "node:fs";
 import { APPIMAGE_ARCH, BREW_ARCH, resolveBrewArch } from "../core/architecture.ts";
@@ -89,9 +87,8 @@ function replaceOnce(
   return source.replace(pattern, (_match, ...groups: string[]) => replacer(...groups));
 }
 
-// Rewrites the version and the pinned checksums, preserving the file's own
-// spacing and indentation. Each pattern must match exactly once, so a cask
-// restructuring fails loudly instead of being silently half-updated.
+// Rewrites the version and checksums in place, preserving spacing. Each pattern
+// must match once, so a restructured cask fails loudly instead of half-updating.
 export function updateCask(source: string, state: CaskState): string {
   const version = assertVersionLine(state.version);
   const arm64Count = [...source.matchAll(ARM64_SHA256)].length;
@@ -226,9 +223,8 @@ export function checkCask(descriptor: AppDescriptor, source: string): string[] {
   require(source.includes(`~/${iconTarget}`), `zap does not remove ~/${iconTarget}`);
   require(source.includes(`~/${desktopTarget}`), `zap does not remove ~/${desktopTarget}`);
 
-  // The cask's postflight desktop entry repeats descriptor-derived strings that
-  // a standalone cask file cannot import; asserting them here keeps a
-  // displayName/comment change from silently drifting out of the cask.
+  // The cask repeats descriptor-derived strings a standalone file cannot
+  // import; assert them so a displayName/comment change cannot drift out.
   require(
     source.includes(`Name=${descriptor.displayName}`),
     `desktop entry Name does not match displayName "${descriptor.displayName}"`,

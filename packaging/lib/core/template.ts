@@ -1,6 +1,5 @@
-// Literal placeholder substitution for descriptor-declared name templates
-// ("<name>-{version}-{arch}.deb"). Substitution is by literal split/join, not
-// regex, so a value can never be read as a pattern.
+// Literal placeholder substitution for descriptor name templates; no regex, so
+// a value is never read as a pattern.
 
 export function substitutePlaceholders(
   template: string,

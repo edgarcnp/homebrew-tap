@@ -1,8 +1,6 @@
-// GitHub REST access shared by the release-asset and electron-feed oracles:
-// one repository-URL shape check, one download-base derivation, one
-// authenticated JSON fetch, and the release-listing helpers both scanning
-// oracles use. Keeping them here means host pinning and pagination cannot
-// drift between the two resolvers.
+// GitHub REST access shared by the release-asset and electron-feed oracles: the
+// repository-URL check, download-base derivation, authenticated JSON fetch and
+// release-listing helpers.
 
 import { assertSingleLine, fail, isRecord } from "../core/guards.ts";
 import { fetchWithRetry } from "../core/http.ts";
@@ -17,9 +15,8 @@ export interface RepositoryCoordinates {
   repo: string;
 }
 
-// The API repository URL is the one shape every GitHub-backed oracle pins;
-// accepting anything else would let a descriptor point an oracle at an
-// attacker-controlled host.
+// The one repository URL shape every GitHub oracle pins; anything else could
+// point an oracle at an attacker-controlled host.
 export function assertRepositoryUrl(repository: string): string {
   const normalized = repository.replace(/\/+$/, "");
   if (!GITHUB_API_REPOSITORY.test(normalized)) {
@@ -51,8 +48,8 @@ export function releaseByTagApiUrl(repository: string, tag: string): string {
   return `${assertRepositoryUrl(repository)}/releases/tags/${encodeURIComponent(tag)}`;
 }
 
-// Authenticated api.github.com JSON fetch. Every call site pins the host and
-// the redirect policy, so a descriptor cannot redirect the API call elsewhere.
+// Authenticated api.github.com JSON fetch: the host and redirect policy are
+// pinned here, so the API call cannot be redirected elsewhere.
 export async function githubApiFetch(url: string, token: string): Promise<unknown> {
   const parsed = new URL(url);
   if (parsed.protocol !== "https:") fail(`URL must be https: ${url}`);
@@ -86,8 +83,7 @@ export function releaseTag(release: Record<string, unknown>): string | undefined
   return typeof tag === "string" ? tag : undefined;
 }
 
-// Indexes a release's assets by name, dropping entries without the name,
-// digest and size every consumer needs.
+// Indexes a release's assets by name, dropping entries missing name/digest/size.
 export function releaseAssetMap(
   release: Record<string, unknown>,
 ): Map<string, ReleaseAssetRecord> {
