@@ -11,6 +11,7 @@ import { checkCask, readCaskFile, writeCask } from "./cask.ts";
 import { descriptorLines, listApps, loadDescriptor, resolveApp } from "./descriptor.ts";
 import { planGate } from "./gate.ts";
 import { readMetadataField } from "./metadata.ts";
+import { compareReleasedAssets } from "./release.ts";
 import { finalizeApp, neutralizeUpdater } from "./neutralize.ts";
 import { resolveWith } from "./oracles/registry.ts";
 import { writeDesktopEntry } from "./render.ts";
@@ -301,6 +302,23 @@ const COMMANDS: Command[] = [
       ]) {
         process.stdout.write(`${line}\n`);
       }
+      return 0;
+    },
+  },
+  {
+    name: "release-check",
+    summary:
+      "Compare downloaded release assets to the cask pin (--app, --asset-dir, [--tap]); prints true|false, or nothing when it could not compare",
+    options: { app: APP, tap: TAP, "asset-dir": { type: "string" } },
+    run: (flags) => {
+      const descriptor = descriptorFor(flags);
+      const cask = readCaskFile(caskFileFor(flags, descriptor));
+      const { matches, notes } = compareReleasedAssets(descriptor, cask, flags.str("asset-dir"));
+      for (const note of notes) process.stderr.write(`[WARN] ${note}\n`);
+      // No output means the comparison could not run; the gate reads that as
+      // "no evidence" and catches the cask up rather than trusting it.
+      if (matches === null) return 0;
+      process.stdout.write(`${matches}\n`);
       return 0;
     },
   },

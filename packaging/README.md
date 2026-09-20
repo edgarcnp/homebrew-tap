@@ -112,6 +112,9 @@ fbr gate --app X --upstream-version V [--release-exists]
      [--release-matches-cask true|false]     cask gate decision; omit the match flag when
                                              the asset comparison could not run
 fbr cask --action read|set-version|check     read, re-pin or check casks
+fbr release-check --app X --asset-dir D      compare downloaded release assets to the
+     [--tap T]                               cask pin (true|false, or nothing when it
+                                             could not compare)
 fbr neutralize --app X --appdir D            disable the in-AppDir updater
 fbr finalize --app X --appdir D              write .env and install the hook
 fbr render-desktop --app X --version V --appdir D
