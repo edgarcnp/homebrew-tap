@@ -56,10 +56,10 @@ jobs:
             echo "apps=${all}" >> "${GITHUB_OUTPUT}"
             echo "building all apps: $(jq -r 'join(", ")' <<<"${all}")"
           else
-            # API dispatch names apps by cask token (commandcode-desktop);
-            # manual workflow_dispatch runs pass app ids. resolve-app maps
-            # either form to the app id the pipeline keys on, and fails loudly
-            # when the name matches no app.
+            # API dispatch names apps by cask token and manual runs pass app
+            # ids; the two are the same string (the descriptor requires
+            # id === cask), so resolve-app is one lookup and fails loudly when
+            # the name matches no app.
             resolved="$(bun packaging/bin/fbr.ts resolve-app --name "${REQUESTED}")"
             echo "apps=$(jq -c --arg app "${resolved}" '[ $app ]' <<<"${all}")" >> "${GITHUB_OUTPUT}"
           fi

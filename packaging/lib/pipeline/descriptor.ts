@@ -406,6 +406,13 @@ export function validateDescriptor(raw: unknown, expectedId: string): AppDescrip
   if (descriptor.assetPrefix !== descriptor.cask) {
     fail(`${label}.assetPrefix (${descriptor.assetPrefix}) must equal cask (${descriptor.cask})`);
   }
+  // The app id is the directory name (asserted above) and the cask token is the
+  // Casks/<cask>.rb name; dispatch reaches the app by either, so they must also
+  // be the same string. That keeps "app id", "cask token" and "asset prefix"
+  // one name end to end.
+  if (descriptor.id !== descriptor.cask) {
+    fail(`${label}.id (${descriptor.id}) must equal cask (${descriptor.cask})`);
+  }
   if (descriptor.binaryTargets.length === 0) {
     fail(`${label}.binaryTargets must not be empty`);
   }
@@ -428,17 +435,13 @@ export function listApps(): string[] {
     .sort();
 }
 
-// The build entry point accepts a name that is either an app id (a directory
-// under packaging/apps, as workflow_dispatch and the smoke test use) or a cask
-// token (the Casks/<cask>.rb name, as the API's watcher now dispatches builds
-// by). Both forms resolve to the app id, which is what the pipeline keys on.
-// Casks must be unique across app ids (release tags are named after them), so
-// a name matching several descriptors resolves to nothing rather than a guess.
+// The build entry point accepts an app id (a directory under packaging/apps,
+// as workflow_dispatch and the smoke test use). The API's watcher dispatches
+// builds by cask token, and validateDescriptor requires the id and the cask
+// token to be the same string, so both callers pass the same name and this is
+// a single lookup.
 export function resolveApp(name: string): string | undefined {
-  const apps = listApps();
-  if (apps.includes(name)) return name;
-  const byCask = apps.filter((id) => loadDescriptor(id).cask === name);
-  return byCask.length === 1 ? byCask[0] : undefined;
+  return listApps().includes(name) ? name : undefined;
 }
 
 export interface DescriptorExport {

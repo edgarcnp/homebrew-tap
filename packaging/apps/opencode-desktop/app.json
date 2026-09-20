@@ -1,5 +1,5 @@
 {
-  "id": "opencode",
+  "id": "opencode-desktop",
   "appName": "OpenCode Desktop",
   "displayName": "OpenCode",
   "comment": "Open source AI coding agent",
@@ -13,7 +13,7 @@
   "tagPrefix": "opencode-desktop-v",
   "sourceRepo": "edgarcnp/homebrew-tap",
   "sourceOwner": "edgarcnp",
-  "sourceDir": "packaging/apps/opencode",
+  "sourceDir": "packaging/apps/opencode-desktop",
   "buildCommand": "./build.sh",
   "debloatArgs": "--add-common --prefer-nano ffmpeg-mini",
   "needsWebkit": false,

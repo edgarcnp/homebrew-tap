@@ -23,7 +23,7 @@ describe("readCask", () => {
   });
 
   it("reads the single-arch cask with one checksum", () => {
-    const descriptor = loadDescriptor("commandcode");
+    const descriptor = loadDescriptor("commandcode-desktop");
     const state = readCaskFile(caskPath(descriptor.cask));
     assert.equal(state.sha256["amd64"]?.length, 64);
     assert.equal(state.sha256["arm64"], undefined);

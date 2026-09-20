@@ -1,5 +1,5 @@
 {
-  "id": "commandcode",
+  "id": "commandcode-desktop",
   "appName": "Command Code Desktop",
   "displayName": "Command Code",
   "comment": "Command Code desktop app",
@@ -13,7 +13,7 @@
   "tagPrefix": "commandcode-desktop-v",
   "sourceRepo": "edgarcnp/homebrew-tap",
   "sourceOwner": "edgarcnp",
-  "sourceDir": "packaging/apps/commandcode",
+  "sourceDir": "packaging/apps/commandcode-desktop",
   "buildCommand": "./build.sh",
   "debloatArgs": "--add-common --prefer-nano ffmpeg-mini",
   "needsWebkit": false,

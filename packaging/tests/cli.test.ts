@@ -38,18 +38,18 @@ describe("fbr CLI contract", () => {
     assert.deepEqual(JSON.parse(json.stdout), expected);
   });
 
-  it("resolves a cask token to an app id the way the build plan calls it", () => {
-    const viaCask = fbr(["resolve-app", "--name", "commandcode-desktop"]);
-    assert.equal(viaCask.status, 0, viaCask.stderr);
-    assert.equal(viaCask.stdout.trim(), "commandcode");
+  it("resolves an app name the way the build plan calls it", () => {
+    const hyphenated = fbr(["resolve-app", "--name", "commandcode-desktop"]);
+    assert.equal(hyphenated.status, 0, hyphenated.stderr);
+    assert.equal(hyphenated.stdout.trim(), "commandcode-desktop");
 
-    const viaId = fbr(["resolve-app", "--name", "vscode"]);
-    assert.equal(viaId.status, 0, viaId.stderr);
-    assert.equal(viaId.stdout.trim(), "vscode");
+    const plain = fbr(["resolve-app", "--name", "vscode"]);
+    assert.equal(plain.status, 0, plain.stderr);
+    assert.equal(plain.stdout.trim(), "vscode");
 
     const unknown = fbr(["resolve-app", "--name", "nope"]);
     assert.equal(unknown.status, 1);
-    assert.match(unknown.stderr, /unknown app or cask 'nope'/);
+    assert.match(unknown.stderr, /unknown app 'nope'/);
 
     const missingFlag = fbr(["resolve-app"]);
     assert.equal(missingFlag.status, 2);

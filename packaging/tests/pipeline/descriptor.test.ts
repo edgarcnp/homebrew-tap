@@ -26,18 +26,19 @@ describe("descriptor loading", () => {
     assert.deepEqual(APPS, [...APPS].sort(), "app ids must be sorted");
   });
 
-  it("resolves app ids and cask tokens to the app id", () => {
-    // Cask tokens that differ from the id (dispatch sends these).
-    assert.equal(resolveApp("commandcode-desktop"), "commandcode");
-    assert.equal(resolveApp("opencode-desktop"), "opencode");
-    // App ids (manual workflow_dispatch runs) resolve directly, even when the
-    // cask equals the id.
-    assert.equal(resolveApp("commandcode"), "commandcode");
+  it("resolves app ids, which are also the cask tokens", () => {
+    // Dispatch names apps by id or cask token; validateDescriptor requires the
+    // two to be the same string, so both forms resolve directly.
+    assert.equal(resolveApp("commandcode-desktop"), "commandcode-desktop");
+    assert.equal(resolveApp("opencode-desktop"), "opencode-desktop");
     assert.equal(resolveApp("gitbutler"), "gitbutler");
     assert.equal(resolveApp("vscode"), "vscode");
-    // Every cask token maps back to its own app.
+    // Every app's id, cask token and asset prefix are one name.
     for (const id of APPS) {
-      assert.equal(resolveApp(loadDescriptor(id).cask), id);
+      const descriptor = loadDescriptor(id);
+      assert.equal(descriptor.cask, id);
+      assert.equal(descriptor.assetPrefix, id);
+      assert.equal(resolveApp(descriptor.cask), id);
     }
     assert.equal(resolveApp("nope"), undefined);
   });
@@ -72,8 +73,8 @@ describe("descriptor contents (regression against the previous per-app scripts)"
     assert.equal(descriptor.updater.residualScan?.severity, "error");
   });
 
-  it("keeps opencode's update-manifest, required feed removal and warning-level scan", () => {
-    const descriptor = loadDescriptor("opencode");
+  it("keeps opencode-desktop's update-manifest, required feed removal and warning-level scan", () => {
+    const descriptor = loadDescriptor("opencode-desktop");
     assert.equal(descriptor.oracle.kind, "update-manifest");
     if (descriptor.oracle.kind === "update-manifest") {
       assert.equal(
@@ -107,8 +108,8 @@ describe("descriptor contents (regression against the previous per-app scripts)"
     assert.equal(descriptor.updater.residualScan?.severity, "warning");
   });
 
-  it("keeps commandcode's versioned-asset oracle, deb staging and required feed removal", () => {
-    const descriptor = loadDescriptor("commandcode");
+  it("keeps commandcode-desktop's versioned-asset oracle, deb staging and required feed removal", () => {
+    const descriptor = loadDescriptor("commandcode-desktop");
     assert.equal(descriptor.oracle.kind, "github-release");
     assert.equal(
       descriptor.oracle.kind === "github-release" ? descriptor.oracle.assetNameTemplate : "",
@@ -202,7 +203,7 @@ describe("release watch", () => {
       versionPattern: "^(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
       repo: "microsoft/vscode",
     });
-    assert.deepEqual(loadDescriptor("opencode").watch, {
+    assert.deepEqual(loadDescriptor("opencode-desktop").watch, {
       feedUrl: "https://github.com/anomalyco/opencode/releases.atom",
       versionPattern: "^v(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
       repo: "anomalyco/opencode",
@@ -213,7 +214,7 @@ describe("release watch", () => {
       skipPattern: "^nightly\\/",
       repo: "gitbutlerapp/gitbutler",
     });
-    assert.deepEqual(loadDescriptor("commandcode").watch, {
+    assert.deepEqual(loadDescriptor("commandcode-desktop").watch, {
       feedUrl: "https://github.com/CommandCodeAI/desktop/releases.atom",
       versionPattern: "(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
       repo: "CommandCodeAI/desktop",
@@ -224,9 +225,9 @@ describe("release watch", () => {
     // Feed titles are release names, not tags (e.g. "Command Code 0.1.29").
     const titles: Record<string, [string, string]> = {
       vscode: ["1.137.0", "1.137.0"],
-      opencode: ["v1.18.30", "1.18.30"],
+      "opencode-desktop": ["v1.18.30", "1.18.30"],
       gitbutler: ["release/0.22.3", "0.22.3"],
-      commandcode: ["Command Code 0.1.29", "0.1.29"],
+      "commandcode-desktop": ["Command Code 0.1.29", "0.1.29"],
     };
     for (const [app, [title, version]] of Object.entries(titles)) {
       const watch = loadDescriptor(app).watch;
@@ -294,6 +295,25 @@ describe("descriptor validation", () => {
     }
   });
 
+  it("requires the app id (directory name) to equal the cask token", () => {
+    // Dispatch names apps by id or cask token and the pipeline keys on the id,
+    // so they must be the same string; the directory is already asserted to be
+    // the id, which makes the app directory, cask token and asset prefix one
+    // name.
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("vscode", (copy) => {
+            // Keep assetPrefix === cask so the id check is the one that fires.
+            copy["cask"] = "other-cask";
+            copy["assetPrefix"] = "other-cask";
+          }),
+          "vscode",
+        ),
+      /id \(vscode\) must equal cask \(other-cask\)/,
+    );
+  });
+
   it("rejects unknown oracle and payload kinds", () => {
     assert.throws(
       () =>
@@ -335,20 +355,20 @@ describe("descriptor validation", () => {
     assert.throws(
       () =>
         validateDescriptor(
-          mutated("commandcode", (copy) => {
+          mutated("commandcode-desktop", (copy) => {
             nested(copy, "updater")["env"] = { "bad key": "1" };
           }),
-          "commandcode",
+          "commandcode-desktop",
         ),
       /not a valid name/,
     );
     assert.throws(
       () =>
         validateDescriptor(
-          mutated("commandcode", (copy) => {
+          mutated("commandcode-desktop", (copy) => {
             nested(copy, "updater")["env"] = { OK: "value\ninjected" };
           }),
-          "commandcode",
+          "commandcode-desktop",
         ),
       /newlines or NUL/,
     );
@@ -411,24 +431,24 @@ describe("descriptor validation", () => {
     assert.throws(
       () =>
         validateDescriptor(
-          mutated("commandcode", (copy) => { delete nested(copy, "oracle")["tagPrefix"]; }),
-          "commandcode",
+          mutated("commandcode-desktop", (copy) => { delete nested(copy, "oracle")["tagPrefix"]; }),
+          "commandcode-desktop",
         ),
       /must be set together/,
     );
     assert.throws(
       () =>
         validateDescriptor(
-          mutated("commandcode", (copy) => { nested(copy, "oracle")["assetPrefix"] = "x"; }),
-          "commandcode",
+          mutated("commandcode-desktop", (copy) => { nested(copy, "oracle")["assetPrefix"] = "x"; }),
+          "commandcode-desktop",
         ),
       /mutually exclusive/,
     );
     assert.throws(
       () =>
         validateDescriptor(
-          mutated("commandcode", (copy) => { nested(copy, "oracle")["assetNameTemplate"] = "no-version-here.deb"; }),
-          "commandcode",
+          mutated("commandcode-desktop", (copy) => { nested(copy, "oracle")["assetNameTemplate"] = "no-version-here.deb"; }),
+          "commandcode-desktop",
         ),
       /must contain \{version\}/,
     );
@@ -438,32 +458,32 @@ describe("descriptor validation", () => {
     assert.throws(
       () =>
         validateDescriptor(
-          mutated("opencode", (copy) => { delete nested(copy, "oracle")["assetTemplate"]; }),
-          "opencode",
+          mutated("opencode-desktop", (copy) => { delete nested(copy, "oracle")["assetTemplate"]; }),
+          "opencode-desktop",
         ),
       /assetTemplate must be a non-empty string/,
     );
     assert.throws(
       () =>
         validateDescriptor(
-          mutated("opencode", (copy) => { nested(copy, "oracle")["assetTemplate"] = "opencode.desb"; }),
-          "opencode",
+          mutated("opencode-desktop", (copy) => { nested(copy, "oracle")["assetTemplate"] = "opencode.desb"; }),
+          "opencode-desktop",
         ),
       /must contain \{arch\}/,
     );
     assert.throws(
       () =>
         validateDescriptor(
-          mutated("opencode", (copy) => { nested(copy, "oracle")["downloadHosts"] = []; }),
-          "opencode",
+          mutated("opencode-desktop", (copy) => { nested(copy, "oracle")["downloadHosts"] = []; }),
+          "opencode-desktop",
         ),
       /downloadHosts must not be empty/,
     );
     assert.throws(
       () =>
         validateDescriptor(
-          mutated("opencode", (copy) => { nested(copy, "oracle")["downloadHosts"] = "opencode.ai"; }),
-          "opencode",
+          mutated("opencode-desktop", (copy) => { nested(copy, "oracle")["downloadHosts"] = "opencode.ai"; }),
+          "opencode-desktop",
         ),
       /downloadHosts must be an array/,
     );
@@ -526,16 +546,16 @@ describe("descriptor validation", () => {
 describe("descriptor env and output lines", () => {
   it("emits the workflow variables", () => {
     const env = new Map(
-      descriptorLines(loadDescriptor("commandcode"), "env").map((line) => {
+      descriptorLines(loadDescriptor("commandcode-desktop"), "env").map((line) => {
         const [key = "", ...rest] = line.split("=");
         return [key, rest.join("=")] as [string, string];
       }),
     );
-    assert.equal(env.get("APP_ID"), "commandcode");
+    assert.equal(env.get("APP_ID"), "commandcode-desktop");
     assert.equal(env.get("APP_CASK"), "commandcode-desktop");
-    assert.equal(env.get("WATCH"), JSON.stringify(loadDescriptor("commandcode").watch));
+    assert.equal(env.get("WATCH"), JSON.stringify(loadDescriptor("commandcode-desktop").watch));
     assert.equal(env.get("TAG_PREFIX"), "commandcode-desktop-v");
-    assert.equal(env.get("SOURCE_DIR"), "packaging/apps/commandcode");
+    assert.equal(env.get("SOURCE_DIR"), "packaging/apps/commandcode-desktop");
     assert.equal(env.get("BUILD_COMMAND"), "./build.sh");
     assert.equal(env.get("NEEDS_WEBKIT"), "false");
     assert.equal(env.get("DEBLOAT_ARGS"), "--add-common --prefer-nano ffmpeg-mini");
