@@ -51,8 +51,8 @@ jobs:
         run: |
           tap_dir="$(brew --repository "$TAP_REPO")"
           cd "$tap_dir"
-          # Iterate descriptors (app id -> cask token), not filenames: the two
-          # differ (commandcode -> commandcode-desktop).
+          # Iterate descriptors rather than cask filenames: the descriptor is
+          # the source of truth, and its cask token (== app id) names the file.
           for app in $(bun packaging/bin/fbr.ts list-apps); do
             name="$(bun packaging/bin/fbr.ts descriptor --app "$app" --field cask)"
             cask="Casks/${name}.rb"

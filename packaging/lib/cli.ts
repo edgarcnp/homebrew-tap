@@ -209,16 +209,15 @@ const COMMANDS: Command[] = [
   },
   {
     name: "resolve-app",
-    summary: "Map an app id or cask token to the app id (--name)",
+    summary: "Resolve an app name (id == cask token) to the app id (--name)",
     options: { name: { type: "string" } },
     run: (flags) => {
       const name = flags.str("name");
       const app = resolveApp(name);
       if (app === undefined) {
-        const known = listApps()
-          .map((id) => `${id} (${loadDescriptor(id).cask})`)
-          .join(", ");
-        process.stderr.write(`[ERROR] unknown app or cask '${name}' (known: ${known})\n`);
+        process.stderr.write(
+          `[ERROR] unknown app '${name}' (known: ${listApps().join(", ")})\n`,
+        );
         return 1;
       }
       process.stdout.write(`${app}\n`);

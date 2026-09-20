@@ -71,7 +71,7 @@ expected content and hosts; shared regexes (`core/patterns.ts`), the arch table
 
 | Field | Meaning |
 | --- | --- |
-| `id`, `cask`, `assetPrefix`, `tagPrefix` | Identity: app id, cask token (`Casks/<cask>.rb`), release asset and tag prefixes (the tag is `<tagPrefix><version>`) |
+| `id`, `cask`, `assetPrefix`, `tagPrefix` | Identity: app id, cask token (`Casks/<cask>.rb`), release asset and tag prefixes (the tag is `<tagPrefix><version>`). `id`, `cask` and `assetPrefix` must all be the same string (the app directory is the `id`), so an app has one name end to end |
 | `appName`, `displayName`, `comment` | Release title and desktop entry `Name=`/`Comment=` |
 | `sourceRepo`, `sourceOwner` | Upstream repository to build from, and the owner of the fallback fork |
 | `sourceDir`, `buildCommand` | Where CI `cd`s before running the build |
@@ -172,10 +172,11 @@ place:
 ## Adding an app
 
 1. `packaging/apps/<app>/app.json` — copy a similar descriptor and adjust the
-   oracle, payload, icon and updater sections.
+   oracle, payload, icon and updater sections. `<app>` is the app id and must
+   equal the descriptor's `id`, `cask` and `assetPrefix`.
 2. `packaging/apps/<app>/templates/<name>.desktop`, plus `build.sh` (four lines:
    `exec ../../lib/shell/build-appimage.sh <app>`).
-3. `Casks/<cask>.rb` with zero placeholder checksums; the first publish fills
+3. `Casks/<app>.rb` with zero placeholder checksums; the first publish fills
    them in.
 4. Nothing else: the build matrix and the dispatch route read the descriptor
    directory, and CI lints/tests globbed paths.
