@@ -13,7 +13,7 @@ import {
   fail,
 } from "../guards.ts";
 import { digestMatchesHex, sha256Digest, sha256Hex, writeFileAtomic } from "../http.ts";
-import { writeMetadata } from "../metadata.ts";
+import { makeMetadata, writeMetadata } from "../metadata.ts";
 import type { Architecture, CdnRedirectOracle, Metadata } from "../types.ts";
 import { normalizeUpstreamVersion } from "../version.ts";
 import { fetchVerified } from "./download.ts";
@@ -113,18 +113,16 @@ export async function resolveWithCdnRedirect(
     }
   }
 
-  const metadata: Metadata = {
+  const metadata = makeMetadata({
     package: oracle.packageName,
     version,
-    packageVersion: version,
     architecture: mapping.debArch,
     repositoryPath: parsed.repositoryPath,
     sha256: assertSha256Hex(sha256, ".deb SHA256"),
     size,
-    depends: "",
     repository: parsed.repository,
     path: packagePath,
-  };
+  });
   writeMetadata(metadataPath, metadata);
   return metadata;
 }

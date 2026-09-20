@@ -20,7 +20,7 @@ import {
   parseDeb822,
   parseReleaseSha256,
 } from "../deb822.ts";
-import { writeMetadata } from "../metadata.ts";
+import { makeMetadata, writeMetadata } from "../metadata.ts";
 import { REPO_ROOT } from "../paths.ts";
 import type { AptOracle, Architecture, Metadata } from "../types.ts";
 import { compareDebVersions, normalizeUpstreamVersion } from "../version.ts";
@@ -217,11 +217,11 @@ export async function resolveWithApt(
     verifyIndexedFile(packagePath, selected, path.basename(packagePath));
   }
 
-  const metadata: Metadata = {
+  const metadata = makeMetadata({
     ...selected,
     repository: assertSingleLine(repository, "repository URL"),
     path: packagePath,
-  };
+  });
   writeMetadata(metadataPath, metadata);
   return metadata;
 }

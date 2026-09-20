@@ -15,7 +15,7 @@ import {
   fail,
 } from "../guards.ts";
 import { MAX_PAYLOAD_BYTES, fetchWithRetry, readPayload } from "../http.ts";
-import { writeMetadata } from "../metadata.ts";
+import { makeMetadata, writeMetadata } from "../metadata.ts";
 import type { Metadata, UpdateManifestOracle } from "../types.ts";
 import { downloadVerified } from "./download.ts";
 import { prepareOutput, type ResolveRequest } from "./shared.ts";
@@ -126,31 +126,27 @@ export async function resolveWithUpdateManifest(
     oracle.downloadHosts,
   );
 
-  const metadata: Metadata = {
+  const packagePath = request.metadataOnly
+    ? null
+    : path.join(outputDir, `${packageName}_${manifest.version}_${request.architecture}.deb`);
+  const metadata = makeMetadata({
     package: packageName,
     version: manifest.version,
-    packageVersion: manifest.version,
     architecture: request.architecture,
     repositoryPath: manifest.repositoryPath,
     sha256: manifest.asset.sha256,
     size: manifest.asset.size,
-    depends: "",
     repository: manifest.repository,
-    path: null,
-  };
+    path: packagePath,
+  });
 
-  if (!request.metadataOnly) {
-    const packagePath = path.join(
-      outputDir,
-      `${packageName}_${manifest.version}_${request.architecture}.deb`,
-    );
+  if (packagePath !== null) {
     await downloadVerified(
       manifest.asset.url,
       packagePath,
       { sha256: manifest.asset.sha256, size: manifest.asset.size },
       { allowedHosts: oracle.downloadHosts, label: path.basename(packagePath) },
     );
-    metadata.path = packagePath;
   }
 
   writeMetadata(metadataPath, metadata);

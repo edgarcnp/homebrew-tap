@@ -8,7 +8,7 @@
 import * as path from "node:path";
 import { GITHUB_ASSET_HOSTS, assertMatches, assertPositiveSize, fail } from "../guards.ts";
 import { MAX_PAYLOAD_BYTES } from "../http.ts";
-import { writeMetadata } from "../metadata.ts";
+import { makeMetadata, writeMetadata } from "../metadata.ts";
 import type { Architecture, GithubReleaseOracle, Metadata } from "../types.ts";
 import { ARCHITECTURES } from "../types.ts";
 import { downloadVerified } from "./download.ts";
@@ -146,27 +146,26 @@ export async function resolveWithGithubRelease(
       request.token,
     );
     const size = assertPositiveSize(asset.size, MAX_PAYLOAD_BYTES, `${asset.name} size`);
-    const metadata: Metadata = {
+    const packagePath = request.metadataOnly
+      ? null
+      : path.join(outputDir, `${packageName}_${version}_${architecture}.deb`);
+    const metadata = makeMetadata({
       package: packageName,
       version,
-      packageVersion: version,
       architecture,
       repositoryPath: `${tag}/${asset.name}`,
       sha256: asset.digest,
       size,
-      depends: "",
       repository: downloadBase,
-      path: null,
-    };
-    if (!request.metadataOnly) {
-      const packagePath = path.join(outputDir, `${packageName}_${version}_${architecture}.deb`);
+      path: packagePath,
+    });
+    if (packagePath !== null) {
       await downloadVerified(
         `${downloadBase}/${metadata.repositoryPath}`,
         packagePath,
         { sha256: metadata.sha256, size: metadata.size },
         { allowedHosts: GITHUB_ASSET_HOSTS, label: path.basename(packagePath) },
       );
-      metadata.path = packagePath;
     }
     writeMetadata(metadataPath, metadata);
     return metadata;
@@ -182,29 +181,26 @@ export async function resolveWithGithubRelease(
   const asset = assets[architecture];
   const version = normalizeTagVersion(tag);
   const size = assertPositiveSize(asset.size, MAX_PAYLOAD_BYTES, `${asset.name} size`);
-
-  const metadata: Metadata = {
+  const packagePath = request.metadataOnly
+    ? null
+    : path.join(outputDir, `${assetPrefix}_${version}_${architecture}.deb`);
+  const metadata = makeMetadata({
     package: assetPrefix,
     version,
-    packageVersion: version,
     architecture,
     repositoryPath: `${tag}/${asset.name}`,
     sha256: asset.digest,
     size,
-    depends: "",
     repository: downloadBase,
-    path: null,
-  };
-
-  if (!request.metadataOnly) {
-    const packagePath = path.join(outputDir, `${assetPrefix}_${version}_${architecture}.deb`);
+    path: packagePath,
+  });
+  if (packagePath !== null) {
     await downloadVerified(
       `${downloadBase}/${metadata.repositoryPath}`,
       packagePath,
       { sha256: metadata.sha256, size: metadata.size },
       { allowedHosts: GITHUB_ASSET_HOSTS, label: path.basename(packagePath) },
     );
-    metadata.path = packagePath;
   }
   writeMetadata(metadataPath, metadata);
   return metadata;

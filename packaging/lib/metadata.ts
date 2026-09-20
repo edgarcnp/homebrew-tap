@@ -11,8 +11,39 @@ import {
   fail,
 } from "./guards.ts";
 import { MAX_PAYLOAD_BYTES, writeFileAtomic } from "./http.ts";
-import type { Metadata } from "./types.ts";
+import type { Architecture, Metadata } from "./types.ts";
 import { isArchitecture } from "./types.ts";
+
+// The fields an oracle fills in. Everything else follows one convention:
+// packageVersion mirrors version (the deb build epoch only matters for apt),
+// depends is empty, and an unresolved payload carries a null path.
+export interface MetadataFields {
+  package: string;
+  version: string;
+  architecture: Architecture;
+  repositoryPath: string;
+  sha256: string;
+  size: number;
+  repository: string;
+  packageVersion?: string;
+  depends?: string;
+  path?: string | null;
+}
+
+export function makeMetadata(fields: MetadataFields): Metadata {
+  return {
+    package: fields.package,
+    version: fields.version,
+    packageVersion: fields.packageVersion ?? fields.version,
+    architecture: fields.architecture,
+    repositoryPath: fields.repositoryPath,
+    sha256: fields.sha256,
+    size: fields.size,
+    depends: fields.depends ?? "",
+    repository: fields.repository,
+    path: fields.path ?? null,
+  };
+}
 
 export const METADATA_KEYS: readonly (keyof Metadata)[] = [
   "package",
