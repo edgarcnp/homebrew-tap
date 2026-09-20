@@ -12,17 +12,11 @@ import {
   assertSha256Hex,
   fail,
 } from "../guards.ts";
-import {
-  MAX_PAYLOAD_BYTES,
-  digestMatchesHex,
-  fetchWithRetry,
-  readPayload,
-  sha256Digest,
-  writeFileAtomic,
-} from "../http.ts";
+import { digestMatchesHex, sha256Digest, sha256Hex, writeFileAtomic } from "../http.ts";
 import { writeMetadata } from "../metadata.ts";
 import type { Architecture, CdnRedirectOracle, Metadata } from "../types.ts";
 import { normalizeUpstreamVersion } from "../version.ts";
+import { fetchVerified } from "./download.ts";
 import { prepareOutput, type ResolveRequest } from "./shared.ts";
 
 // Assumed upstream URL layout (live-verified 2026-08, both architectures):
@@ -77,24 +71,6 @@ export function parseFinalUrl(finalUrl: string, redirectHosts: readonly string[]
   };
 }
 
-async function fetchFollowRedirects(
-  url: string,
-  redirectHosts: readonly string[],
-): Promise<Response> {
-  const initial = new URL(url);
-  if (initial.protocol !== "https:") {
-    fail(`Initial URL must be https (got ${initial.protocol}) for ${url}`);
-  }
-  const response = await fetchWithRetry(url, { redirect: "follow", timeoutMs: 60000 });
-  if (!response.ok) throw new Error(`Download failed (${response.status}) for ${url}`);
-  const declaredLength = Number(response.headers.get("content-length") ?? 0);
-  if (declaredLength > MAX_PAYLOAD_BYTES) {
-    throw new Error(`Payload too large (Content-Length ${declaredLength}) for ${url}`);
-  }
-  assertHostAllowed(new URL(response.url), redirectHosts, "redirect");
-  return response;
-}
-
 export async function resolveWithCdnRedirect(
   oracle: CdnRedirectOracle,
   request: ResolveRequest,
@@ -113,18 +89,19 @@ export async function resolveWithCdnRedirect(
   const repository = repositoryUrl.origin + repositoryUrl.pathname.replace(/\/+$/, "");
   const { outputDir, metadataPath } = prepareOutput(request);
 
-  const response = await fetchFollowRedirects(
-    `${repository}/${mapping.path}/deb`,
-    oracle.redirectHosts,
-  );
-  const parsed = parseFinalUrl(response.url, oracle.redirectHosts);
+  const { bytes, finalUrl } = await fetchVerified(`${repository}/${mapping.path}/deb`, {
+    allowedHosts: oracle.redirectHosts,
+    label: "Download",
+    hostLabel: "redirect",
+    timeoutMs: 60000,
+  });
+  const parsed = parseFinalUrl(finalUrl.href, oracle.redirectHosts);
   if (parsed.archPath !== mapping.path) {
     throw new Error(`Redirect arch ${parsed.archPath} does not match requested ${mapping.path}`);
   }
 
   const version = normalizeUpstreamVersion(parsed.releaseVersion);
-  const bytes = await readPayload(response);
-  const sha256 = sha256Digest(bytes).toString("hex");
+  const sha256 = sha256Hex(bytes);
   const size = bytes.length;
   let packagePath: string | null = null;
   if (!request.metadataOnly) {

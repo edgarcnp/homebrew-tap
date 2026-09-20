@@ -12,23 +12,15 @@
 import * as path from "node:path";
 import {
   GITHUB_ASSET_HOSTS,
-  assertHostAllowed,
   assertMatches,
   assertPositiveSize,
   assertSingleLine,
   fail,
 } from "../guards.ts";
-import {
-  MAX_PAYLOAD_BYTES,
-  digestMatchesHex,
-  fetchWithRetry,
-  readPayload,
-  sha256Digest,
-  sha512Base64,
-  writeFileAtomic,
-} from "../http.ts";
+import { MAX_PAYLOAD_BYTES, fetchWithRetry } from "../http.ts";
 import { writeMetadata } from "../metadata.ts";
 import type { Architecture, ElectronFeedOracle, Metadata } from "../types.ts";
+import { downloadVerified, fetchVerified } from "./download.ts";
 import { assertRepositoryUrl } from "./github-release.ts";
 import { normalizeTagVersion, parseSha256Digest } from "./release-common.ts";
 import { prepareOutput, type ResolveRequest } from "./shared.ts";
@@ -183,16 +175,13 @@ export function parseUpdateYml(
 }
 
 async function fetchYaml(feedUrl: string): Promise<string> {
-  const response = await fetchWithRetry(feedUrl, { redirect: "follow", timeoutMs: 30000 });
-  if (!response.ok) throw new Error(`Feed fetch failed (${response.status}) for ${feedUrl}`);
-  const finalUrl = new URL(response.url);
-  assertHostAllowed(finalUrl, GITHUB_ASSET_HOSTS, "feed yml");
-  const declaredLength = Number(response.headers.get("content-length") ?? 0);
-  if (declaredLength > MAX_YAML_BYTES) {
-    throw new Error(`Feed yml too large (Content-Length ${declaredLength})`);
-  }
-  const bytes = await readPayload(response);
-  if (bytes.length > MAX_YAML_BYTES) throw new Error("Feed yml too large");
+  const { bytes } = await fetchVerified(feedUrl, {
+    allowedHosts: GITHUB_ASSET_HOSTS,
+    label: "Feed fetch",
+    hostLabel: "feed yml",
+    timeoutMs: 30000,
+    maxBytes: MAX_YAML_BYTES,
+  });
   return bytes.toString("utf8");
 }
 
@@ -251,29 +240,6 @@ export function selectAsset(
     throw new Error(`Asset size ${size} does not match update yml size ${ymlSize}`);
   }
   return { name: assetName, sha256: parseSha256Digest(digest), size };
-}
-
-async function downloadAndVerify(
-  url: string,
-  destination: string,
-  expected: { sha256: string; sha512: string; size: number },
-  label: string,
-): Promise<void> {
-  const response = await fetchWithRetry(url, { redirect: "follow", timeoutMs: 60000 });
-  if (!response.ok) throw new Error(`Download failed (${response.status}) for ${url}`);
-  const finalUrl = new URL(response.url);
-  assertHostAllowed(finalUrl, GITHUB_ASSET_HOSTS, "download");
-  const bytes = await readPayload(response);
-  if (bytes.length !== expected.size) {
-    throw new Error(`${label} size mismatch: expected ${expected.size}, got ${bytes.length}`);
-  }
-  if (!digestMatchesHex(expected.sha256, sha256Digest(bytes))) {
-    throw new Error(`${label} SHA256 mismatch against the GitHub release digest`);
-  }
-  if (sha512Base64(bytes) !== expected.sha512) {
-    throw new Error(`${label} SHA512 mismatch against the upstream update feed`);
-  }
-  writeFileAtomic(destination, bytes);
 }
 
 export async function resolveWithElectronFeed(
@@ -336,11 +302,11 @@ export async function resolveWithElectronFeed(
       outputDir,
       `${oracle.packageName}_${parsed.version}_${request.architecture}.AppImage`,
     );
-    await downloadAndVerify(
+    await downloadVerified(
       `${downloadBase}/${metadata.repositoryPath}`,
       packagePath,
       { sha256: asset.sha256, sha512: yml.sha512, size: asset.size },
-      path.basename(packagePath),
+      { allowedHosts: GITHUB_ASSET_HOSTS, label: path.basename(packagePath) },
     );
     metadata.path = packagePath;
   }
