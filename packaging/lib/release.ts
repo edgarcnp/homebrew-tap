@@ -6,8 +6,40 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { APPIMAGE_ARCH } from "./architecture.ts";
+import { fail } from "./guards.ts";
 import { sha256Hex } from "./http.ts";
 import type { AppDescriptor, Architecture, CaskState } from "./types.ts";
+import { sortDebVersions } from "./version.ts";
+
+export interface PrunePlan {
+  // Every version found under the tag prefix, dpkg-ordered ascending.
+  versions: string[];
+  // The oldest versions beyond `keep`, i.e. the ones to delete (ascending).
+  stale: string[];
+}
+
+// Selects which releases to prune. "Newest" is the pipeline's dpkg ordering,
+// not `sort -V`: for shapes upstreams publish (1.0.109a vs 1.0.109-1, 1.0+build
+// vs 1.0-rc.1) GNU's version sort and dpkg disagree about which is newer, and
+// pruning must never drop the newest release. An unparseable version fails
+// here instead of silently pruning a short list.
+export function planReleasePrune(
+  tags: readonly string[],
+  prefix: string,
+  keep: number,
+): PrunePlan {
+  const versions = tags
+    .filter((tag) => tag !== "")
+    .filter((tag) => tag.startsWith(prefix))
+    .map((tag) => {
+      const version = tag.slice(prefix.length);
+      if (version === "") fail(`release tag ${tag} has an empty version`);
+      return version;
+    });
+  const sorted = sortDebVersions(versions);
+  const stale = sorted.slice(0, Math.max(0, sorted.length - keep));
+  return { versions: sorted, stale };
+}
 
 export interface AssetComparison {
   // true/false when the comparison ran; null when it could not (a missing or
