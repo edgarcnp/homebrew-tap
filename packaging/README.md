@@ -67,6 +67,7 @@ upstream source kind behind a shared interface, dispatched exhaustively
 | `icon` | Icon path inside the payload plus its hicolor size directory |
 | `desktopTemplate` | Desktop entry template relative to the app directory |
 | `updater` | Updater neutralization: JSON key removal, endpoint patch, feed removal, `.env` entries, runtime hook, residual scan |
+| `quickSharun` | quick-sharun build knobs exported as environment variables: `hooks` (pkgforge hooks deployed via `ADD_HOOKS`, e.g. `fix-namespaces.hook`) and `env` (verbatim variables such as `OPTIMIZE_LAUNCH`, `DEPLOY_OPENGL`, `QUICK_SHARUN_SKIP_DEPS_FOR`) |
 
 ### Oracle kinds
 
@@ -176,6 +177,23 @@ fails at runtime with `Failed to find '<name>' in PATH or <dir>/shared/bin`.
 working `bin/<name>` wrapper with a relative symlink (sharun follows a symlink
 that resolves there) and fails the build when one cannot be mapped, so a dead
 sidecar cannot ship silently.
+
+The descriptor's `quickSharun` block is exported as environment variables
+before quick-sharun runs, so an app's pkgforge knobs (hooks, `OPTIMIZE_LAUNCH`,
+`DEPLOY_*`, `QUICK_SHARUN_SKIP_DEPS_FOR`) live with the app instead of in the
+workflow, and a local `build.sh` behaves like CI. Every app deploys pkgforge's
+`fix-namespaces.hook`, which detects the unprivileged-userns restriction some
+distros (Ubuntu 24.04+, secureblue) impose and offers to lift it; the hook is
+sourced by the generated `AppRun` and no-ops where userns already work.
+
+Three things stay in this pipeline rather than delegating to quick-sharun:
+updater neutralization (`fbr neutralize` fails the build when a declared
+endpoint survives, which `self-updater.hook` — whose purpose is the opposite —
+cannot express), the smoke gate (a superset of `quick-sharun --simple-test`'s
+loader-error patterns, run against the packed AppImage), and the appimagetool
+invocation itself (`quick-sharun --make-appimage` guesses an update-information
+string from `GITHUB_REPOSITORY`, which would embed a zsync updater feed in
+artifacts that are deliberately update-free).
 
 The workflow installs the webkit2gtk/GTK deps only for apps whose descriptor
 sets `needsWebkit` (gitbutler) — vscode, opencode-desktop and commandcode-desktop are

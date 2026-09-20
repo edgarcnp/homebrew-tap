@@ -166,6 +166,22 @@ export interface UpdaterConfig {
 }
 
 // ---------------------------------------------------------------------------
+// quick-sharun build configuration
+// ---------------------------------------------------------------------------
+
+// pkgforge's quick-sharun reads its knobs from the environment (ADD_HOOKS,
+// OPTIMIZE_LAUNCH, DEPLOY_*, QUICK_SHARUN_SKIP_DEPS_FOR, ANYLINUX_LIB, ...).
+// This block is the descriptor's typed view of the ones an app needs; the
+// pipeline exports them so the CI build and a local build.sh behave alike.
+export interface QuickSharunConfig {
+  // pkgforge hooks to deploy (ADD_HOOKS), e.g. ["fix-namespaces.hook"].
+  // quick-sharun itself rejects a name it does not know.
+  hooks?: string[];
+  // Extra quick-sharun environment variables, passed through verbatim.
+  env?: Record<string, string>;
+}
+
+// ---------------------------------------------------------------------------
 // App descriptor
 // ---------------------------------------------------------------------------
 
@@ -229,6 +245,8 @@ export interface AppDescriptor {
   // Desktop entry template, relative to sourceDir.
   desktopTemplate: string;
   updater: UpdaterConfig;
+  // quick-sharun build knobs, exported as environment variables at pack time.
+  quickSharun: QuickSharunConfig;
 }
 
 // ---------------------------------------------------------------------------

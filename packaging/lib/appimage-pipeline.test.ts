@@ -113,3 +113,65 @@ describe(STAGE, () => {
     assert.equal(fs.lstatSync(pathIn("bin/resources/opencode-cli")).isSymbolicLink(), false);
   });
 });
+
+// The stage exports the descriptor's quick-sharun knobs, so it needs jq (which
+// the pipeline requires anyway) but no build.
+const HAS_JQ = spawnSync("jq", ["--version"], { encoding: "utf8" }).status === 0;
+const EXPORTED_NAMES = ["ADD_HOOKS", "OPTIMIZE_LAUNCH", "DEPLOY_OPENGL"];
+
+function exportQuickSharun(
+  appJson: string,
+  extraEnv: Record<string, string> = {},
+): { status: number | null; env: Record<string, string> } {
+  const script = [
+    "set -Eeuo pipefail",
+    '. "$PIPELINE_LIB"',
+    "pipeline_export_quick_sharun_env",
+    `for name in ${EXPORTED_NAMES.join(" ")}; do`,
+    '  eval "value=\\${$name:-}"',
+    '  printf "%s=%s\\n" "$name" "$value"',
+    "done",
+  ].join("\n");
+  const result = spawnSync("bash", ["-c", script], {
+    encoding: "utf8",
+    env: { ...process.env, PIPELINE_LIB, APP_JSON: appJson, ...extraEnv },
+  });
+  const env: Record<string, string> = {};
+  for (const line of (result.stdout ?? "").split("\n")) {
+    const separator = line.indexOf("=");
+    if (separator > 0) env[line.slice(0, separator)] = line.slice(separator + 1);
+  }
+  return { status: result.status, env };
+}
+
+describe("pipeline_export_quick_sharun_env", () => {
+  it("exports the descriptor's hooks and environment variables", { skip: !HAS_JQ }, () => {
+    const { status, env } = exportQuickSharun(
+      JSON.stringify({
+        quickSharun: {
+          hooks: ["fix-namespaces.hook"],
+          env: { OPTIMIZE_LAUNCH: "1", DEPLOY_OPENGL: "1" },
+        },
+      }),
+    );
+    assert.equal(status, 0);
+    assert.equal(env["ADD_HOOKS"], "fix-namespaces.hook");
+    assert.equal(env["OPTIMIZE_LAUNCH"], "1");
+    assert.equal(env["DEPLOY_OPENGL"], "1");
+  });
+
+  it("appends to hook lists already in the environment", { skip: !HAS_JQ }, () => {
+    const { env } = exportQuickSharun(
+      JSON.stringify({ quickSharun: { hooks: ["fix-namespaces.hook"] } }),
+      { ADD_HOOKS: "vulkan-check.hook" },
+    );
+    assert.equal(env["ADD_HOOKS"], "vulkan-check.hook:fix-namespaces.hook");
+  });
+
+  it("is a no-op without a quickSharun block", { skip: !HAS_JQ }, () => {
+    const { status, env } = exportQuickSharun("{}");
+    assert.equal(status, 0);
+    for (const name of EXPORTED_NAMES) assert.equal(env[name], "");
+  });
+});
+

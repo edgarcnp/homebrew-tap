@@ -12,6 +12,7 @@ import type {
   IconConfig,
   Oracle,
   Payload,
+  QuickSharunConfig,
   ResidualScan,
   UpdaterConfig,
   WatchConfig,
@@ -271,6 +272,36 @@ function validateUpdater(raw: unknown, label: string): UpdaterConfig {
   return updater;
 }
 
+// Hook entries are colon-joined into ADD_HOOKS, so an entry must not contain
+// the separator or whitespace that would split the list; quick-sharun itself
+// rejects a hook name it does not know at build time.
+function validateQuickSharun(raw: unknown, label: string): QuickSharunConfig {
+  if (raw === undefined) return {};
+  const source = asObject(raw, label);
+  const config: QuickSharunConfig = {};
+
+  const hooks = strArray(source, "hooks", label);
+  for (const [index, hook] of hooks.entries()) {
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(hook)) {
+      fail(`${label}.hooks[${index}] is not a hook name: ${hook}`);
+    }
+  }
+  if (hooks.length > 0) config.hooks = hooks;
+
+  const envRaw = source["env"];
+  if (envRaw !== undefined) {
+    const env: Record<string, string> = {};
+    for (const [key, value] of Object.entries(asObject(envRaw, `${label}.env`))) {
+      if (!SAFE_ENV_KEY.test(key)) fail(`${label}.env key is not a valid name: ${key}`);
+      if (typeof value !== "string") fail(`${label}.env.${key} must be a string`);
+      env[key] = assertSingleLine(value, `${label}.env.${key}`);
+    }
+    config.env = env;
+  }
+
+  return config;
+}
+
 function validateArchitectures(raw: unknown, label: string): Architecture[] {
   if (raw === undefined) return [...ARCHITECTURES];
   if (!Array.isArray(raw) || raw.length === 0) {
@@ -355,6 +386,7 @@ export function validateDescriptor(raw: unknown, expectedId: string): AppDescrip
     icon: validateIcon(source["icon"], `${label}.icon`),
     desktopTemplate: relativePath(str(source, "desktopTemplate", label), `${label}.desktopTemplate`),
     updater: validateUpdater(source["updater"], `${label}.updater`),
+    quickSharun: validateQuickSharun(source["quickSharun"], `${label}.quickSharun`),
   };
   if (watch !== undefined) descriptor.watch = watch;
 

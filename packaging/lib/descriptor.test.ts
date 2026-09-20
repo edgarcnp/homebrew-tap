@@ -132,6 +132,66 @@ describe("descriptor contents (regression against the previous per-app scripts)"
   });
 });
 
+describe("quick-sharun configuration", () => {
+  it("deploys fix-namespaces for every app", () => {
+    for (const app of APPS) {
+      assert.deepEqual(loadDescriptor(app).quickSharun, { hooks: ["fix-namespaces.hook"] });
+    }
+  });
+
+  it("accepts verbatim environment variables", () => {
+    const descriptor = validateDescriptor(
+      mutated("vscode", (copy) => {
+        copy["quickSharun"] = {
+          hooks: ["fix-namespaces.hook", "vulkan-check.hook"],
+          env: { OPTIMIZE_LAUNCH: "1" },
+        };
+      }),
+      "vscode",
+    );
+    assert.deepEqual(descriptor.quickSharun, {
+      hooks: ["fix-namespaces.hook", "vulkan-check.hook"],
+      env: { OPTIMIZE_LAUNCH: "1" },
+    });
+  });
+
+  it("defaults to an empty configuration when the block is absent", () => {
+    const descriptor = validateDescriptor(
+      mutated("vscode", (copy) => {
+        delete copy["quickSharun"];
+      }),
+      "vscode",
+    );
+    assert.deepEqual(descriptor.quickSharun, {});
+  });
+
+  it("rejects a hook name that would split the ADD_HOOKS list", () => {
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("vscode", (copy) => {
+            copy["quickSharun"] = { hooks: ["fix-namespaces.hook:other"] };
+          }),
+          "vscode",
+        ),
+      /is not a hook name/,
+    );
+  });
+
+  it("rejects an unsafe environment key", () => {
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("vscode", (copy) => {
+            copy["quickSharun"] = { env: { lower_case: "1" } };
+          }),
+          "vscode",
+        ),
+      /key is not a valid name/,
+    );
+  });
+});
+
 describe("release watch", () => {
   it("loads each app's watch block", () => {
     assert.deepEqual(loadDescriptor("vscode").watch, {

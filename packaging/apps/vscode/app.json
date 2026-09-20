@@ -50,5 +50,8 @@
       "patterns": ["update.code.visualstudio.com"],
       "severity": "error"
     }
+  },
+  "quickSharun": {
+    "hooks": ["fix-namespaces.hook"]
   }
 }
