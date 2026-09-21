@@ -205,20 +205,20 @@ pipeline_install_icon() {
 pipeline_reconcile_sharun_sidecars() {
   local sharun sidecar relative name wrapper real up rest target reconciled
   sharun="${APPDIR}/sharun"
-  [ -x "${sharun}" ] || return 0
+  [[ -x "${sharun}" ]] || return 0
 
   reconciled=0
   while IFS= read -r -d '' sidecar
   do
     # every hardlink of sharun (a real sidecar binary is a distinct inode)
-    if [ "${sidecar}" = "${sharun}" ]
+    if [[ "${sidecar}" = "${sharun}" ]]
     then
       continue
     fi
     relative="${sidecar#"${APPDIR}/"}"
     name="${sidecar##*/}"
     # a wrapper directly under bin/ is the one slot sharun resolves
-    if [ "${sidecar%/*}" = "${APPDIR}/bin" ]
+    if [[ "${sidecar%/*}" = "${APPDIR}/bin" ]]
     then
       continue
     fi
@@ -226,7 +226,7 @@ pipeline_reconcile_sharun_sidecars() {
     real="${APPDIR}/shared/bin/${name}"
     if [[ "${sidecar}" == "${APPDIR}/bin/"* ]]
     then
-      if [ -f "${wrapper}" ] && [ "${wrapper}" -ef "${sharun}" ] && [ -x "${real}" ]
+      if [[ -f "${wrapper}" ]] && [[ "${wrapper}" -ef "${sharun}" ]] && [[ -x "${real}" ]]
       then
         rel="${sidecar#"${APPDIR}/bin/"}"
         rel="${rel%/*}"
