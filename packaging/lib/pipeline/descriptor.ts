@@ -318,6 +318,24 @@ function validateArchitectures(raw: unknown, label: string): Architecture[] {
   return architectures;
 }
 
+function validateHostHelpers(raw: unknown, label: string): string[] | undefined {
+  if (raw === undefined) return undefined;
+  if (!Array.isArray(raw)) fail(`${label} must be an array`);
+  return raw.map((entry, index) => {
+    if (typeof entry !== "string" || entry === "") {
+      fail(`${label}[${index}] must be a non-empty string`);
+    }
+    const helper = assertSingleLine(entry, `${label}[${index}]`);
+    if (helper.startsWith("/") || helper.includes("..")) {
+      fail(`${label}[${index}] must be an AppDir-relative path: ${helper}`);
+    }
+    if (!helper.startsWith("bin/") || helper === "bin/") {
+      fail(`${label}[${index}] must be a file under bin/: ${helper}`);
+    }
+    return helper;
+  });
+}
+
 function validateIcon(raw: unknown, label: string): IconConfig {
   const source = asObject(raw, label);
   const size = str(source, "size", label);
@@ -362,6 +380,7 @@ export function validateDescriptor(raw: unknown, expectedId: string): AppDescrip
   if (id !== expectedId) fail(`${label}: id ${id} does not match directory ${expectedId}`);
 
   const watch = validateWatch(source["watch"], `${label}.watch`);
+  const hostHelpers = validateHostHelpers(source["hostHelpers"], `${label}.hostHelpers`);
   const descriptor: AppDescriptor = {
     id,
     appName: str(source, "appName", label),
@@ -386,6 +405,7 @@ export function validateDescriptor(raw: unknown, expectedId: string): AppDescrip
     quickSharun: validateQuickSharun(source["quickSharun"], `${label}.quickSharun`),
   };
   if (watch !== undefined) descriptor.watch = watch;
+  if (hostHelpers !== undefined) descriptor.hostHelpers = hostHelpers;
 
   for (const [field, value] of [
     ["cask", descriptor.cask],

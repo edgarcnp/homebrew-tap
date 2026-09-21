@@ -30,6 +30,7 @@
     "kind": "deb-tree",
     "tree": "opt/OpenCode"
   },
+  "hostHelpers": ["bin/resources/opencode-cli"],
   "icon": {
     "source": "usr/share/icons/hicolor/128x128/apps/ai.opencode.desktop.png",
     "size": "128x128"

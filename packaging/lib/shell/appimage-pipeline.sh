@@ -201,7 +201,9 @@ pipeline_install_icon() {
 # spawning bin/resources/<name>) fails at runtime. This stage re-points each
 # nested wrapper under bin/ at the working bin/<name> wrapper with a relative
 # symlink (which sharun follows), then asserts the whole AppDir: the only sharun
-# hardlinks left are sharun itself and the bin/<name> wrappers.
+# hardlinks left are sharun itself and the bin/<name> wrappers. Helpers the app
+# runs outside the mount never reach this stage: pipeline_restore_host_helpers
+# already put their pristine binaries back (see hostHelpers in the README).
 pipeline_reconcile_sharun_sidecars() {
   local sharun sidecar relative name wrapper real up rest target reconciled
   sharun="${APPDIR}/sharun"
@@ -270,6 +272,79 @@ pipeline_export_quick_sharun_env() {
   done < <(descriptor_field '.quickSharun.env // {} | to_entries[] | "\(.key)=\(.value)"')
 }
 
+# Helpers the app runs outside the mount (the descriptor's hostHelpers, AppDir
+# paths under bin/) must stay host-runnable, so stash pristine copies before
+# quick-sharun runs: its Electron scan adds every deployable binary under
+# bin/resources and _handle_nested_bins hardlinks sharun over nested
+# executables, and the app copies the helper out at runtime — e.g.
+# opencode-desktop staging bin/resources/opencode-cli to userData — where a
+# sharun wrapper dies with "Interpreter not found!".
+pipeline_stash_host_helpers() {
+  local stash_dir helper source
+  stash_dir="${WORK_DIR}/host-helpers"
+  while IFS= read -r helper
+  do
+    [[ -n "${helper}" ]] || continue
+    source="${APPDIR}/${helper}"
+    ensure_file_exists "${source}" "host helper ${helper}"
+    mkdir -p -- "${stash_dir}/$(dirname -- "${helper}")"
+    cp -a -- "${source}" "${stash_dir}/${helper}"
+    # Remember whether a top-level wrapper for this basename already exists:
+    # only an auto-created one may be removed again at restore time.
+    if [[ ! -e "${APPDIR}/bin/$(basename -- "${helper}")" ]]
+    then
+      printf '%s\n' "$(basename -- "${helper}")" >>"${stash_dir}/.auto-tops"
+    fi
+  done < <(descriptor_field '.hostHelpers // [] | .[]')
+}
+
+# Restores the stashed host helpers over whatever quick-sharun left behind
+# (a nested sharun hardlink) and drops the auto-created top-level wrapper plus
+# its shared/bin duplicate, leaving the pristine upstream binary as the single
+# copy. Runs before the sidecar reconciliation, which then has nothing to
+# repair for these paths.
+pipeline_restore_host_helpers() {
+  local stash_dir helper dest name top real
+  stash_dir="${WORK_DIR}/host-helpers"
+  [[ -d "${stash_dir}" ]] || return 0
+  while IFS= read -r helper
+  do
+    [[ -n "${helper}" ]] || continue
+    dest="${APPDIR}/${helper}"
+    [[ -f "${stash_dir}/${helper}" ]] || error "Missing stashed host helper: ${helper}"
+    # rm first: cp would follow the reconcile symlink onto the top wrapper.
+    rm -f -- "${dest}"
+    cp -a -- "${stash_dir}/${helper}" "${dest}"
+    chmod 0755 -- "${dest}"
+    [[ -x "${dest}" ]] || error "Restored host helper is not executable: ${helper}"
+    if [[ -e "${APPDIR}/sharun" ]] && [[ "${dest}" -ef "${APPDIR}/sharun" ]]
+    then
+      error "Restored host helper is still a sharun wrapper: ${helper}"
+    fi
+    name="$(basename -- "${helper}")"
+    top="${APPDIR}/bin/${name}"
+    real="${APPDIR}/shared/bin/${name}"
+    if [[ -f "${stash_dir}/.auto-tops" ]] && grep -Fxq -- "${name}" "${stash_dir}/.auto-tops"
+    then
+      if [[ -e "${top}" ]]
+      then
+        if [[ "${top}" -ef "${APPDIR}/sharun" ]]
+        then
+          rm -f -- "${top}"
+          info "Removed auto-created sharun wrapper bin/${name}"
+        else
+          error "Refusing to remove non-sharun top-level file bin/${name}"
+        fi
+      fi
+      if [[ -e "${real}" ]]
+      then
+        rm -f -- "${real}"
+        info "Removed sharun duplicate shared/bin/${name}"
+      fi
+    fi
+  done < <(descriptor_field '.hostHelpers // [] | .[]')
+}
+
 # Packages the AppDir: quick-sharun (AppRun + the runtime closure including
 # libc), then the pkgforge appimagetool via APPIMAGETOOL, then the smoke gate.
 pipeline_pack() {
@@ -300,7 +375,9 @@ Install the Anylinux tools (packaging/scripts/install-anylinux-tools.sh) or add 
     targets=("${APPDIR}/bin/"*)
   fi
   pipeline_export_quick_sharun_env
+  pipeline_stash_host_helpers
   quick-sharun "${targets[@]}"
+  pipeline_restore_host_helpers
   pipeline_reconcile_sharun_sidecars
 
   # .env and the runtime hook belong to the finished AppDir (after AppRun exists).

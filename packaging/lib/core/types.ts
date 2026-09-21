@@ -229,6 +229,13 @@ export interface AppDescriptor {
   architectures: Architecture[];
   // Names the cask must expose on PATH (checkCask asserts the agreement).
   binaryTargets: string[];
+  // AppDir-relative paths (under bin/) the app executes outside the mount, so
+  // they must stay host-runnable: the pipeline restores them from the pristine
+  // payload after quick-sharun instead of shipping sharun wrappers (e.g. an
+  // Electron app that copies bin/resources/<helper> to userData and spawns it
+  // there — a sharun wrapper dies outside the mount with "Interpreter not
+  // found!"). Absent when the app runs everything inside the mount.
+  hostHelpers?: string[];
   oracle: Oracle;
   payload: Payload;
   icon: IconConfig;

@@ -78,6 +78,7 @@ must equal `id`, `cask` and `assetPrefix` — one name end to end.
 | `desktopTemplate` | Desktop entry template, relative to the app dir. |
 | `updater` | Updater neutralization: JSON key removal, endpoint patch, feed removal, `.env`, runtime hook, residual scan. |
 | `quickSharun` | quick-sharun knobs exported as env vars: `hooks` (`ADD_HOOKS`) and `env`. |
+| `hostHelpers` | Optional AppDir paths under `bin/` the app executes outside the mount. Stashed before quick-sharun and restored after, so they stay host-runnable instead of becoming sharun wrappers. |
 | `watch` | Optional release-watch block (`feedUrl`, `versionPattern`, optional `skipPattern`, `repo`). The pattern matches the feed entry *title* (the GitHub release name, not the tag); capture group 1 is the version. |
 
 ### Oracle kinds
@@ -173,6 +174,14 @@ non-FHS and old distros.
   resolves at runtime, so `pipeline_reconcile_sharun_sidecars` re-points nested
   wrappers at the working `bin/<name>` wrapper, then fails the build on any
   sharun hardlink outside the legal slots.
+- Helpers the app executes outside the mount take a different path: the
+  descriptor's `hostHelpers` lists `bin/`-relative files that are stashed before
+  `quick-sharun` and restored after, with auto-created `bin/<name>` wrappers
+  and their `shared/bin/<name>` duplicates removed. A sharun wrapper cannot run
+  outside the mount (it resolves `shared/bin` from its own location), so
+  without this an app that copies a helper out at runtime — opencode-desktop
+  staging `bin/resources/opencode-cli` to userData — ships a helper that dies
+  with `Interpreter not found!`.
 - Three things stay in this pipeline rather than delegating to `quick-sharun`:
   updater neutralization, the smoke gate (run against the packed AppImage), and
   the `appimagetool` invocation (so no zsync updater feed is embedded).
