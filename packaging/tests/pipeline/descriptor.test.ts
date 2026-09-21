@@ -100,13 +100,18 @@ describe("descriptor contents (regression against the previous per-app scripts)"
     const descriptor = loadDescriptor("gitbutler");
     assert.equal(descriptor.oracle.kind, "cdn-redirect");
     assert.equal(descriptor.needsWebkit, true);
-    assert.equal(descriptor.debloatArgs, "--add-mesa --prefer-nano");
+    assert.equal(descriptor.debloatArgs, "--add-common --prefer-nano webkit2gtk-4.1-mini");
     assert.deepEqual(descriptor.payload.files, [
       "usr/bin/gitbutler-tauri",
       "usr/bin/gitbutler-git-askpass",
       "usr/bin/but",
     ]);
     assert.equal(descriptor.updater.hook, "templates/prevent-autoupdate.hook");
+    // Upstream webkit2gtk demo flow: GTK WM_CLASS shim plus the shared hook.
+    assert.deepEqual(descriptor.quickSharun, {
+      hooks: ["fix-namespaces.hook"],
+      env: { GTK_CLASS_FIX: "1" },
+    });
     // Warning, not error: a legitimately unpatched copy must not fail the build.
     assert.equal(descriptor.updater.residualScan?.severity, "warning");
   });
@@ -139,7 +144,13 @@ describe("descriptor contents (regression against the previous per-app scripts)"
 describe("quick-sharun configuration", () => {
   it("deploys fix-namespaces for every app", () => {
     for (const app of APPS) {
-      assert.deepEqual(loadDescriptor(app).quickSharun, { hooks: ["fix-namespaces.hook"] });
+      const quickSharun = loadDescriptor(app).quickSharun;
+      assert.deepEqual(quickSharun.hooks, ["fix-namespaces.hook"]);
+      if (app === "gitbutler") {
+        assert.deepEqual(quickSharun.env, { GTK_CLASS_FIX: "1" });
+      } else {
+        assert.equal(quickSharun.env, undefined);
+      }
     }
   });
 

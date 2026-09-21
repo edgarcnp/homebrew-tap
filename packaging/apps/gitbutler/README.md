@@ -24,8 +24,10 @@ final AppImage at install.
   are staged into `AppDir/bin`. `but` is a symlink into `gitbutler-tauri`, copied
   with `-a` so the symlink survives.
 - **webkit2gtk** — `needsWebkit: true`: the build installs the webkit2gtk/GTK
-  closure (plus debloated mesa) and sharun bundles it, so the host needs no
-  webkit libraries.
+  closure (plus X11 libs, following upstream
+  `webkit2gtk4-demo-appimage.sh`) and debloated common packages including
+  `webkit2gtk-4.1-mini`, and sharun bundles it, so the host needs no
+  webkit libraries. `GTK_CLASS_FIX=1` ships the WM_CLASS shim for GTK.
 - **Updater** — the endpoint embedded in the `gitbutler-tauri` binary is
   rewritten to a never-resolving host with a same-length patch. The residual
   scan runs at `severity: warning`, since a copy can legitimately remain in a

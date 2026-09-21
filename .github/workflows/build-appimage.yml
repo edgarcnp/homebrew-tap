@@ -249,10 +249,19 @@ jobs:
         if: needs.detect.outputs.needs_webkit == 'true'
         run: |
           # webkit2gtk closure for the gitbutler build; sharun bundles it.
+          # Mirrors upstream webkit2gtk4-demo-appimage.sh: full webkit + gtk
+          # for linking, X11 libs for strace-time dlopen detection.
           pacman -S --noconfirm \
             gdk-pixbuf2 \
             glib-networking \
             gtk3 \
+            libxcb \
+            libxcursor \
+            libxi \
+            libxkbcommon \
+            libxkbcommon-x11 \
+            libxrandr \
+            libxtst \
             webkit2gtk-4.1
       - name: Install appimagetool
         run: |
