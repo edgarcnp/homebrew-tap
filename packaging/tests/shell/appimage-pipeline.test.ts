@@ -132,7 +132,7 @@ describe(STAGE, () => {
 // The stage exports the descriptor's quick-sharun knobs, so it needs jq (which
 // the pipeline requires anyway) but no build.
 const HAS_JQ = spawnSync("jq", ["--version"], { encoding: "utf8" }).status === 0;
-const EXPORTED_NAMES = ["ADD_HOOKS", "OPTIMIZE_LAUNCH", "DEPLOY_OPENGL"];
+const EXPORTED_NAMES = ["ADD_HOOKS", "DEPLOY_OPENGL", "DEPLOY_VULKAN"];
 
 function exportQuickSharun(
   appJson: string,
@@ -165,14 +165,14 @@ describe("pipeline_export_quick_sharun_env", () => {
       JSON.stringify({
         quickSharun: {
           hooks: ["fix-namespaces.hook"],
-          env: { OPTIMIZE_LAUNCH: "1", DEPLOY_OPENGL: "1" },
+          env: { DEPLOY_OPENGL: "1", DEPLOY_VULKAN: "1" },
         },
       }),
     );
     assert.equal(status, 0);
     assert.equal(env["ADD_HOOKS"], "fix-namespaces.hook");
-    assert.equal(env["OPTIMIZE_LAUNCH"], "1");
     assert.equal(env["DEPLOY_OPENGL"], "1");
+    assert.equal(env["DEPLOY_VULKAN"], "1");
   });
 
   it("appends to hook lists already in the environment", { skip: !HAS_JQ }, () => {

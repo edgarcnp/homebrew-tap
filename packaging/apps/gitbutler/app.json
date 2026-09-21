@@ -50,9 +50,6 @@
     }
   },
   "quickSharun": {
-    "hooks": ["fix-namespaces.hook"],
-    "env": {
-      "OPTIMIZE_LAUNCH": "1"
-    }
+    "hooks": ["fix-namespaces.hook"]
   }
 }

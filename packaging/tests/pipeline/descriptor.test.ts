@@ -134,12 +134,9 @@ describe("descriptor contents (regression against the previous per-app scripts)"
 });
 
 describe("quick-sharun configuration", () => {
-  it("deploys fix-namespaces and launch optimization for every app", () => {
+  it("deploys fix-namespaces for every app", () => {
     for (const app of APPS) {
-      assert.deepEqual(loadDescriptor(app).quickSharun, {
-        hooks: ["fix-namespaces.hook"],
-        env: { OPTIMIZE_LAUNCH: "1" },
-      });
+      assert.deepEqual(loadDescriptor(app).quickSharun, { hooks: ["fix-namespaces.hook"] });
     }
   });
 
@@ -148,14 +145,14 @@ describe("quick-sharun configuration", () => {
       mutated("vscode", (copy) => {
         copy["quickSharun"] = {
           hooks: ["fix-namespaces.hook", "vulkan-check.hook"],
-          env: { OPTIMIZE_LAUNCH: "1" },
+          env: { DEPLOY_VULKAN: "1" },
         };
       }),
       "vscode",
     );
     assert.deepEqual(descriptor.quickSharun, {
       hooks: ["fix-namespaces.hook", "vulkan-check.hook"],
-      env: { OPTIMIZE_LAUNCH: "1" },
+      env: { DEPLOY_VULKAN: "1" },
     });
   });
 
