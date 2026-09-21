@@ -22,6 +22,13 @@ version and each asset's SHA-256 and size.
   endpoint is legitimately embedded in `app.asar` and the `opencode-cli` binary,
   which cannot be same-length patched. The AppDir `.env` sets
   `OPENCODE_DISABLE_AUTOUPDATE=1`; updates come via Homebrew only.
+- **Host helper** — `bin/resources/opencode-cli` is declared in `hostHelpers`:
+  the desktop app copies it to `~/.config/ai.opencode.desktop/cli/<version>/`
+  and spawns it there, outside the mount, where a sharun wrapper dies with
+  `Interpreter not found!`. The pipeline ships the pristine upstream binary
+  (host `ld-linux`, host libc — exactly what the upstream `.deb` runs on) and
+  drops quick-sharun's auto-created `bin/opencode-cli` wrapper plus its
+  `shared/bin` duplicate.
 
 Upstream versions are used verbatim (e.g. `2.0.8`).
 

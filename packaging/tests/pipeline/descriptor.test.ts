@@ -91,6 +91,9 @@ describe("descriptor contents (regression against the previous per-app scripts)"
     // which cannot be same-length patched (see the app README).
     assert.equal(descriptor.updater.residualScan?.severity, "warning");
     assert.deepEqual(descriptor.updater.env, { OPENCODE_DISABLE_AUTOUPDATE: "1" });
+    // The desktop copies bin/resources/opencode-cli to userData and spawns it
+    // outside the mount, so it must stay host-runnable (not a sharun wrapper).
+    assert.deepEqual(descriptor.hostHelpers, ["bin/resources/opencode-cli"]);
   });
 
   it("keeps gitbutler's webkit dependency, file list and warning-level scan", () => {
@@ -189,6 +192,91 @@ describe("quick-sharun configuration", () => {
           "vscode",
         ),
       /key is not a valid name/,
+    );
+  });
+});
+
+describe("host helpers", () => {
+  it("omits the field when the block is absent", () => {
+    const descriptor = validateDescriptor(
+      mutated("vscode", (copy) => {
+        delete copy["hostHelpers"];
+      }),
+      "vscode",
+    );
+    assert.equal(descriptor.hostHelpers, undefined);
+  });
+
+  it("accepts AppDir paths under bin/", () => {
+    const descriptor = validateDescriptor(
+      mutated("vscode", (copy) => {
+        copy["hostHelpers"] = ["bin/resources/server", "bin/helper"];
+      }),
+      "vscode",
+    );
+    assert.deepEqual(descriptor.hostHelpers, ["bin/resources/server", "bin/helper"]);
+  });
+
+  it("rejects non-arrays, bad entries and paths outside bin/", () => {
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("vscode", (copy) => {
+            copy["hostHelpers"] = "bin/resources/server";
+          }),
+          "vscode",
+        ),
+      /hostHelpers must be an array/,
+    );
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("vscode", (copy) => {
+            copy["hostHelpers"] = [""];
+          }),
+          "vscode",
+        ),
+      /must be a non-empty string/,
+    );
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("vscode", (copy) => {
+            copy["hostHelpers"] = ["/bin/server"];
+          }),
+          "vscode",
+        ),
+      /must be an AppDir-relative path/,
+    );
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("vscode", (copy) => {
+            copy["hostHelpers"] = ["bin/../etc/passwd"];
+          }),
+          "vscode",
+        ),
+      /must be an AppDir-relative path/,
+    );
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("vscode", (copy) => {
+            copy["hostHelpers"] = ["share/server"];
+          }),
+          "vscode",
+        ),
+      /must be a file under bin\//,
+    );
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("vscode", (copy) => {
+            copy["hostHelpers"] = ["bin/"];
+          }),
+          "vscode",
+        ),
+      /must be a file under bin\//,
     );
   });
 });
