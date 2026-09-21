@@ -165,7 +165,9 @@ non-FHS and old distros.
 - The descriptor's `quickSharun` block is exported before `quick-sharun` runs,
   so a local `build.sh` behaves like CI. Every app deploys pkgforge's
   `fix-namespaces.hook` (offers to lift the unprivileged-userns restriction some
-  distros impose) and sets `OPTIMIZE_LAUNCH=1`.
+  distros impose). `OPTIMIZE_LAUNCH` stays off: appimagetool's DWARFS profiling
+  pass relaunches the AppImage through `/dev/fuse`, which the build container
+  does not have, and the pass fails the build outright rather than skipping.
 - `quick-sharun` hardlinks `sharun` over every nested `bin/` executable whose
   basename also lands in `shared/bin`. Only a wrapper directly under `bin/`
   resolves at runtime, so `pipeline_reconcile_sharun_sidecars` re-points nested
