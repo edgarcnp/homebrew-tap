@@ -185,8 +185,11 @@ non-FHS and old distros.
 - Three things stay in this pipeline rather than delegating to `quick-sharun`:
   updater neutralization, the smoke gate (run against the packed AppImage), and
   the `appimagetool` invocation (so no zsync updater feed is embedded).
-- The workflow installs webkit2gtk/GTK only for apps with `needsWebkit`
-  (gitbutler); the other build deps are installed for every app.
+- The workflow installs webkit2gtk/GTK (+ X11 libs, mirroring upstream
+  `webkit2gtk4-demo-appimage.sh`) only for apps with `needsWebkit`
+  (gitbutler); the other build deps are installed for every app. Gitbutler
+  debloats with `--add-common --prefer-nano webkit2gtk-4.1-mini` and exports
+  `GTK_CLASS_FIX=1`.
 
 `scripts/install-anylinux-tools.sh` fetches `quick-sharun` and
 `get-debloated-pkgs` from a URL addressed by a commit digest of

@@ -16,7 +16,7 @@
   "sourceOwner": "edgarcnp",
   "sourceDir": "packaging/apps/gitbutler",
   "buildCommand": "./build.sh",
-  "debloatArgs": "--add-mesa --prefer-nano",
+  "debloatArgs": "--add-common --prefer-nano webkit2gtk-4.1-mini",
   "needsWebkit": true,
   "architectures": ["amd64", "arm64"],
   "binaryTargets": ["gitbutler-tauri", "but"],
@@ -50,6 +50,9 @@
     }
   },
   "quickSharun": {
-    "hooks": ["fix-namespaces.hook"]
+    "hooks": ["fix-namespaces.hook"],
+    "env": {
+      "GTK_CLASS_FIX": "1"
+    }
   }
 }
