@@ -37,8 +37,8 @@ jobs:
       architectures: ${{ steps.app.outputs.architectures }}
       build_matrix: ${{ steps.matrix.outputs.matrix }}
       version: ${{ steps.resolve.outputs.version }}
-      skipped: ${{ steps.gate.outputs.skipped }}
-      repair_cask: ${{ steps.gate.outputs.repair_cask }}
+      skipped: ${{ steps.resolve.outputs.skipped }}
+      repair_cask: ${{ steps.resolve.outputs.repair_cask }}
       source: ${{ steps.source.outputs.repo }}
       upstream_sha256_amd64: ${{ steps.resolve.outputs.upstream_sha256_amd64 }}
       upstream_sha256_arm64: ${{ steps.resolve.outputs.upstream_sha256_arm64 }}
@@ -85,7 +85,7 @@ jobs:
           repository: ${{ steps.source.outputs.repo }}
           path: source
           persist-credentials: false
-      - name: Resolve upstream version
+      - name: Resolve upstream version and gate
         id: resolve
         env:
           GH_TOKEN: ${{ github.token }}
@@ -96,41 +96,78 @@ jobs:
             sudo apt-get install -y gnupg
           fi
           cd source
-          version=""
-          upstream_sha256_amd64=""
-          upstream_sha256_arm64=""
-          upstream_url_amd64=""
-          upstream_url_arm64=""
-          while IFS= read -r arch; do
-            [ -n "${arch}" ] || continue
-            file="upstream/metadata-${arch}.json"
-            bun packaging/bin/fbr.ts resolve \
-              --app "${APP_ID}" --arch "${arch}" --metadata-only \
-              --output-dir upstream --metadata "${file}"
-            arch_version="$(jq -r '.version' "${file}")"
-            if [ -z "${version}" ]; then
-              version="${arch_version}"
-            elif [ "${version}" != "${arch_version}" ]; then
-              echo "upstream version mismatch: ${version} vs ${arch_version} (${arch})" >&2
+          # The descriptor's watch feed and the oracle resolve asks publish on
+          # their own schedules (opencode's update manifest lagged its own
+          # release feed by ~1min on 2.0.14, and that run gated on the stale
+          # read and skipped). Hold while the feed already advertises a version
+          # the cask lacks and resolve has not moved past the cask, then gate
+          # normally. Bounded: a feed that runs ahead cannot stall the job, and
+          # it fails loudly instead of skipping a build nothing would retry.
+          feed_version=""
+          hold="false"
+          for attempt in 1 2 3; do
+            version=""
+            upstream_sha256_amd64=""
+            upstream_sha256_arm64=""
+            upstream_url_amd64=""
+            upstream_url_arm64=""
+            while IFS= read -r arch; do
+              [ -n "${arch}" ] || continue
+              file="upstream/metadata-${arch}.json"
+              bun packaging/bin/fbr.ts resolve \
+                --app "${APP_ID}" --arch "${arch}" --metadata-only \
+                --output-dir upstream --metadata "${file}"
+              arch_version="$(jq -r '.version' "${file}")"
+              if [ -z "${version}" ]; then
+                version="${arch_version}"
+              elif [ "${version}" != "${arch_version}" ]; then
+                echo "upstream version mismatch: ${version} vs ${arch_version} (${arch})" >&2
+                exit 1
+              fi
+              sha="$(jq -r '.sha256' "${file}")"
+              url="$(jq -r '.repository + "/" + .repositoryPath' "${file}")"
+              case "${arch}" in
+                amd64)
+                  upstream_sha256_amd64="${sha}"
+                  upstream_url_amd64="${url}"
+                  ;;
+                arm64)
+                  upstream_sha256_arm64="${sha}"
+                  upstream_url_arm64="${url}"
+                  ;;
+                *) echo "unsupported architecture: ${arch}" >&2; exit 1 ;;
+              esac
+            done < <(jq -r '.[]' <<<"${APP_ARCHITECTURES}")
+            [ -n "${version}" ] || { echo "no architectures resolved" >&2; exit 1; }
+            [[ "${version}" =~ ^[0-9A-Za-z._-]+$ ]] || { echo "invalid upstream version: ${version}" >&2; exit 1; }
+            version="${version//[^0-9A-Za-z._-]/_}"
+
+            hold_rc=0
+            hold_report="$(bun "${GITHUB_WORKSPACE}/tap/packaging/bin/fbr.ts" feed-hold \
+              --app "${APP_ID}" --tap "${GITHUB_WORKSPACE}/tap" \
+              --upstream-version "${version}")" || hold_rc=$?
+            if [ "${hold_rc}" -eq 2 ]; then
+              # A usage error is our own bug: fail rather than gate blind.
+              exit "${hold_rc}"
+            elif [ "${hold_rc}" -ne 0 ]; then
+              # The cross-check is advisory: a feed outage must not fail a run
+              # that resolve is perfectly able to plan.
+              echo "::warning::release feed unavailable (exit ${hold_rc}); gating without the feed cross-check" >&2
+              hold="false"
+              feed_version=""
+            else
+              feed_version="$(sed -n 's/^feed_version=//p' <<<"${hold_report}")"
+              hold="$(sed -n 's/^hold=//p' <<<"${hold_report}")"
+            fi
+            [ "${hold}" = "true" ] || break
+            if [ "${attempt}" -ge 3 ]; then
+              echo "::error::${APP_ID}: the release feed advertises ${feed_version} but resolve still returns ${version}; re-dispatch this build once upstream publishes it" >&2
               exit 1
             fi
-            sha="$(jq -r '.sha256' "${file}")"
-            url="$(jq -r '.repository + "/" + .repositoryPath' "${file}")"
-            case "${arch}" in
-              amd64)
-                upstream_sha256_amd64="${sha}"
-                upstream_url_amd64="${url}"
-                ;;
-              arm64)
-                upstream_sha256_arm64="${sha}"
-                upstream_url_arm64="${url}"
-                ;;
-              *) echo "unsupported architecture: ${arch}" >&2; exit 1 ;;
-            esac
-          done < <(jq -r '.[]' <<<"${APP_ARCHITECTURES}")
-          [ -n "${version}" ] || { echo "no architectures resolved" >&2; exit 1; }
-          [[ "${version}" =~ ^[0-9A-Za-z._-]+$ ]] || { echo "invalid upstream version: ${version}" >&2; exit 1; }
-          version="${version//[^0-9A-Za-z._-]/_}"
+            echo "waiting for the ${APP_ID} oracle to publish ${feed_version} (hold ${attempt}/2)"
+            sleep 60
+          done
+          cd "${GITHUB_WORKSPACE}"
           {
             echo "upstream_sha256_amd64=${upstream_sha256_amd64}"
             echo "upstream_sha256_arm64=${upstream_sha256_arm64}"
@@ -138,17 +175,12 @@ jobs:
             echo "upstream_url_arm64=${upstream_url_arm64}"
             echo "version=${version}"
           } >> "${GITHUB_OUTPUT}"
-      - name: Gate on upstream version vs cask version
-        id: gate
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          # The gate decision is a unit-tested pure function; this step gathers
-          # its inputs (cask pin, release existence, and whether the published
-          # assets still match the cask pin).
+
+          # The gate decision is a unit-tested pure function; the rest of this
+          # step gathers its inputs (cask pin, release existence, and whether
+          # the published assets still match the cask pin).
           cask_json="$(bun tap/packaging/bin/fbr.ts cask --action read --app "${APP_ID}" --tap "${GITHUB_WORKSPACE}/tap")"
           cask_version="$(jq -r '.version' <<<"${cask_json}")"
-          version="${{ steps.resolve.outputs.version }}"
 
           release_exists=false
           if gh release view "${TAG_PREFIX}${version}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
