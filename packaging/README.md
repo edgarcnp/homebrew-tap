@@ -172,10 +172,12 @@ non-FHS and old distros.
   pass relaunches the AppImage through `/dev/fuse`, which the build container
   does not have, and the pass fails the build outright rather than skipping.
 - `quick-sharun` hardlinks `sharun` over every nested `bin/` executable whose
-  basename also lands in `shared/bin`. Only a wrapper directly under `bin/`
-  resolves at runtime, so `pipeline_reconcile_sharun_sidecars` re-points nested
-  wrappers at the working `bin/<name>` wrapper, then fails the build on any
-  sharun hardlink outside the legal slots.
+  basename also lands in `shared/bin`, and over `lib/` executables deployed
+  via `ADD_DIR` (the webkit2gtk helpers in `lib/webkit2gtk-4.1`). Only a
+  wrapper directly under `bin/` resolves at runtime, so
+  `pipeline_reconcile_sharun_sidecars` re-points nested and `lib/` wrappers at
+  the working `bin/<name>` wrapper, then fails the build on any sharun
+  hardlink outside the legal slots.
 - Helpers the app executes outside the mount take a different path: the
   descriptor's `hostHelpers` lists `bin/`-relative files that are stashed before
   `quick-sharun` and restored after, with auto-created `bin/<name>` wrappers

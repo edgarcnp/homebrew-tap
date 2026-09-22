@@ -1,6 +1,8 @@
 // The sharun sidecar reconciliation stage. quick-sharun hardlinks sharun over
 // every nested executable under bin/ whose basename also lands in shared/bin,
-// and sharun cannot map such a nested wrapper back to shared/bin at runtime.
+// and over lib/ executables deployed via ADD_DIR (e.g. webkit2gtk helpers).
+// Only a wrapper directly under bin/ resolves shared/bin at runtime without
+// the environment, so the stage re-points the rest at the bin/ wrapper.
 // These tests drive the real shell stage against a synthetic AppDir: `-ef`
 // only looks at the inode, so hardlinks are enough and no ELF is needed.
 
@@ -93,6 +95,36 @@ describe(STAGE, () => {
     assert.equal(fs.realpathSync(sidecar), fs.realpathSync(pathIn("bin/nested")));
   });
 
+  it("re-points a lib/ helper at the bin/ wrapper (webkit2gtk)", () => {
+    makeSharun();
+    wrap("bin/WebKitWebProcess");
+    wrap("lib/webkit2gtk-4.1/WebKitWebProcess");
+    writeExecutable("shared/bin/WebKitWebProcess");
+
+    assert.equal(reconcile().status, 0);
+
+    const sidecar = pathIn("lib/webkit2gtk-4.1/WebKitWebProcess");
+    assert.equal(fs.lstatSync(sidecar).isSymbolicLink(), true);
+    assert.equal(fs.readlinkSync(sidecar), "../../bin/WebKitWebProcess");
+    assert.equal(fs.realpathSync(sidecar), fs.realpathSync(pathIn("bin/WebKitWebProcess")));
+
+    // a resumed or re-run stage must stay clean
+    assert.equal(reconcile().status, 0);
+    assert.equal(fs.readlinkSync(sidecar), "../../bin/WebKitWebProcess");
+  });
+
+  it("scales the lib/ relative target with the nesting depth", () => {
+    makeSharun();
+    wrap("bin/helper");
+    wrap("lib/a/b/helper");
+    writeExecutable("shared/bin/helper");
+
+    assert.equal(reconcile().status, 0);
+    const sidecar = pathIn("lib/a/b/helper");
+    assert.equal(fs.readlinkSync(sidecar), "../../../bin/helper");
+    assert.equal(fs.realpathSync(sidecar), fs.realpathSync(pathIn("bin/helper")));
+  });
+
   it("leaves a real (non-sharun) nested binary untouched", () => {
     makeSharun();
     wrap("bin/command-code");
@@ -116,7 +148,7 @@ describe(STAGE, () => {
   it("fails on a sharun hardlink outside the legal slots", () => {
     makeSharun();
     wrap("bin/command-code");
-    // a lib/gstreamer-* style wrapper: nothing resolves it from that location
+    // an unmappable lib/ wrapper: no bin/ wrapper exists for it
     wrap("lib/gstreamer-1.0/gst-plugin-scanner");
     writeExecutable("shared/bin/gst-plugin-scanner");
 

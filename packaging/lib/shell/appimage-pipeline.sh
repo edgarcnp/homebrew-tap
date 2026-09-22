@@ -196,18 +196,22 @@ pipeline_install_icon() {
 }
 
 # quick-sharun hardlinks sharun over every nested bin/ executable whose basename
-# also lands in shared/bin. sharun resolves its root from /proc/self/exe, so only
-# a wrapper directly under bin/ resolves; a nested one (e.g. an Electron app
-# spawning bin/resources/<name>) fails at runtime. This stage re-points each
-# nested wrapper under bin/ at the working bin/<name> wrapper with a relative
-# symlink (which sharun follows), then asserts the whole AppDir: the only sharun
-# hardlinks left are sharun itself and the bin/<name> wrappers. Helpers the app
-# runs outside the mount never reach this stage: pipeline_restore_host_helpers
-# already put their pristine binaries back (see hostHelpers in the README).
+# also lands in shared/bin, and over lib/ executables deployed via ADD_DIR
+# (e.g. the webkit2gtk helpers in lib/webkit2gtk-4.1). sharun resolves its root
+# from /proc/self/exe, so only a wrapper directly under bin/ resolves without
+# the environment; a nested one (e.g. an Electron app spawning
+# bin/resources/<name>) or a lib/ copy fails at runtime once the environment is
+# cleared. This stage re-points each such wrapper at the working bin/<name>
+# wrapper with a relative symlink (which sharun follows), then asserts the
+# whole AppDir: the only sharun hardlinks left are sharun itself and the
+# bin/<name> wrappers. Helpers the app runs outside the mount never reach this
+# stage: pipeline_restore_host_helpers already put their pristine binaries back
+# (see hostHelpers in the README).
 pipeline_reconcile_sharun_sidecars() {
-  local sharun sidecar relative name wrapper real up rest target reconciled
+  local sharun sidecar relative name wrapper real target reconciled
   sharun="${APPDIR}/sharun"
   [[ -x "${sharun}" ]] || return 0
+  command -v realpath >/dev/null 2>&1 || error "realpath is required"
 
   reconciled=0
   while IFS= read -r -d '' sidecar
@@ -226,25 +230,17 @@ pipeline_reconcile_sharun_sidecars() {
     fi
     wrapper="${APPDIR}/bin/${name}"
     real="${APPDIR}/shared/bin/${name}"
+    if [[ -f "${wrapper}" ]] && [[ "${wrapper}" -ef "${sharun}" ]] && [[ -x "${real}" ]]
+    then
+      target="$(realpath --relative-to="${sidecar%/*}" "${wrapper}")"
+      [[ -n "${target}" ]] || error "Failed to compute relative target for ${relative}"
+      ln -sfn "${target}" "${sidecar}"
+      reconciled=$((reconciled + 1))
+      info "Relinked ${relative} -> ${target}"
+      continue
+    fi
     if [[ "${sidecar}" == "${APPDIR}/bin/"* ]]
     then
-      if [[ -f "${wrapper}" ]] && [[ "${wrapper}" -ef "${sharun}" ]] && [[ -x "${real}" ]]
-      then
-        rel="${sidecar#"${APPDIR}/bin/"}"
-        rel="${rel%/*}"
-        up=".."
-        rest="${rel}"
-        while [[ "${rest}" == */* ]]
-        do
-          up="../${up}"
-          rest="${rest#*/}"
-        done
-        target="${up}/${name}"
-        ln -sfn "${target}" "${sidecar}"
-        reconciled=$((reconciled + 1))
-        info "Relinked ${relative} -> ${target}"
-        continue
-      fi
       error "Nested sharun wrapper ${relative} has no bin/${name} wrapper for shared/bin/${name}; it would fail at runtime"
     fi
     error "sharun hardlink outside the legal slots (${relative}); only bin/<name> resolves shared/bin/${name}"
