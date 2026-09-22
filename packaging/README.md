@@ -71,6 +71,7 @@ must equal `id`, `cask` and `assetPrefix` — one name end to end.
 | `sourceRepo`, `sourceOwner` | Upstream repo to build from, and the owner of the fallback fork. |
 | `sourceDir`, `buildCommand` | Where CI `cd`s before building. |
 | `debloatArgs`, `needsWebkit` | pkgforge debloat flags; whether the webkit2gtk/GTK build deps are needed. |
+| `buildPackages` | Arch packages CI installs into the build container for this app, beyond the shared toolchain — for libraries that must exist at pack time, e.g. one named in `quickSharun.libraries`. |
 | `architectures` | Arches this app ships; the pipeline builds, publishes and checks only these. |
 | `binaryTargets` | Names the cask must expose on `PATH` (checked by `fbr cask --action check`). |
 | `oracle` | Where the version and payload come from. |
@@ -78,7 +79,7 @@ must equal `id`, `cask` and `assetPrefix` — one name end to end.
 | `icon` | Icon path in the payload plus its hicolor size directory. |
 | `desktopTemplate` | Desktop entry template, relative to the app dir. |
 | `updater` | Updater neutralization: JSON key removal, endpoint patch, feed removal, `.env`, runtime hook, residual scan. |
-| `quickSharun` | quick-sharun knobs exported as env vars: `hooks` (`ADD_HOOKS`) and `env`. |
+| `quickSharun` | quick-sharun knobs: `hooks` (`ADD_HOOKS`), `env`, and `libraries` — absolute paths of libraries the app only `dlopen`s at runtime, passed to quick-sharun as deploy targets (an `ldd` scan never surfaces those, so nothing else would bundle them). |
 | `hostHelpers` | Optional AppDir paths under `bin/` the app executes outside the mount. Stashed before quick-sharun and restored after, so they stay host-runnable instead of becoming sharun wrappers. |
 | `watch` | Optional release-watch block (`feedUrl`, `format`, `versionPattern`, optional `skipPattern`, `repo`, and `versionField` for `"json"`). `format` — `"atom"` or `"json"` — must be declared: the API's reader still defaults an absent one to atom, but this validator does not, so a forgotten format fails here instead of silently watching the wrong reader. The pattern matches the feed entry *title* (the GitHub release name, not the tag) and capture group 1 is the version; for `"json"` it matches the `versionField` value (a dotted path, e.g. `version`) instead, reading a single version string from a JSON document for upstreams like avakot that publish no feed. |
 

@@ -27,6 +27,7 @@ function descriptorWith(updater: UpdaterConfig, id = "vscode"): AppDescriptor {
     buildCommand: "./build.sh",
     debloatArgs: "--add-common",
     needsWebkit: false,
+    buildPackages: [],
     architectures: ["amd64", "arm64"],
     binaryTargets: ["code"],
     oracle: { kind: "github-release", repository: "https://api.github.com/repos/x/y", assetPrefix: "z" },

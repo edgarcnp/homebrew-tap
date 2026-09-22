@@ -299,6 +299,16 @@ function validateQuickSharun(raw: unknown, label: string): QuickSharunConfig {
   }
   if (hooks.length > 0) config.hooks = hooks;
 
+  // Absolute paths: the pipeline passes them to quick-sharun unchanged, and a
+  // relative one would resolve against whatever directory CI runs in.
+  const libraries = strArray(source, "libraries", label);
+  for (const [index, library] of libraries.entries()) {
+    if (!library.startsWith("/")) {
+      fail(`${label}.libraries[${index}] must be an absolute path: ${library}`);
+    }
+  }
+  if (libraries.length > 0) config.libraries = libraries;
+
   const envRaw = source["env"];
   if (envRaw !== undefined) {
     const env: Record<string, string> = {};
@@ -430,6 +440,7 @@ export function validateDescriptor(raw: unknown, expectedId: string): AppDescrip
     buildCommand: str(source, "buildCommand", label),
     debloatArgs: str(source, "debloatArgs", label),
     needsWebkit: bool(source, "needsWebkit", label),
+    buildPackages: strArray(source, "buildPackages", label),
     architectures: validateArchitectures(source["architectures"], label),
     binaryTargets: strArray(source, "binaryTargets", label),
     oracle: validateOracle(source["oracle"], `${label}.oracle`),
@@ -504,6 +515,8 @@ export interface DescriptorExport {
   build_command: string;
   debloat_args: string;
   needs_webkit: string;
+  // Space-separated; "" when the app declares no build packages.
+  build_packages: string;
   architectures: string;
 }
 
@@ -521,6 +534,7 @@ export function descriptorExport(descriptor: AppDescriptor): DescriptorExport {
     build_command: descriptor.buildCommand,
     debloat_args: descriptor.debloatArgs,
     needs_webkit: descriptor.needsWebkit ? "true" : "false",
+    build_packages: descriptor.buildPackages.join(" "),
     architectures: JSON.stringify(descriptor.architectures),
   };
 }
@@ -548,6 +562,7 @@ export function descriptorLines(
     `BUILD_COMMAND=${values.build_command}`,
     `DEBLOAT_ARGS=${values.debloat_args}`,
     `NEEDS_WEBKIT=${values.needs_webkit}`,
+    `BUILD_PACKAGES=${values.build_packages}`,
     `APP_ARCHITECTURES=${values.architectures}`,
   ];
 }

@@ -31,6 +31,15 @@ the same pinned JSON manifest (`https://api.avakot.org/lg/manifest.json`).
   `libwebkit2gtk-4.1` and GTK 3, so the build installs the webkit2gtk/GTK
   closure (plus X11 libs) and debloats with `webkit2gtk-4.1-mini`, following
   the gitbutler flow.
+- **Tray indicator** — `libappindicator-sys` `dlopen`s
+  `libayatana-appindicator3.so.1` at startup and panics without it, and a
+  `dlopen`ed library is absent from the ELF `NEEDED` entries, so an `ldd` scan
+  never bundles it: the smoke test fails on
+  `cannot open shared object file`. `buildPackages` installs
+  `libayatana-appindicator` into the build container and
+  `quickSharun.libraries` hands `/usr/lib/libayatana-appindicator3.so.1` to
+  quick-sharun as a deploy target, which bundles it together with its `ldd`
+  closure (`libayatana-indicator`, `libdbusmenu-{glib,gtk3}`).
 - **Updater** — the manifest endpoint embedded once in the `little-genius` ELF
   is rewritten to a never-resolving host with a same-length patch
   (`https://update.invalid/lg/manifest.json` is byte-identical in length to the
@@ -44,6 +53,11 @@ the same pinned JSON manifest (`https://api.avakot.org/lg/manifest.json`).
 
 ## Local run
 
+The build container in CI installs `buildPackages`; locally the same package
+must already be present or `pipeline_collect_targets` stops with
+`Missing quick-sharun library`.
+
 ```sh
+sudo pacman -S libayatana-appindicator
 TARGET_ARCH=amd64 PACKAGE_VERSION=0.6.7 ./build.sh
 ```
