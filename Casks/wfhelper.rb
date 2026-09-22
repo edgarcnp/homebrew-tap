@@ -23,7 +23,7 @@ cask "wfhelper" do
   postflight_steps do
     run "{{HOMEBREW_PREFIX}}/bin/wfhelper", args: ["--appimage-extract"], chdir: "{{staged_path}}"
     copy "squashfs-root/wfhelper.png",
-         ".local/share/icons/hicolor/974x974/apps/wfhelper.png",
+         ".local/share/icons/hicolor/512x512/apps/wfhelper.png",
          target_base: :home
     remove "{{staged_path}}/squashfs-root", recursive: true
     write_file ".local/share/applications/wfhelper.desktop", <<~EOS, base: :home
@@ -44,7 +44,7 @@ cask "wfhelper" do
   zap trash: [
     "~/.config/wfhelper",
     "~/.local/share/applications/wfhelper.desktop",
-    "~/.local/share/icons/hicolor/974x974/apps/wfhelper.png",
+    "~/.local/share/icons/hicolor/512x512/apps/wfhelper.png",
   ]
 
   caveats <<~EOS
