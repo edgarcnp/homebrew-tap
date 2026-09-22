@@ -1,6 +1,6 @@
 cask "wfhelper" do
   version "2.1.0"
-  sha256 "0000000000000000000000000000000000000000000000000000000000000000"
+  sha256 "068f43a75e0e1ba703212b53f2323995ee698d5170187799f8dcbe312a08693c"
 
   url "https://github.com/edgarcnp/homebrew-tap/releases/download/wfhelper-v#{version}/wfhelper-#{version}-x86_64.AppImage"
   name "WFHelper"
