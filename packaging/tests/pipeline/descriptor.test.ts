@@ -182,7 +182,7 @@ describe("descriptor contents (regression against the previous per-app scripts)"
       descriptor.payload.kind === "appimage-tree" ? descriptor.payload.exclude : [],
       ["AppRun", "wfhelper.desktop", "wfhelper.png", "usr"],
     );
-    assert.equal(descriptor.icon.size, "974x974");
+    assert.equal(descriptor.icon.size, "512x512");
     assert.equal(descriptor.updater.removeFeed?.required, true);
     assert.deepEqual(descriptor.updater.env, { WF_DISABLE_AUTO_UPDATE: "1" });
     assert.equal(descriptor.updater.residualScan?.severity, "warning");

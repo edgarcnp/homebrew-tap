@@ -33,7 +33,7 @@
   },
   "icon": {
     "source": "usr/share/icons/hicolor/974x974/apps/wfhelper.png",
-    "size": "974x974"
+    "size": "512x512"
   },
   "desktopTemplate": "templates/wfhelper.desktop",
   "updater": {
