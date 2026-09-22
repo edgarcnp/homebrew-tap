@@ -5,6 +5,7 @@ import { fail } from "../core/guards.ts";
 import type { Metadata, Oracle, OracleKind } from "../core/types.ts";
 import { resolveWithApt } from "./apt.ts";
 import { resolveWithCdnRedirect } from "./cdn-redirect.ts";
+import { resolveWithAvakot } from "./custom/avakot.ts";
 import { resolveWithElectronFeed } from "./electron-feed.ts";
 import { resolveWithGithubRelease } from "./github-release.ts";
 import type { ResolveRequest } from "./shared.ts";
@@ -23,6 +24,7 @@ export const ORACLE_RESOLVERS: Registry = {
   "electron-feed": resolveWithElectronFeed,
   "cdn-redirect": resolveWithCdnRedirect,
   "update-manifest": resolveWithUpdateManifest,
+  avakot: resolveWithAvakot,
 };
 
 export function resolveWith(oracle: Oracle, request: ResolveRequest): Promise<Metadata> {
@@ -37,6 +39,8 @@ export function resolveWith(oracle: Oracle, request: ResolveRequest): Promise<Me
       return ORACLE_RESOLVERS["cdn-redirect"](oracle, request);
     case "update-manifest":
       return ORACLE_RESOLVERS["update-manifest"](oracle, request);
+    case "avakot":
+      return ORACLE_RESOLVERS.avakot(oracle, request);
   }
   const exhaustive: never = oracle;
   return fail(`Unsupported resolver kind: ${JSON.stringify(exhaustive)}`);

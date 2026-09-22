@@ -86,12 +86,30 @@ export interface UpdateManifestOracle {
   downloadHosts: string[];
 }
 
+// Provider-specific manifest oracle (see oracles/custom/): avakot's
+// manifest.json serves {version, artifacts: {<name>: {url, sha256, [size],
+// [version]}}} with static download URLs and no published size, so the
+// version binds through the per-entry version field and the payload is
+// measured from the verified download.
+export interface AvakotOracle {
+  kind: "avakot";
+  // Pinned https endpoint returning the avakot manifest.
+  repository: string;
+  // Upstream package identity recorded in the metadata document.
+  packageName: string;
+  // Artifacts key naming the payload ({arch} substituted when present).
+  assetTemplate: string;
+  // Hosts asset URLs must resolve to after redirecting.
+  downloadHosts: string[];
+}
+
 export type Oracle =
   | AptOracle
   | GithubReleaseOracle
   | ElectronFeedOracle
   | CdnRedirectOracle
-  | UpdateManifestOracle;
+  | UpdateManifestOracle
+  | AvakotOracle;
 
 export type OracleKind = Oracle["kind"];
 
@@ -185,7 +203,10 @@ export interface IconConfig {
 }
 
 // Release-watch block. versionPattern matches the atom entry *title* (the
-// GitHub release name, not the tag); capture group 1 is the version.
+// GitHub release name, not the tag), or the JSON `versionField` value for
+// `format: "json"` feeds; capture group 1 is the version.
+export type WatchFormat = "atom" | "json";
+
 export interface WatchConfig {
   feedUrl: string;
   versionPattern: string;
@@ -193,6 +214,14 @@ export interface WatchConfig {
   skipPattern?: string;
   // Upstream repo (owner/repo), carried as the informational trigger_repo.
   repo?: string;
+  // Feed format: "atom" parses releases.atom entry titles, "json" reads a
+  // single version string at `versionField` (e.g. avakot's manifest). The
+  // validator requires it — every descriptor declares it — while the API's
+  // reader still treats an absent one as atom.
+  format: WatchFormat;
+  // Dotted path to the version string in a JSON feed; required with "json",
+  // rejected otherwise.
+  versionField?: string;
 }
 
 export interface AppDescriptor {

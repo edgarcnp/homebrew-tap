@@ -146,6 +146,19 @@ function validateOracle(raw: unknown, label: string): Oracle {
         assetTemplate,
       };
     }
+    case "avakot": {
+      // Provider-specific manifest (see oracles/custom/): a fixed artifacts
+      // key names the payload, so no {arch} placeholder is required.
+      const downloadHosts = strArray(source, "downloadHosts", label);
+      if (downloadHosts.length === 0) fail(`${label}.downloadHosts must not be empty`);
+      return {
+        kind,
+        repository: str(source, "repository", label),
+        downloadHosts,
+        packageName: str(source, "packageName", label),
+        assetTemplate: str(source, "assetTemplate", label),
+      };
+    }
     default:
       return fail(`Unknown resolver kind: ${kind}`);
   }
@@ -360,8 +373,17 @@ function compiledPattern(value: string, label: string): string {
 function validateWatch(raw: unknown, label: string): WatchConfig | undefined {
   if (raw === undefined) return undefined;
   const source = asObject(raw, label);
+  // Required, not defaulted: every descriptor declares its format, so an
+  // omission is a mistake rather than a shorthand. The API's reader stays
+  // liberal — a descriptor it did not write (or one written before this rule)
+  // still reads an absent format as atom.
+  const format = str(source, "format", label);
+  if (format !== "atom" && format !== "json") {
+    fail(`${label}.format must be "atom" or "json": ${format}`);
+  }
   const watch: WatchConfig = {
     feedUrl: str(source, "feedUrl", label),
+    format,
     versionPattern: compiledPattern(str(source, "versionPattern", label), `${label}.versionPattern`),
   };
   const skipPattern = optionalStr(source, "skipPattern", label);
@@ -370,6 +392,19 @@ function validateWatch(raw: unknown, label: string): WatchConfig | undefined {
   }
   const repo = optionalStr(source, "repo", label);
   if (repo !== undefined) watch.repo = repo;
+  // JSON feeds (e.g. avakot's manifest) carry a single version string at a
+  // dotted path instead of atom entry titles; atom feeds must not set it, so
+  // a misplaced field fails here rather than being silently ignored.
+  const versionField = optionalStr(source, "versionField", label);
+  if (watch.format === "json") {
+    if (versionField === undefined) fail(`${label}.versionField is required when format is "json"`);
+    if (!/^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$/.test(versionField)) {
+      fail(`${label}.versionField must be a dotted field path: ${versionField}`);
+    }
+    watch.versionField = versionField;
+  } else if (versionField !== undefined) {
+    fail(`${label}.versionField requires format "json"`);
+  }
   return watch;
 }
 

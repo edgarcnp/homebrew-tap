@@ -6,6 +6,7 @@
   "cask": "commandcode-desktop",
   "watch": {
     "feedUrl": "https://github.com/CommandCodeAI/desktop/releases.atom",
+    "format": "atom",
     "versionPattern": "(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
     "repo": "CommandCodeAI/desktop"
   },
