@@ -4,7 +4,7 @@
   "type": "module",
   "description": "Build tooling for the AppImage casks in this tap. TypeScript sources run directly on Bun; no runtime dependencies.",
   "engines": {
-    "bun": ">=1.4.0"
+    "bun": "1.4.2"
   },
   "scripts": {
     "fbr": "bun packaging/bin/fbr.ts",
