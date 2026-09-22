@@ -139,6 +139,50 @@ describe("descriptor contents (regression against the previous per-app scripts)"
     assert.deepEqual(descriptor.updater.env, { CC_DISABLE_AUTO_UPDATE: "1" });
     assert.equal(descriptor.updater.residualScan?.severity, "error");
   });
+
+  it("keeps little-genius' avakot oracle, file list and error-level scan", () => {
+    const descriptor = loadDescriptor("little-genius");
+    assert.equal(descriptor.oracle.kind, "avakot");
+    assert.deepEqual(descriptor.architectures, ["amd64"]);
+    assert.deepEqual(descriptor.binaryTargets, ["little-genius", "lg-linux-compat"]);
+    assert.equal(descriptor.payload.kind, "deb-files");
+    assert.deepEqual(
+      descriptor.payload.kind === "deb-files" ? descriptor.payload.files : [],
+      ["usr/bin/little-genius", "usr/bin/lg-linux-compat"],
+    );
+    assert.equal(descriptor.icon.size, "512x512");
+    assert.equal(descriptor.needsWebkit, true);
+    assert.equal(descriptor.updater.patchEndpoint?.from, "https://api.avakot.org/lg/manifest.json");
+    assert.equal(descriptor.updater.patchEndpoint?.binaryReplacement.length, 39);
+    assert.equal(descriptor.updater.residualScan?.severity, "error");
+  });
+
+  it("keeps wfhelper's AppImage oracle, tree staging and required feed removal", () => {
+    const descriptor = loadDescriptor("wfhelper");
+    assert.equal(descriptor.oracle.kind, "github-release");
+    assert.equal(
+      descriptor.oracle.kind === "github-release" ? descriptor.oracle.assetNameTemplate : "",
+      "WFHelper-{version}.AppImage",
+    );
+    assert.equal(
+      descriptor.oracle.kind === "github-release" ? descriptor.oracle.tagPrefix : "",
+      "v",
+    );
+    assert.equal(
+      descriptor.oracle.kind === "github-release" ? descriptor.oracle.packageName : "",
+      "wfhelper",
+    );
+    assert.deepEqual(descriptor.architectures, ["amd64"]);
+    assert.equal(descriptor.payload.kind, "appimage-tree");
+    assert.deepEqual(
+      descriptor.payload.kind === "appimage-tree" ? descriptor.payload.exclude : [],
+      ["AppRun", "wfhelper.desktop", "wfhelper.png", "usr"],
+    );
+    assert.equal(descriptor.icon.size, "974x974");
+    assert.equal(descriptor.updater.removeFeed?.required, true);
+    assert.deepEqual(descriptor.updater.env, { WF_DISABLE_AUTO_UPDATE: "1" });
+    assert.equal(descriptor.updater.residualScan?.severity, "warning");
+  });
 });
 
 describe("quick-sharun configuration", () => {
@@ -296,24 +340,40 @@ describe("release watch", () => {
   it("loads each app's watch block", () => {
     assert.deepEqual(loadDescriptor("vscode").watch, {
       feedUrl: "https://github.com/microsoft/vscode/releases.atom",
+      format: "atom",
       versionPattern: "^(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
       repo: "microsoft/vscode",
     });
     assert.deepEqual(loadDescriptor("opencode-desktop").watch, {
       feedUrl: "https://github.com/anomalyco/opencode/releases.atom",
+      format: "atom",
       versionPattern: "^v(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
       repo: "anomalyco/opencode",
     });
     assert.deepEqual(loadDescriptor("gitbutler").watch, {
       feedUrl: "https://github.com/gitbutlerapp/gitbutler/releases.atom",
+      format: "atom",
       versionPattern: "^release\\/(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
       skipPattern: "^nightly\\/",
       repo: "gitbutlerapp/gitbutler",
     });
     assert.deepEqual(loadDescriptor("commandcode-desktop").watch, {
       feedUrl: "https://github.com/CommandCodeAI/desktop/releases.atom",
+      format: "atom",
       versionPattern: "(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
       repo: "CommandCodeAI/desktop",
+    });
+    assert.deepEqual(loadDescriptor("little-genius").watch, {
+      feedUrl: "https://api.avakot.org/lg/manifest.json",
+      format: "json",
+      versionField: "version",
+      versionPattern: "^(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
+    });
+    assert.deepEqual(loadDescriptor("wfhelper").watch, {
+      feedUrl: "https://github.com/WFHelper/WFHelper/releases.atom",
+      format: "atom",
+      versionPattern: "^v(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
+      repo: "WFHelper/WFHelper",
     });
   });
 
@@ -324,6 +384,10 @@ describe("release watch", () => {
       "opencode-desktop": ["v1.18.30", "1.18.30"],
       gitbutler: ["release/0.22.3", "0.22.3"],
       "commandcode-desktop": ["Command Code 0.1.29", "0.1.29"],
+      // JSON feeds carry no titles; the pattern applies to the versionField
+      // value instead (here the manifest's top-level "0.6.7").
+      "little-genius": ["0.6.7", "0.6.7"],
+      wfhelper: ["v2.1.0", "2.1.0"],
     };
     for (const [app, [title, version]] of Object.entries(titles)) {
       const watch = loadDescriptor(app).watch;
@@ -594,6 +658,17 @@ describe("descriptor validation", () => {
         ),
       /watch\.feedUrl must be a non-empty string/,
     );
+    // The format is declared, never defaulted: an omission must fail here rather
+    // than silently watching an atom feed (the API defaults it only for
+    // descriptors it did not write).
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("vscode", (copy) => { delete nested(copy, "watch")["format"]; }),
+          "vscode",
+        ),
+      /watch\.format must be a non-empty string/,
+    );
     assert.throws(
       () =>
         validateDescriptor(
@@ -630,12 +705,116 @@ describe("descriptor validation", () => {
     const withoutWatch = mutated("vscode", (copy) => { delete copy["watch"]; });
     assert.equal(validateDescriptor(withoutWatch, "vscode").watch, undefined);
     const minimal = mutated("vscode", (copy) => {
-      copy["watch"] = { feedUrl: "https://example.com/releases.atom", versionPattern: "^(\\d+)$" };
+      copy["watch"] = {
+        feedUrl: "https://example.com/releases.atom",
+        format: "atom",
+        versionPattern: "^(\\d+)$",
+      };
     });
     assert.deepEqual(validateDescriptor(minimal, "vscode").watch, {
       feedUrl: "https://example.com/releases.atom",
+      format: "atom",
       versionPattern: "^(\\d+)$",
     });
+  });
+
+  it("validates the provider-specific avakot oracle", () => {
+    const descriptor = loadDescriptor("little-genius");
+    assert.equal(descriptor.oracle.kind, "avakot");
+    if (descriptor.oracle.kind === "avakot") {
+      assert.equal(descriptor.oracle.repository, "https://api.avakot.org/lg/manifest.json");
+      assert.equal(descriptor.oracle.assetTemplate, "linux_x86_64_deb");
+      assert.deepEqual(descriptor.oracle.downloadHosts, ["api.avakot.org"]);
+    }
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("little-genius", (copy) => { nested(copy, "oracle")["downloadHosts"] = []; }),
+          "little-genius",
+        ),
+      /downloadHosts must not be empty/,
+    );
+    // The fixed artifact name belongs to the avakot kind: as update-manifest
+    // it fails the {arch} requirement, keeping the generic contract strict.
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("little-genius", (copy) => { nested(copy, "oracle")["kind"] = "update-manifest"; }),
+          "little-genius",
+        ),
+      /must contain \{arch\}/,
+    );
+  });
+
+  it("validates the json watch format and its version field", () => {
+    const jsonWatch = {
+      feedUrl: "https://api.avakot.org/lg/manifest.json",
+      format: "json",
+      versionField: "version",
+      versionPattern: "^(\\d+)$",
+    };
+    assert.deepEqual(validateDescriptor(mutated("vscode", (copy) => { copy["watch"] = jsonWatch; }), "vscode").watch, jsonWatch);
+    // Every descriptor declares its format; only json demands a version field.
+    const atomWatch = {
+      feedUrl: "https://example.com/releases.atom",
+      format: "atom",
+      versionPattern: "^(\\d+)$",
+    };
+    assert.deepEqual(validateDescriptor(mutated("vscode", (copy) => { copy["watch"] = atomWatch; }), "vscode").watch, atomWatch);
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("vscode", (copy) => {
+            copy["watch"] = {
+              feedUrl: "https://api.avakot.org/lg/manifest.json",
+              format: "json",
+              versionPattern: "^(\\d+)$",
+            };
+          }),
+          "vscode",
+        ),
+      /versionField is required when format is "json"/,
+    );
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("vscode", (copy) => {
+            copy["watch"] = { feedUrl: "https://example.com/x", format: "rss", versionPattern: "^(\\d+)$" };
+          }),
+          "vscode",
+        ),
+      /format must be "atom" or "json"/,
+    );
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("vscode", (copy) => {
+            copy["watch"] = {
+              feedUrl: "https://example.com/releases.atom",
+              format: "atom",
+              versionPattern: "^(\\d+)$",
+              versionField: "version",
+            };
+          }),
+          "vscode",
+        ),
+      /versionField requires format "json"/,
+    );
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("vscode", (copy) => {
+            copy["watch"] = {
+              feedUrl: "https://api.avakot.org/lg/manifest.json",
+              format: "json",
+              versionField: "a..b",
+              versionPattern: "^(\\d+)$",
+            };
+          }),
+          "vscode",
+        ),
+      /must be a dotted field path/,
+    );
   });
 });
 

@@ -6,6 +6,7 @@
   "cask": "opencode-desktop",
   "watch": {
     "feedUrl": "https://github.com/anomalyco/opencode/releases.atom",
+    "format": "atom",
     "versionPattern": "^v(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
     "repo": "anomalyco/opencode"
   },

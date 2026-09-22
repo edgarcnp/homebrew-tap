@@ -6,6 +6,7 @@
   "cask": "vscode",
   "watch": {
     "feedUrl": "https://github.com/microsoft/vscode/releases.atom",
+    "format": "atom",
     "versionPattern": "^(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
     "repo": "microsoft/vscode"
   },

@@ -21,7 +21,8 @@ packaging/
                            architecture, template, http, deb822, metadata
   lib/pipeline/            descriptor-driven steps: descriptor, cask, gate,
                            release, neutralize, render
-  lib/oracles/             one module per upstream source kind
+  lib/oracles/             one module per upstream source kind; custom/ holds
+                           provider-specific oracles (e.g. avakot)
   lib/shell/               the bash pipeline
   tests/                   unit suite, mirrors lib/  (bun test)
   scripts/                 repo tooling (tool installer, local style gate)
@@ -79,17 +80,18 @@ must equal `id`, `cask` and `assetPrefix` — one name end to end.
 | `updater` | Updater neutralization: JSON key removal, endpoint patch, feed removal, `.env`, runtime hook, residual scan. |
 | `quickSharun` | quick-sharun knobs exported as env vars: `hooks` (`ADD_HOOKS`) and `env`. |
 | `hostHelpers` | Optional AppDir paths under `bin/` the app executes outside the mount. Stashed before quick-sharun and restored after, so they stay host-runnable instead of becoming sharun wrappers. |
-| `watch` | Optional release-watch block (`feedUrl`, `versionPattern`, optional `skipPattern`, `repo`). The pattern matches the feed entry *title* (the GitHub release name, not the tag); capture group 1 is the version. |
+| `watch` | Optional release-watch block (`feedUrl`, `format`, `versionPattern`, optional `skipPattern`, `repo`, and `versionField` for `"json"`). `format` — `"atom"` or `"json"` — must be declared: the API's reader still defaults an absent one to atom, but this validator does not, so a forgotten format fails here instead of silently watching the wrong reader. The pattern matches the feed entry *title* (the GitHub release name, not the tag) and capture group 1 is the version; for `"json"` it matches the `versionField` value (a dotted path, e.g. `version`) instead, reading a single version string from a JSON document for upstreams like avakot that publish no feed. |
 
 ### Oracle kinds
 
 | Kind | Version and payload source |
 | --- | --- |
 | `apt` | Signed apt repo: pinned key → `InRelease` (verified with `gpgv` against a pinned fingerprint) → `Packages` SHA-256 → package SHA-256/size. Newest entry per architecture wins, by dpkg ordering. |
-| `github-release` | GitHub release assets. Legacy: newest release carrying both `<assetPrefix>-<arch>.deb`. Versioned-asset: pins a tag prefix plus an `assetNameTemplate` and resolves each shipped architecture separately. |
+| `github-release` | GitHub release assets. Legacy: newest release carrying both `<assetPrefix>-<arch>.deb`. Versioned-asset: pins a tag prefix plus an `assetNameTemplate` and resolves each shipped architecture separately. A `.AppImage` asset additionally cross-checks the release's electron-builder update yml (SHA-512 + size) before downloading. |
 | `electron-feed` | An electron-updater feed whose 302 names the release tag. The yml supplies filename, SHA-512 and size; the GitHub API supplies the SHA-256. All three must agree. |
 | `cdn-redirect` | A CDN download redirect that is itself the version source. The target URL shape is pinned and the payload is hashed on download (the CDN publishes no checksums). |
 | `update-manifest` | A pinned https JSON manifest that publishes the version and per-asset SHA-256/size. The `assetTemplate` entry (`{arch}` substituted) must carry the version as a download-path segment on a pinned host. |
+| `avakot` (in `custom/`) | Provider-specific manifest oracle: avakot's `manifest.json` serves an `artifacts` map with a fixed entry name, static download URLs and no published size. The version binds through the per-entry `version` field and the payload is measured from the verified download (downloaded and discarded in `--metadata-only` mode). |
 
 ## `fbr` CLI
 

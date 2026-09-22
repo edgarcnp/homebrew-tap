@@ -22,6 +22,8 @@ brew install --cask <cask>
 | `gitbutler` | [GitButler](https://gitbutler.com/) | installs the GUI and the `but` CLI |
 | `commandcode-desktop` | [Command Code Desktop](https://commandcode.ai/desktop) | amd64 only |
 | `opencode-desktop` | [OpenCode Desktop](https://opencode.ai/) | |
+| `little-genius` | [Little Genius](https://lg.avakot.org/) | Soulframe companion, amd64 only |
+| `wfhelper` | [WFHelper](https://github.com/WFHelper/WFHelper) | Warframe companion, amd64 only |
 | `vscode` | [Visual Studio Code](https://code.visualstudio.com/) | |
 
 ## Requirements

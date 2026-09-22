@@ -88,7 +88,9 @@ export function selectManifestAsset(
   };
 }
 
-async function fetchManifest(repository: string): Promise<unknown> {
+// Shared with the provider-specific manifest oracles under custom/: fetch
+// and parse a pinned JSON manifest with the same size cap.
+export async function fetchManifest(repository: string): Promise<unknown> {
   const response = await fetchWithRetry(repository, { redirect: "follow", timeoutMs: 30000 });
   if (!response.ok) {
     throw new Error(`Update manifest fetch failed (${response.status}) for ${repository}`);

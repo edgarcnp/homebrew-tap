@@ -6,6 +6,7 @@
   "cask": "gitbutler",
   "watch": {
     "feedUrl": "https://github.com/gitbutlerapp/gitbutler/releases.atom",
+    "format": "atom",
     "versionPattern": "^release\\/(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
     "skipPattern": "^nightly\\/",
     "repo": "gitbutlerapp/gitbutler"

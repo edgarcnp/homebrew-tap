@@ -1,0 +1,55 @@
+{
+  "id": "wfhelper",
+  "appName": "WFHelper",
+  "displayName": "WFHelper",
+  "comment": "Warframe companion: inventory, foundry, relic and riven scanning, market orders.",
+  "cask": "wfhelper",
+  "watch": {
+    "feedUrl": "https://github.com/WFHelper/WFHelper/releases.atom",
+    "format": "atom",
+    "versionPattern": "^v(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
+    "repo": "WFHelper/WFHelper"
+  },
+  "assetPrefix": "wfhelper",
+  "tagPrefix": "wfhelper-v",
+  "sourceRepo": "edgarcnp/homebrew-tap",
+  "sourceOwner": "edgarcnp",
+  "sourceDir": "packaging/apps/wfhelper",
+  "buildCommand": "./build.sh",
+  "debloatArgs": "--add-common --prefer-nano ffmpeg-mini",
+  "needsWebkit": false,
+  "architectures": ["amd64"],
+  "binaryTargets": ["wfhelper"],
+  "oracle": {
+    "kind": "github-release",
+    "repository": "https://api.github.com/repos/WFHelper/WFHelper",
+    "packageName": "wfhelper",
+    "tagPrefix": "v",
+    "assetNameTemplate": "WFHelper-{version}.AppImage"
+  },
+  "payload": {
+    "kind": "appimage-tree",
+    "exclude": ["AppRun", "wfhelper.desktop", "wfhelper.png", "usr"]
+  },
+  "icon": {
+    "source": "usr/share/icons/hicolor/974x974/apps/wfhelper.png",
+    "size": "974x974"
+  },
+  "desktopTemplate": "templates/wfhelper.desktop",
+  "updater": {
+    "removeFeed": {
+      "paths": ["bin/resources/app-update.yml"],
+      "required": true
+    },
+    "env": {
+      "WF_DISABLE_AUTO_UPDATE": "1"
+    },
+    "residualScan": {
+      "patterns": ["WFHelper/WFHelper"],
+      "severity": "warning"
+    }
+  },
+  "quickSharun": {
+    "hooks": ["fix-namespaces.hook"]
+  }
+}

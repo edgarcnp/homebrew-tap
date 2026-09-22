@@ -1,6 +1,10 @@
 // GitHub release asset oracle: the newest published release carrying the
-// requested architecture's `.deb` with a SHA-256 digest, verified at download.
-// The versioned-asset flavor picks by tag prefix and `assetNameTemplate`.
+// requested architecture's payload with a SHA-256 digest, verified at
+// download. Two flavors:
+//   - legacy `.deb` ("<assetPrefix>-<arch>.deb");
+//   - versioned-asset by tag prefix plus `assetNameTemplate`, `.deb` or
+//     `.AppImage`. AppImage assets additionally cross-check the release's
+//     electron-builder update yml (SHA-512 + size) before downloading.
 
 import * as path from "node:path";
 import { GITHUB_ASSET_HOSTS, assertMatches, assertPositiveSize, fail } from "../core/guards.ts";
@@ -10,7 +14,8 @@ import { SAFE_REFERENCE } from "../core/patterns.ts";
 import { substitutePlaceholders } from "../core/template.ts";
 import type { Architecture, GithubReleaseOracle, Metadata } from "../core/types.ts";
 import { ARCHITECTURES } from "../core/types.ts";
-import { downloadVerified } from "./download.ts";
+import { downloadVerified, fetchVerified } from "./download.ts";
+import { parseUpdateYml } from "./electron-feed.ts";
 import {
   assertRepositoryUrl,
   asReleaseList,
@@ -41,6 +46,36 @@ function validatedAsset(record: ReleaseAssetRecord | undefined): ReleaseAsset | 
     return null;
   }
   return { name: record.name, digest: parseSha256Digest(record.digest), size: record.size };
+}
+
+// An upstream AppImage payload (repacked by the appimage-tree pipeline stage),
+// as opposed to a .deb payload staged from a dpkg tree.
+export function isAppImageAsset(name: string): boolean {
+  return name.endsWith(".AppImage");
+}
+
+// The electron-builder update yml shipped alongside an AppImage release
+// asset, per architecture. Mirrors the electron-feed oracle's layout without
+// its feed-redirect step: the tag is already known from the release scan.
+export function updateYmlName(architecture: Architecture): string {
+  return architecture === "arm64" ? "latest-linux-arm64.yml" : "latest-linux.yml";
+}
+
+const MAX_YAML_BYTES = 64 * 1024;
+
+async function fetchUpdateYml(
+  downloadBase: string,
+  tag: string,
+  ymlName: string,
+): Promise<string> {
+  const { bytes } = await fetchVerified(`${downloadBase}/${tag}/${ymlName}`, {
+    allowedHosts: GITHUB_ASSET_HOSTS,
+    label: "Feed fetch",
+    hostLabel: "feed yml",
+    timeoutMs: 30000,
+    maxBytes: MAX_YAML_BYTES,
+  });
+  return bytes.toString("utf8");
 }
 
 interface ReleaseSelection {
@@ -117,6 +152,55 @@ export async function selectTemplatedRelease(
   );
 }
 
+interface AppImageResolution {
+  outputDir: string;
+  metadataPath: string;
+  downloadBase: string;
+  packageName: string;
+  tag: string;
+  version: string;
+  asset: ReleaseAsset;
+  size: number;
+}
+
+// AppImage flavor of the templated resolve: the release's update yml supplies
+// the SHA-512 and re-states the size, and the GitHub API supplies the SHA-256.
+// All three must agree before the payload is trusted.
+async function resolveAppImageAsset(
+  request: ResolveRequest,
+  resolved: AppImageResolution,
+): Promise<Metadata> {
+  const { outputDir, metadataPath, downloadBase, packageName, tag, version, asset, size } = resolved;
+  const ymlName = updateYmlName(request.architecture);
+  const yml = parseUpdateYml(await fetchUpdateYml(downloadBase, tag, ymlName), version, asset.name);
+  if (yml.size !== size) {
+    throw new Error(`Asset size ${size} does not match update yml size ${yml.size}`);
+  }
+  const packagePath = request.metadataOnly
+    ? null
+    : path.join(outputDir, `${packageName}_${version}_${request.architecture}.AppImage`);
+  const metadata = makeMetadata({
+    package: packageName,
+    version,
+    architecture: request.architecture,
+    repositoryPath: `${tag}/${asset.name}`,
+    sha256: asset.digest,
+    size,
+    repository: downloadBase,
+    path: packagePath,
+  });
+  if (packagePath !== null) {
+    await downloadVerified(
+      `${downloadBase}/${metadata.repositoryPath}`,
+      packagePath,
+      { sha256: asset.digest, sha512: yml.sha512, size },
+      { allowedHosts: GITHUB_ASSET_HOSTS, label: path.basename(packagePath) },
+    );
+  }
+  writeMetadata(metadataPath, metadata);
+  return metadata;
+}
+
 export async function resolveWithGithubRelease(
   oracle: GithubReleaseOracle,
   request: ResolveRequest,
@@ -139,6 +223,16 @@ export async function resolveWithGithubRelease(
       request.token,
     );
     const size = assertPositiveSize(asset.size, MAX_PAYLOAD_BYTES, `${asset.name} size`);
+    // AppImage payloads (e.g. WFHelper) cross-check the release's
+    // electron-builder update yml: its SHA-512 and size must agree with the
+    // API asset before the payload is trusted, mirroring the electron-feed
+    // oracle minus the feed-redirect step.
+    if (isAppImageAsset(asset.name)) {
+      return resolveAppImageAsset(
+        request,
+        { outputDir, metadataPath, downloadBase, packageName, tag, version, asset, size },
+      );
+    }
     const packagePath = request.metadataOnly
       ? null
       : path.join(outputDir, `${packageName}_${version}_${architecture}.deb`);

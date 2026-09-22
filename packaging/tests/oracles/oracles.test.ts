@@ -9,7 +9,7 @@ import {
   selectAsset,
   validateFeedRepository,
 } from "../../lib/oracles/electron-feed.ts";
-import { selectRelease } from "../../lib/oracles/github-release.ts";
+import { selectRelease, isAppImageAsset, updateYmlName } from "../../lib/oracles/github-release.ts";
 import { assertRepositoryUrl } from "../../lib/oracles/github-api.ts";
 import { normalizeTagVersion, parseSha256Digest } from "../../lib/oracles/release-common.ts";
 import {
@@ -111,6 +111,13 @@ describe("github-release oracle", () => {
 
   it("is exported for network-free reuse", () => {
     assert.equal(typeof selectRelease, "function");
+  });
+
+  it("recognizes AppImage payloads and names the per-arch update yml", () => {
+    assert.equal(isAppImageAsset("WFHelper-2.1.0.AppImage"), true);
+    assert.equal(isAppImageAsset("CommandCode-0.1.29-amd64.deb"), false);
+    assert.equal(updateYmlName("amd64"), "latest-linux.yml");
+    assert.equal(updateYmlName("arm64"), "latest-linux-arm64.yml");
   });
 });
 

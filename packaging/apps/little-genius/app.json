@@ -1,0 +1,54 @@
+{
+  "id": "little-genius",
+  "appName": "Little Genius",
+  "displayName": "Little Genius",
+  "comment": "The Soulframe Companion App",
+  "cask": "little-genius",
+  "watch": {
+    "feedUrl": "https://api.avakot.org/lg/manifest.json",
+    "format": "json",
+    "versionField": "version",
+    "versionPattern": "^(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$"
+  },
+  "assetPrefix": "little-genius",
+  "tagPrefix": "little-genius-v",
+  "sourceRepo": "edgarcnp/homebrew-tap",
+  "sourceOwner": "edgarcnp",
+  "sourceDir": "packaging/apps/little-genius",
+  "buildCommand": "./build.sh",
+  "debloatArgs": "--add-common --prefer-nano webkit2gtk-4.1-mini",
+  "needsWebkit": true,
+  "architectures": ["amd64"],
+  "binaryTargets": ["little-genius", "lg-linux-compat"],
+  "oracle": {
+    "kind": "avakot",
+    "repository": "https://api.avakot.org/lg/manifest.json",
+    "packageName": "little-genius",
+    "assetTemplate": "linux_x86_64_deb",
+    "downloadHosts": ["api.avakot.org"]
+  },
+  "payload": {
+    "kind": "deb-files",
+    "files": ["usr/bin/little-genius", "usr/bin/lg-linux-compat"]
+  },
+  "icon": {
+    "source": "usr/share/icons/hicolor/512x512/apps/little-genius.png",
+    "size": "512x512"
+  },
+  "desktopTemplate": "templates/little-genius.desktop",
+  "updater": {
+    "patchEndpoint": {
+      "from": "https://api.avakot.org/lg/manifest.json",
+      "textReplacement": "https://update.invalid/lg/manifest.json",
+      "binaryReplacement": "https://update.invalid/lg/manifest.json",
+      "targets": ["bin/little-genius"]
+    },
+    "residualScan": {
+      "patterns": ["https://api.avakot.org/lg/manifest.json"],
+      "severity": "error"
+    }
+  },
+  "quickSharun": {
+    "hooks": ["fix-namespaces.hook"]
+  }
+}
