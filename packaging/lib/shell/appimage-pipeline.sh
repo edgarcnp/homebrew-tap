@@ -341,6 +341,34 @@ pipeline_restore_host_helpers() {
   done < <(descriptor_field '.hostHelpers // [] | .[]')
 }
 
+# Fills TARGETS with the quick-sharun deploy targets: the staged payload
+# binaries, plus every library the descriptor declares for a runtime dlopen.
+# quick-sharun bundles a library only when it is a target or reachable from
+# one, and an app that dlopens a library never links it, so ldd would never
+# surface it.
+pipeline_collect_targets() {
+  TARGETS=()
+  if [[ "$(descriptor_field '.payload.kind')" = "deb-files" ]]
+  then
+    local file
+    while IFS= read -r file
+    do
+      TARGETS+=("${APPDIR}/bin/$(basename -- "${file}")")
+    done < <(descriptor_field '.payload.files[]')
+  else
+    # Electron payloads: quick-sharun auto-detects the electron binary from the
+    # staged tree and deploys its support libraries.
+    TARGETS=("${APPDIR}/bin/"*)
+  fi
+
+  local library
+  while IFS= read -r library
+  do
+    [[ -e "${library}" ]] || error "Missing quick-sharun library: ${library}"
+    TARGETS+=("${library}")
+  done < <(descriptor_field '.quickSharun.libraries // [] | .[]')
+}
+
 # Packages the AppDir: quick-sharun (AppRun + the runtime closure including
 # libc), then the pkgforge appimagetool via APPIMAGETOOL, then the smoke gate.
 pipeline_pack() {
@@ -357,22 +385,10 @@ pipeline_pack() {
 Install the Anylinux tools (packaging/scripts/install-anylinux-tools.sh) or add it to PATH."
   [[ -n "${APPIMAGETOOL:-}" && -x "${APPIMAGETOOL}" ]] || error "APPIMAGETOOL is not executable: ${APPIMAGETOOL:-<unset>}"
 
-  local -a targets=()
-  if [[ "$(descriptor_field '.payload.kind')" = "deb-files" ]]
-  then
-    local file
-    while IFS= read -r file
-    do
-      targets+=("${APPDIR}/bin/$(basename -- "${file}")")
-    done < <(descriptor_field '.payload.files[]')
-  else
-    # Electron payloads: quick-sharun auto-detects the electron binary from the
-    # staged tree and deploys its support libraries.
-    targets=("${APPDIR}/bin/"*)
-  fi
+  pipeline_collect_targets
   pipeline_export_quick_sharun_env
   pipeline_stash_host_helpers
-  quick-sharun "${targets[@]}"
+  quick-sharun "${TARGETS[@]}"
   pipeline_restore_host_helpers
   pipeline_reconcile_sharun_sidecars
 

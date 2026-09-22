@@ -18,6 +18,7 @@
   "buildCommand": "./build.sh",
   "debloatArgs": "--add-common --prefer-nano webkit2gtk-4.1-mini",
   "needsWebkit": true,
+  "buildPackages": ["libayatana-appindicator"],
   "architectures": ["amd64"],
   "binaryTargets": ["little-genius", "lg-linux-compat"],
   "oracle": {
@@ -49,6 +50,7 @@
     }
   },
   "quickSharun": {
-    "hooks": ["fix-namespaces.hook"]
+    "hooks": ["fix-namespaces.hook"],
+    "libraries": ["/usr/lib/libayatana-appindicator3.so.1"]
   }
 }

@@ -187,6 +187,11 @@ export interface QuickSharunConfig {
   // pkgforge hooks to deploy (ADD_HOOKS), e.g. ["fix-namespaces.hook"].
   // quick-sharun itself rejects a name it does not know.
   hooks?: string[];
+  // Absolute paths in the build environment of libraries the app only dlopens
+  // at runtime (so they are absent from the ELF closure and ldd would never
+  // surface them), e.g. ["/usr/lib/libayatana-appindicator3.so.1"]. Passed to
+  // quick-sharun as deploy targets, which bundles each one's ldd closure.
+  libraries?: string[];
   // Extra quick-sharun environment variables, passed through verbatim.
   env?: Record<string, string>;
 }
@@ -253,6 +258,11 @@ export interface AppDescriptor {
   debloatArgs: string;
   // Whether the build needs the webkit2gtk/GTK build dependencies.
   needsWebkit: boolean;
+  // Arch packages CI installs into the build container for this app, beyond
+  // the shared toolchain: only for libraries that must exist at build time
+  // (e.g. a dlopened library listed in quickSharun.libraries). Empty when the
+  // shared toolchain is enough.
+  buildPackages: string[];
   // Architectures this app ships; the pipeline builds, publishes and checks
   // only these.
   architectures: Architecture[];

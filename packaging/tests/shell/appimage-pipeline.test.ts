@@ -390,3 +390,65 @@ describe("pipeline_export_quick_sharun_env", () => {
   });
 });
 
+// The quick-sharun deploy targets: the staged payload binaries plus the
+// libraries the descriptor names for a runtime dlopen. quick-sharun only
+// bundles what it is given directly or what ldd reaches, so a dlopened
+// library missing from this list never lands in the AppImage.
+function collectTargets(appJson: string): { status: number | null; targets: string[]; stderr: string } {
+  const result = spawnSync(
+    "bash",
+    [
+      "-c",
+      'set -Eeuo pipefail; . "$PIPELINE_LIB"; APPDIR="$APP_DIR"; pipeline_collect_targets; printf "%s\\n" "${TARGETS[@]}"',
+    ],
+    { encoding: "utf8", env: { ...process.env, PIPELINE_LIB, APP_DIR: appDir, APP_JSON: appJson } },
+  );
+  const targets = (result.stdout ?? "").split("\n").filter((line) => line.length > 0);
+  return { status: result.status, targets, stderr: result.stderr };
+}
+
+describe("pipeline_collect_targets", () => {
+  let library: string;
+
+  beforeEach(() => {
+    library = path.join(workDir, "libtray.so.1");
+    fs.writeFileSync(library, "");
+  });
+
+  it("appends a declared library after the staged payload files", { skip: !HAS_JQ }, () => {
+    const { status, targets } = collectTargets(
+      JSON.stringify({
+        payload: { kind: "deb-files", files: ["usr/bin/app", "usr/bin/helper"] },
+        quickSharun: { libraries: [library] },
+      }),
+    );
+    assert.equal(status, 0);
+    assert.deepEqual(targets, [pathIn("bin/app"), pathIn("bin/helper"), library]);
+  });
+
+  it("lists only the payload files when no library is declared", { skip: !HAS_JQ }, () => {
+    const { status, targets } = collectTargets(
+      JSON.stringify({ payload: { kind: "deb-files", files: ["usr/bin/app"] } }),
+    );
+    assert.equal(status, 0);
+    assert.deepEqual(targets, [pathIn("bin/app")]);
+  });
+
+  it("globs the staged bin/ for a tree payload", { skip: !HAS_JQ }, () => {
+    writeExecutable("bin/electron-app");
+    const { status, targets } = collectTargets(JSON.stringify({ payload: { kind: "appimage-tree" } }));
+    assert.equal(status, 0);
+    assert.deepEqual(targets, [pathIn("bin/electron-app")]);
+  });
+
+  it("fails when a declared library is not in the build environment", { skip: !HAS_JQ }, () => {
+    const { status, stderr } = collectTargets(
+      JSON.stringify({
+        payload: { kind: "deb-files", files: ["usr/bin/app"] },
+        quickSharun: { libraries: ["/does/not/exist/libtray.so.1"] },
+      }),
+    );
+    assert.equal(status, 1);
+    assert.match(stderr, /Missing quick-sharun library/);
+  });
+});

@@ -152,6 +152,10 @@ describe("descriptor contents (regression against the previous per-app scripts)"
     );
     assert.equal(descriptor.icon.size, "512x512");
     assert.equal(descriptor.needsWebkit, true);
+    // The tray indicator is dlopened at runtime, so it is installed into the
+    // build container and named as a quick-sharun deploy target.
+    assert.deepEqual(descriptor.buildPackages, ["libayatana-appindicator"]);
+    assert.deepEqual(descriptor.quickSharun.libraries, ["/usr/lib/libayatana-appindicator3.so.1"]);
     assert.equal(descriptor.updater.patchEndpoint?.from, "https://api.avakot.org/lg/manifest.json");
     assert.equal(descriptor.updater.patchEndpoint?.binaryReplacement.length, 39);
     assert.equal(descriptor.updater.residualScan?.severity, "error");
@@ -247,6 +251,19 @@ describe("quick-sharun configuration", () => {
           "vscode",
         ),
       /key is not a valid name/,
+    );
+  });
+
+  it("rejects a library path that is not absolute", () => {
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("vscode", (copy) => {
+            copy["quickSharun"] = { libraries: ["usr/lib/libfoo.so.1"] };
+          }),
+          "vscode",
+        ),
+      /must be an absolute path/,
     );
   });
 });
@@ -835,6 +852,13 @@ describe("descriptor env and output lines", () => {
     assert.equal(env.get("NEEDS_WEBKIT"), "false");
     assert.equal(env.get("DEBLOAT_ARGS"), "--add-common --prefer-nano ffmpeg-mini");
     assert.equal(env.get("APP_ARCHITECTURES"), '["amd64"]');
+    // commandcode-desktop declares no build packages of its own.
+    assert.equal(env.get("BUILD_PACKAGES"), "");
+  });
+
+  it("emits the build packages an app declares", () => {
+    const lines = descriptorLines(loadDescriptor("little-genius"), "env");
+    assert.ok(lines.includes("BUILD_PACKAGES=libayatana-appindicator"));
   });
 
   it("emits lowercase keys for job outputs", () => {

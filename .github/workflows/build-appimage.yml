@@ -277,6 +277,15 @@ jobs:
         run: |
           # The tap is the source of truth for the build flags.
           bun "${GITHUB_WORKSPACE}/tap/packaging/bin/fbr.ts" descriptor-env --app "${APP}" >> "${GITHUB_ENV}"
+      - name: Install app build packages
+        run: |
+          # Build-time packages are per app (app.json buildPackages): only
+          # libraries that must exist while packaging, e.g. one the app
+          # dlopens and the descriptor names as a quick-sharun target.
+          if [ -n "${BUILD_PACKAGES}" ]; then
+            read -r -a packages <<<"${BUILD_PACKAGES}"
+            pacman -S --noconfirm "${packages[@]}"
+          fi
       - name: Install webkit2gtk build dependencies
         if: needs.detect.outputs.needs_webkit == 'true'
         run: |
