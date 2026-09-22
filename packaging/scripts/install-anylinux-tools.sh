@@ -15,7 +15,7 @@ error() {
 }
 
 ANYLINUX_TOOLS_DIR="${ANYLINUX_TOOLS_DIR:-/usr/local/bin}"
-PINNED_COMMIT="80e07f4a2ab636a62eca5fed310302e95407991a"
+PINNED_COMMIT="9f3c67111db7776e494ff9c162793109e0bf65fe"
 BASE_URL="https://raw.githubusercontent.com/pkgforge-dev/Anylinux-AppImages/${PINNED_COMMIT}/useful-tools"
 declare -a TOOLS=(
   quick-sharun
@@ -30,8 +30,18 @@ for name in "${TOOLS[@]}"
 do
   dest="${tmp_dir}/${name}"
   info "Downloading ${name} from pinned commit ${PINNED_COMMIT}"
-  curl -fL --retry 5 --retry-all-errors --retry-delay 5 -o "${dest}" "${BASE_URL}/${name}.sh"
-  test -s "${dest}" || error "${name} downloaded empty"
+  attempt=1
+  max_attempts=3
+  until curl -fL --retry 5 --retry-all-errors --retry-delay 5 -o "${dest}" "${BASE_URL}/${name}.sh" \
+    && test -s "${dest}"; do
+    if [ "${attempt}" -ge "${max_attempts}" ]; then
+      error "Failed to download ${name} after ${max_attempts} attempts"
+    fi
+    sleep_seconds=$((attempt * 10))
+    info "Download of ${name} attempt ${attempt}/${max_attempts} failed; retrying in ${sleep_seconds}s..."
+    sleep "${sleep_seconds}"
+    attempt=$((attempt + 1))
+  done
   chmod 0755 -- "${dest}"
   mv -- "${dest}" "${ANYLINUX_TOOLS_DIR}/${name}"
   info "Installed ${ANYLINUX_TOOLS_DIR}/${name}"

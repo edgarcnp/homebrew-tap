@@ -269,10 +269,22 @@ jobs:
           # version but cannot recompute these per-arch hashes, so update them in
           # its PR - the check prints the hash it measured. quick-sharun invokes
           # it via APPIMAGETOOL with no args (it reads the APPDIR/OUT* env).
-          curl -fL --retry 5 --retry-all-errors --retry-delay 5 \
+          # Release downloads flake with transient 500s, so retry a few times.
+          attempt=1
+          max_attempts=3
+          until curl -fL --retry 5 --retry-all-errors --retry-delay 5 \
             -o /tmp/appimagetool-uruntime \
-            "https://github.com/pkgforge-dev/appimagetool/releases/download/0.5.1/appimagetool-${{ matrix.appimage_arch }}-linux"
-          test -s /tmp/appimagetool-uruntime
+            "https://github.com/pkgforge-dev/appimagetool/releases/download/0.5.1/appimagetool-${{ matrix.appimage_arch }}-linux" \
+            && test -s /tmp/appimagetool-uruntime; do
+            if [ "${attempt}" -ge "${max_attempts}" ]; then
+              echo "::error::appimagetool download failed after ${max_attempts} attempts" >&2
+              exit 1
+            fi
+            sleep_seconds=$((attempt * 10))
+            echo "appimagetool download attempt ${attempt}/${max_attempts} failed; retrying in ${sleep_seconds}s..." >&2
+            sleep "${sleep_seconds}"
+            attempt=$((attempt + 1))
+          done
           case "${{ matrix.appimage_arch }}" in
             x86_64) expected="0a771486c173b482e44417e04554aae57a915eb3e3a6a20a29d17fdc8e8cbb13" ;;
             aarch64) expected="6534610d4d1e56865ae20516ea73c1b5d105bee887f1f77e53df12679499e342" ;;
@@ -290,12 +302,38 @@ jobs:
         run: |
           # quick-sharun + get-debloated-pkgs, pinned to a commit digest;
           # Renovate owns the pin (packaging/scripts/install-anylinux-tools.sh).
-          "${GITHUB_WORKSPACE}/tap/packaging/scripts/install-anylinux-tools.sh"
+          # Raw release downloads flake with transient 500s, so retry a few
+          # times (the installer retries each tool internally as well).
+          attempt=1
+          max_attempts=3
+          until "${GITHUB_WORKSPACE}/tap/packaging/scripts/install-anylinux-tools.sh"; do
+            if [ "${attempt}" -ge "${max_attempts}" ]; then
+              echo "::error::install-anylinux-tools failed after ${max_attempts} attempts" >&2
+              exit 1
+            fi
+            sleep_seconds=$((attempt * 10))
+            echo "install-anylinux-tools attempt ${attempt}/${max_attempts} failed; retrying in ${sleep_seconds}s..." >&2
+            sleep "${sleep_seconds}"
+            attempt=$((attempt + 1))
+          done
       - name: Install debloated packages
         run: |
           # Debloated Arch packages shrink the AppImage; flags are per app.
+          # The release downloads flake with transient 500s, so retry a few
+          # times before failing (a manual re-run also clears it).
           read -r -a flags <<<"${DEBLOAT_ARGS}"
-          get-debloated-pkgs "${flags[@]}"
+          attempt=1
+          max_attempts=3
+          until get-debloated-pkgs "${flags[@]}"; do
+            if [ "${attempt}" -ge "${max_attempts}" ]; then
+              echo "::error::get-debloated-pkgs failed after ${max_attempts} attempts" >&2
+              exit 1
+            fi
+            sleep_seconds=$((attempt * 10))
+            echo "get-debloated-pkgs attempt ${attempt}/${max_attempts} failed; retrying in ${sleep_seconds}s..." >&2
+            sleep "${sleep_seconds}"
+            attempt=$((attempt + 1))
+          done
       - name: Build AppImage
         env:
           TARGET_ARCH: ${{ matrix.architecture }}
