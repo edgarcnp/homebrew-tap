@@ -19,7 +19,7 @@ packaging/
   lib/cli.ts               CLI composition root
   lib/core/                primitives: paths, types, guards, patterns, version,
                            architecture, template, http, deb822, metadata
-  lib/pipeline/            descriptor-driven steps: descriptor, cask, gate,
+  lib/pipeline/            descriptor-driven steps: descriptor, cask, gate, watch,
                            release, neutralize, render
   lib/oracles/             one module per upstream source kind; custom/ holds
                            provider-specific oracles (e.g. avakot)
@@ -106,6 +106,9 @@ fbr metadata --file F --field version|sha256|url|path
 fbr gate --app X --upstream-version V [--release-exists]
      [--release-matches-cask true|false]     cask gate decision; omit the match flag when
                                              the asset comparison could not run
+fbr feed-hold --app X --upstream-version V [--tap T]
+                                             feed_version= and hold=: whether the run should
+                                             wait for the oracle to catch the release feed
 fbr cask --action read|set-version|check     read, re-pin or check casks
 fbr release-check --app X --asset-dir D      release assets vs the cask pin (true|false,
      [--tap T]                               or nothing when it could not compare)

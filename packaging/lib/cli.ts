@@ -8,6 +8,7 @@ import { APPIMAGE_ARCH, resolveArchitecture } from "./core/architecture.ts";
 import { checkCask, readCaskFile, writeCask } from "./pipeline/cask.ts";
 import { descriptorLines, listApps, loadDescriptor, resolveApp } from "./pipeline/descriptor.ts";
 import { planGate } from "./pipeline/gate.ts";
+import { fetchFeedVersion, planHold } from "./pipeline/watch.ts";
 import { readMetadataField } from "./core/metadata.ts";
 import {
   compareReleasedAssets,
@@ -330,6 +331,29 @@ const COMMANDS: Command[] = [
       ]) {
         process.stdout.write(`${line}\n`);
       }
+      return 0;
+    },
+  },
+  {
+    name: "feed-hold",
+    summary:
+      "Should the run wait for the oracle to catch the release feed? (--app, --upstream-version, [--tap]); prints feed_version= and hold=",
+    options: {
+      app: APP,
+      tap: TAP,
+      "upstream-version": { type: "string" },
+    },
+    run: async (flags) => {
+      const descriptor = descriptorFor(flags);
+      const feedVersion =
+        descriptor.watch === undefined ? null : await fetchFeedVersion(descriptor.watch);
+      const hold = planHold({
+        caskVersion: readCaskFile(caskFileFor(flags, descriptor)).version,
+        upstreamVersion: flags.str("upstream-version"),
+        feedVersion,
+      });
+      // Two KEY=VALUE lines; the workflow parses them out of stdout.
+      process.stdout.write(`feed_version=${feedVersion ?? ""}\nhold=${hold}\n`);
       return 0;
     },
   },
