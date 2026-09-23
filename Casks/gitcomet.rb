@@ -2,8 +2,8 @@ cask "gitcomet" do
   arch arm: "aarch64", intel: "x86_64"
 
   version "0.2.5"
-  sha256 arm64_linux:  "0000000000000000000000000000000000000000000000000000000000000000",
-         x86_64_linux: "0000000000000000000000000000000000000000000000000000000000000000"
+  sha256 arm64_linux:  "e495d1a196487ff11e928f3ce9fb6d787b69f45c8747b6a64459f021472c071e",
+         x86_64_linux: "701299dfd8f06d8ae98a8944c71e9bfb5e2221d79cea7e96d4f5379e8272a735"
 
   url "https://github.com/edgarcnp/homebrew-tap/releases/download/gitcomet-v#{version}/gitcomet-#{version}-#{arch}.AppImage"
   name "GitComet"
