@@ -2,12 +2,10 @@
 [Desktop Entry]
 Name=__PACKAGE_DISPLAY_NAME__
 Comment=__PACKAGE_COMMENT__
-Exec=gitbutler-tauri %U
+Exec=gitcomet
 Icon=__PACKAGE_NAME__
 Terminal=false
 Type=Application
-StartupNotify=true
-StartupWMClass=gitbutler-tauri
-Categories=Development;
-MimeType=x-scheme-handler/but;
+StartupWMClass=gitcomet
+Categories=Development;RevisionControl;
 X-AppImage-Version=__VERSION__

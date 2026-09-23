@@ -31,7 +31,7 @@ describe("descriptor loading", () => {
     // two to be the same string, so both forms resolve directly.
     assert.equal(resolveApp("commandcode-desktop"), "commandcode-desktop");
     assert.equal(resolveApp("opencode-desktop"), "opencode-desktop");
-    assert.equal(resolveApp("gitbutler"), "gitbutler");
+    assert.equal(resolveApp("gitcomet"), "gitcomet");
     assert.equal(resolveApp("vscode"), "vscode");
     // Every app's id, cask token and asset prefix are one name.
     for (const id of APPS) {
@@ -96,24 +96,21 @@ describe("descriptor contents (regression against the previous per-app scripts)"
     assert.deepEqual(descriptor.hostHelpers, ["bin/resources/opencode-cli"]);
   });
 
-  it("keeps gitbutler's webkit dependency, file list and warning-level scan", () => {
-    const descriptor = loadDescriptor("gitbutler");
-    assert.equal(descriptor.oracle.kind, "cdn-redirect");
-    assert.equal(descriptor.needsWebkit, true);
-    assert.equal(descriptor.debloatArgs, "--add-common --prefer-nano webkit2gtk-4.1-mini");
-    assert.deepEqual(descriptor.payload.files, [
-      "usr/bin/gitbutler-tauri",
-      "usr/bin/gitbutler-git-askpass",
-      "usr/bin/but",
-    ]);
-    assert.equal(descriptor.updater.hook, "templates/prevent-autoupdate.hook");
-    // Upstream webkit2gtk demo flow: GTK WM_CLASS shim plus the shared hook.
-    assert.deepEqual(descriptor.quickSharun, {
-      hooks: ["fix-namespaces.hook"],
-      env: { GTK_CLASS_FIX: "1" },
-    });
-    // Warning, not error: a legitimately unpatched copy must not fail the build.
-    assert.equal(descriptor.updater.residualScan?.severity, "warning");
+  it("keeps gitcomet's signed apt oracle, single-binary file list and no webkit", () => {
+    const descriptor = loadDescriptor("gitcomet");
+    assert.equal(descriptor.oracle.kind, "apt");
+    assert.equal(descriptor.needsWebkit, false);
+    assert.equal(descriptor.debloatArgs, "--add-common");
+    assert.deepEqual(descriptor.architectures, ["amd64", "arm64"]);
+    assert.deepEqual(descriptor.payload.files, ["usr/bin/gitcomet"]);
+    assert.equal(descriptor.icon.size, "512x512");
+    // The upstream check is a read-only toast, so upstream's supported switch
+    // (seeded into the AppDir .env) is the whole neutralization: no endpoint to
+    // patch, no residual scan and no runtime hook.
+    assert.deepEqual(descriptor.updater.env, { GITCOMET_NO_UPDATE_CHECK: "1" });
+    assert.equal(descriptor.updater.hook, undefined);
+    assert.equal(descriptor.updater.residualScan, undefined);
+    assert.deepEqual(descriptor.quickSharun, { hooks: ["fix-namespaces.hook"] });
   });
 
   it("keeps commandcode-desktop's versioned-asset oracle, deb staging and required feed removal", () => {
@@ -194,11 +191,7 @@ describe("quick-sharun configuration", () => {
     for (const app of APPS) {
       const quickSharun = loadDescriptor(app).quickSharun;
       assert.deepEqual(quickSharun.hooks, ["fix-namespaces.hook"]);
-      if (app === "gitbutler") {
-        assert.deepEqual(quickSharun.env, { GTK_CLASS_FIX: "1" });
-      } else {
-        assert.equal(quickSharun.env, undefined);
-      }
+      assert.equal(quickSharun.env, undefined);
     }
   });
 
@@ -367,12 +360,12 @@ describe("release watch", () => {
       versionPattern: "^v(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
       repo: "anomalyco/opencode",
     });
-    assert.deepEqual(loadDescriptor("gitbutler").watch, {
-      feedUrl: "https://github.com/gitbutlerapp/gitbutler/releases.atom",
+    assert.deepEqual(loadDescriptor("gitcomet").watch, {
+      feedUrl: "https://github.com/Auto-Explore/GitComet/releases.atom",
       format: "atom",
-      versionPattern: "^release\\/(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
-      skipPattern: "^nightly\\/",
-      repo: "gitbutlerapp/gitbutler",
+      versionPattern: "^GitComet v(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
+      skipPattern: "^GitComet v\\d+\\.\\d+\\.\\d+-rc",
+      repo: "Auto-Explore/GitComet",
     });
     assert.deepEqual(loadDescriptor("commandcode-desktop").watch, {
       feedUrl: "https://github.com/CommandCodeAI/desktop/releases.atom",
@@ -399,7 +392,7 @@ describe("release watch", () => {
     const titles: Record<string, [string, string]> = {
       vscode: ["1.137.0", "1.137.0"],
       "opencode-desktop": ["v1.18.30", "1.18.30"],
-      gitbutler: ["release/0.22.3", "0.22.3"],
+      gitcomet: ["GitComet v0.2.5", "0.2.5"],
       "commandcode-desktop": ["Command Code 0.1.29", "0.1.29"],
       // JSON feeds carry no titles; the pattern applies to the versionField
       // value instead (here the manifest's top-level "0.6.7").
@@ -414,9 +407,10 @@ describe("release watch", () => {
   });
 
   it("skips the pre-release lines each pattern excludes", () => {
-    const gitbutler = loadDescriptor("gitbutler").watch;
-    assert.ok(gitbutler?.skipPattern !== undefined);
-    assert.equal(new RegExp(gitbutler.skipPattern).test("nightly/0.5.2194"), true);
+    const gitcomet = loadDescriptor("gitcomet").watch;
+    assert.ok(gitcomet?.skipPattern !== undefined);
+    assert.equal(new RegExp(gitcomet.skipPattern).test("GitComet v0.3.0-rc.1"), true);
+    assert.equal(new RegExp(gitcomet.skipPattern).test("GitComet v0.3.0"), false);
   });
 });
 
@@ -569,19 +563,23 @@ describe("descriptor validation", () => {
         ),
       /severity must be/,
     );
+    // No descriptor declares cdn-redirect since GitButler took the only one
+    // with it, so build that oracle shape inline rather than mutating an app.
     assert.throws(
       () =>
         validateDescriptor(
-          mutated("gitbutler", (copy) => { nested(copy, "oracle")["redirectHosts"] = []; }),
-          "gitbutler",
+          mutated("vscode", (copy) => {
+            copy["oracle"] = { kind: "cdn-redirect", redirectHosts: [] };
+          }),
+          "vscode",
         ),
       /redirectHosts must not be empty/,
     );
     assert.throws(
       () =>
         validateDescriptor(
-          mutated("gitbutler", (copy) => { nested(copy, "icon")["size"] = "big"; }),
-          "gitbutler",
+          mutated("vscode", (copy) => { nested(copy, "icon")["size"] = "big"; }),
+          "vscode",
         ),
       /size must look like/,
     );
@@ -697,16 +695,16 @@ describe("descriptor validation", () => {
     assert.throws(
       () =>
         validateDescriptor(
-          mutated("gitbutler", (copy) => { nested(copy, "watch")["skipPattern"] = "["; }),
-          "gitbutler",
+          mutated("gitcomet", (copy) => { nested(copy, "watch")["skipPattern"] = "["; }),
+          "gitcomet",
         ),
       /watch\.skipPattern must be a valid regular expression/,
     );
     assert.throws(
       () =>
         validateDescriptor(
-          mutated("gitbutler", (copy) => { nested(copy, "watch")["skipPattern"] = ""; }),
-          "gitbutler",
+          mutated("gitcomet", (copy) => { nested(copy, "watch")["skipPattern"] = ""; }),
+          "gitcomet",
         ),
       /watch\.skipPattern must be a non-empty string/,
     );
@@ -862,12 +860,12 @@ describe("descriptor env and output lines", () => {
   });
 
   it("emits lowercase keys for job outputs", () => {
-    const gitbutler = loadDescriptor("gitbutler");
-    const lines = descriptorLines(gitbutler, "output");
-    assert.ok(lines.includes("id=gitbutler"));
-    assert.ok(lines.includes("cask=gitbutler"));
-    assert.ok(lines.includes(`watch=${JSON.stringify(gitbutler.watch)}`));
-    assert.ok(lines.includes("asset_prefix=gitbutler"));
+    const littleGenius = loadDescriptor("little-genius");
+    const lines = descriptorLines(littleGenius, "output");
+    assert.ok(lines.includes("id=little-genius"));
+    assert.ok(lines.includes("cask=little-genius"));
+    assert.ok(lines.includes(`watch=${JSON.stringify(littleGenius.watch)}`));
+    assert.ok(lines.includes("asset_prefix=little-genius"));
     assert.ok(lines.includes("needs_webkit=true"));
     assert.ok(lines.every((line) => /^[a-z_]+=/.test(line)));
   });

@@ -289,7 +289,7 @@ jobs:
       - name: Install webkit2gtk build dependencies
         if: needs.detect.outputs.needs_webkit == 'true'
         run: |
-          # webkit2gtk closure for the gitbutler build; sharun bundles it.
+          # webkit2gtk closure for the little-genius build; sharun bundles it.
           # Mirrors upstream webkit2gtk4-demo-appimage.sh: full webkit + gtk
           # for linking, X11 libs for strace-time dlopen detection.
           pacman -S --noconfirm \

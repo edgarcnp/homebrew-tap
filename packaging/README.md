@@ -90,7 +90,7 @@ must equal `id`, `cask` and `assetPrefix` — one name end to end.
 | `apt` | Signed apt repo: pinned key → `InRelease` (verified with `gpgv` against a pinned fingerprint) → `Packages` SHA-256 → package SHA-256/size. Newest entry per architecture wins, by dpkg ordering. |
 | `github-release` | GitHub release assets. Legacy: newest release carrying both `<assetPrefix>-<arch>.deb`. Versioned-asset: pins a tag prefix plus an `assetNameTemplate` and resolves each shipped architecture separately. A `.AppImage` asset additionally cross-checks the release's electron-builder update yml (SHA-512 + size) before downloading. |
 | `electron-feed` | An electron-updater feed whose 302 names the release tag. The yml supplies filename, SHA-512 and size; the GitHub API supplies the SHA-256. All three must agree. |
-| `cdn-redirect` | A CDN download redirect that is itself the version source. The target URL shape is pinned and the payload is hashed on download (the CDN publishes no checksums). |
+| `cdn-redirect` | A CDN download redirect that is itself the version source. The target URL shape is pinned and the payload is hashed on download (the CDN publishes no checksums). No app currently consumes it; it is validated and tested as infrastructure for a future CDN-sourced app. |
 | `update-manifest` | A pinned https JSON manifest that publishes the version and per-asset SHA-256/size. The `assetTemplate` entry (`{arch}` substituted) must carry the version as a download-path segment on a pinned host. |
 | `avakot` (in `custom/`) | Provider-specific manifest oracle: avakot's `manifest.json` serves an `artifacts` map with a fixed entry name, static download URLs and no published size. The version binds through the per-entry `version` field and the payload is measured from the verified download (downloaded and discarded in `--metadata-only` mode). |
 
@@ -195,9 +195,8 @@ non-FHS and old distros.
   the `appimagetool` invocation (so no zsync updater feed is embedded).
 - The workflow installs webkit2gtk/GTK (+ X11 libs, mirroring upstream
   `webkit2gtk4-demo-appimage.sh`) only for apps with `needsWebkit`
-  (gitbutler); the other build deps are installed for every app. Gitbutler
-  debloats with `--add-common --prefer-nano webkit2gtk-4.1-mini` and exports
-  `GTK_CLASS_FIX=1`.
+  (little-genius); the other build deps are installed for every app.
+  Little Genius debloats with `--add-common --prefer-nano webkit2gtk-4.1-mini`.
 
 `scripts/install-anylinux-tools.sh` fetches `quick-sharun` and
 `get-debloated-pkgs` from a URL addressed by a commit digest of

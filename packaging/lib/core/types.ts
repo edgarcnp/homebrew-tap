@@ -215,7 +215,7 @@ export type WatchFormat = "atom" | "json";
 export interface WatchConfig {
   feedUrl: string;
   versionPattern: string;
-  // Entries whose title matches are skipped, e.g. Gitbutler's "nightly/".
+  // Entries whose title matches are skipped, e.g. GitComet's "-rc" releases.
   skipPattern?: string;
   // Upstream repo (owner/repo), carried as the informational trigger_repo.
   repo?: string;

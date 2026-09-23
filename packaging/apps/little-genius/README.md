@@ -30,7 +30,7 @@ the same pinned JSON manifest (`https://api.avakot.org/lg/manifest.json`).
 - **webkit2gtk** — `needsWebkit: true`: the main binary links
   `libwebkit2gtk-4.1` and GTK 3, so the build installs the webkit2gtk/GTK
   closure (plus X11 libs) and debloats with `webkit2gtk-4.1-mini`, following
-  the gitbutler flow.
+  the workflow's webkit2gtk build-dependency step.
 - **Tray indicator** — `libappindicator-sys` `dlopen`s
   `libayatana-appindicator3.so.1` at startup and panics without it, and a
   `dlopen`ed library is absent from the ELF `NEEDED` entries, so an `ldd` scan

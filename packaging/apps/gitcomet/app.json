@@ -1,0 +1,48 @@
+{
+  "id": "gitcomet",
+  "appName": "GitComet",
+  "displayName": "GitComet",
+  "comment": "Fast, resource-efficient Git GUI written in Rust",
+  "cask": "gitcomet",
+  "watch": {
+    "feedUrl": "https://github.com/Auto-Explore/GitComet/releases.atom",
+    "format": "atom",
+    "versionPattern": "^GitComet v(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
+    "skipPattern": "^GitComet v\\d+\\.\\d+\\.\\d+-rc",
+    "repo": "Auto-Explore/GitComet"
+  },
+  "assetPrefix": "gitcomet",
+  "tagPrefix": "gitcomet-v",
+  "sourceRepo": "edgarcnp/homebrew-tap",
+  "sourceOwner": "edgarcnp",
+  "sourceDir": "packaging/apps/gitcomet",
+  "buildCommand": "./build.sh",
+  "debloatArgs": "--add-common",
+  "needsWebkit": false,
+  "architectures": ["amd64", "arm64"],
+  "binaryTargets": ["gitcomet"],
+  "oracle": {
+    "kind": "apt",
+    "repository": "https://apt.gitcomet.dev",
+    "packageName": "gitcomet",
+    "fingerprint": "2115CEF160DC4127D59B1AFA14DBABA25C3A181D",
+    "keyBase64Path": "packaging/apps/gitcomet/assets/gitcomet-archive-keyring.gpg.base64"
+  },
+  "payload": {
+    "kind": "deb-files",
+    "files": ["usr/bin/gitcomet"]
+  },
+  "icon": {
+    "source": "usr/share/icons/hicolor/512x512/apps/gitcomet.png",
+    "size": "512x512"
+  },
+  "desktopTemplate": "templates/gitcomet.desktop",
+  "updater": {
+    "env": {
+      "GITCOMET_NO_UPDATE_CHECK": "1"
+    }
+  },
+  "quickSharun": {
+    "hooks": ["fix-namespaces.hook"]
+  }
+}

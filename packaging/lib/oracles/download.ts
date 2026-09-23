@@ -24,7 +24,7 @@ export interface PayloadExpectation {
 export interface FetchVerifiedOptions {
   // Hosts the request may resolve to, after any redirect.
   allowedHosts: readonly string[];
-  // Prefix for error messages, e.g. "gitbutler" or the destination basename.
+  // Prefix for error messages, e.g. "gitcomet" or the destination basename.
   label: string;
   // assertHostAllowed's label; defaults to "download".
   hostLabel?: string;

@@ -19,7 +19,7 @@ brew install --cask <cask>
 
 | Cask | App | Notes |
 | --- | --- | --- |
-| `gitbutler` | [GitButler](https://gitbutler.com/) | installs the GUI and the `but` CLI |
+| `gitcomet` | [GitComet](https://gitcomet.dev/) | |
 | `commandcode-desktop` | [Command Code Desktop](https://commandcode.ai/desktop) | amd64 only |
 | `opencode-desktop` | [OpenCode Desktop](https://opencode.ai/) | |
 | `little-genius` | [Little Genius](https://lg.avakot.org/) | Soulframe companion, amd64 only |

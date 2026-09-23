@@ -4,6 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import { finalizeApp, isElf, neutralizeUpdater } from "../../lib/pipeline/neutralize.ts";
+import { APPS_DIR } from "../../lib/core/paths.ts";
 import type { AppDescriptor, UpdaterConfig } from "../../lib/core/types.ts";
 
 const ENDPOINT = "update.code.visualstudio.com";
@@ -192,13 +193,20 @@ describe("neutralizeUpdater", () => {
 });
 
 describe("finalizeApp", () => {
+  // finalizeApp reads the hook template from appDir(descriptor.id), i.e. from
+  // packaging/apps/<id>. No shipped app carries one since GitButler left, so
+  // point the id at this test's own temp directory and stage the fixture there.
+  function fixtureDescriptor(updater: UpdaterConfig): AppDescriptor {
+    return descriptorWith(updater, path.relative(APPS_DIR, appDir));
+  }
+
   it("appends .env entries once and installs the hook", () => {
     write("bin/app", "binary");
-    // gitbutler is the app that ships a runtime hook template.
-    const descriptor = descriptorWith(
-      { env: { CC_DISABLE_AUTO_UPDATE: "1" }, hook: "templates/prevent-autoupdate.hook" },
-      "gitbutler",
-    );
+    write("templates/prevent-autoupdate.hook", "#!/bin/sh\n");
+    const descriptor = fixtureDescriptor({
+      env: { CC_DISABLE_AUTO_UPDATE: "1" },
+      hook: "templates/prevent-autoupdate.hook",
+    });
 
     const first = finalizeApp(descriptor, appDir);
     const second = finalizeApp(descriptor, appDir);
@@ -216,7 +224,7 @@ describe("finalizeApp", () => {
 
   it("fails when the hook template is missing", () => {
     assert.throws(
-      () => finalizeApp(descriptorWith({ hook: "templates/absent.hook" }, "gitbutler"), appDir),
+      () => finalizeApp(fixtureDescriptor({ hook: "templates/absent.hook" }), appDir),
       /Missing runtime hook/,
     );
   });
