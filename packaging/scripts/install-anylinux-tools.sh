@@ -32,9 +32,10 @@ do
   info "Downloading ${name} from pinned commit ${PINNED_COMMIT}"
   attempt=1
   max_attempts=3
-  until curl -fL --retry 5 --retry-all-errors --retry-delay 5 -o "${dest}" "${BASE_URL}/${name}.sh" \
-    && test -s "${dest}"; do
-    if [ "${attempt}" -ge "${max_attempts}" ]; then
+  until curl -fL --retry 5 --retry-all-errors --retry-delay 5 -o "${dest}" "${BASE_URL}/${name}.sh" &&
+    test -s "${dest}"; do
+    if [[ "${attempt}" -ge "${max_attempts}" ]]
+    then
       error "Failed to download ${name} after ${max_attempts} attempts"
     fi
     sleep_seconds=$((attempt * 10))
