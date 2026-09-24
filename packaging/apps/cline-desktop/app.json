@@ -1,0 +1,56 @@
+{
+  "id": "cline-desktop",
+  "appName": "Cline Desktop",
+  "displayName": "Cline",
+  "comment": "Cline AI coding agent",
+  "cask": "cline-desktop",
+  "watch": {
+    "feedUrl": "https://github.com/cline/cline/releases.atom",
+    "format": "atom",
+    "versionPattern": "^Desktop v(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
+    "repo": "cline/cline"
+  },
+  "assetPrefix": "cline-desktop",
+  "tagPrefix": "cline-desktop-v",
+  "sourceRepo": "edgarcnp/homebrew-tap",
+  "sourceOwner": "edgarcnp",
+  "sourceDir": "packaging/apps/cline-desktop",
+  "buildCommand": "./build.sh",
+  "debloatArgs": "--add-common --prefer-nano webkit2gtk-4.1-mini",
+  "needsWebkit": true,
+  "buildPackages": ["libayatana-appindicator"],
+  "architectures": ["amd64"],
+  "binaryTargets": ["cline-app"],
+  "oracle": {
+    "kind": "github-release",
+    "repository": "https://api.github.com/repos/cline/cline",
+    "packageName": "cline",
+    "tagPrefix": "desktop-v",
+    "assetNameTemplate": "Cline_{version}_{arch}.deb"
+  },
+  "payload": {
+    "kind": "deb-files",
+    "files": ["usr/bin/cline-app", "usr/bin/code-sidecar"]
+  },
+  "icon": {
+    "source": "usr/share/icons/hicolor/256x256@2/apps/cline-app.png",
+    "size": "256x256"
+  },
+  "desktopTemplate": "templates/cline-desktop.desktop",
+  "updater": {
+    "patchEndpoint": {
+      "from": "https://github.com/cline/cline/releases/download/desktop-latest/latest.json",
+      "textReplacement": "https://ab.invalid/cline/cline/releases/download/desktop-latest/latest.json",
+      "binaryReplacement": "https://ab.invalid/cline/cline/releases/download/desktop-latest/latest.json",
+      "targets": ["bin/cline-app"]
+    },
+    "residualScan": {
+      "patterns": ["https://github.com/cline/cline/releases/download/desktop-latest/latest.json"],
+      "severity": "error"
+    }
+  },
+  "quickSharun": {
+    "hooks": ["fix-namespaces.hook"],
+    "libraries": ["/usr/lib/libayatana-appindicator3.so.1"]
+  }
+}

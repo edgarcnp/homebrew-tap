@@ -120,7 +120,7 @@ export interface TemplatedSelection {
 
 // Newest non-draft, non-prerelease release whose tag starts with tagPrefix and
 // which carries the templated asset for the requested architecture. An arm64
-// request against an amd64-only upstream (e.g. CommandCode) scans every
+// request against an amd64-only upstream (e.g. cline-desktop) scans every
 // release and fails with the asset name it never found.
 export async function selectTemplatedRelease(
   repository: string,

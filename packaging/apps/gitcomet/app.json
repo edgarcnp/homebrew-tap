@@ -19,7 +19,7 @@
   "buildCommand": "./build.sh",
   "debloatArgs": "--add-common",
   "needsWebkit": false,
-  "architectures": ["amd64", "arm64"],
+  "architectures": ["amd64"],
   "binaryTargets": ["gitcomet"],
   "oracle": {
     "kind": "apt",

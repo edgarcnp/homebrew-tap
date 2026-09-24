@@ -6,9 +6,11 @@ import { describe, it } from "node:test";
 import { loadDescriptor } from "../../lib/pipeline/descriptor.ts";
 import { sha256Hex } from "../../lib/core/http.ts";
 import { compareReleasedAssets, planReleasePrune, renderReleaseNotes } from "../../lib/pipeline/release.ts";
+import type { AppDescriptor } from "../../lib/core/types.ts";
 
-// vscode ships both architectures, so it exercises the dual-arch walk.
-const descriptor = loadDescriptor("vscode");
+// Every shipped cask is amd64-only, so the dual-arch walk (both assets, both
+// pins) is exercised with a synthetic descriptor instead of a real app.
+const descriptor: AppDescriptor = { ...loadDescriptor("vscode"), architectures: ["amd64", "arm64"] };
 
 function withAssets(files: Record<string, string>, run: (dir: string) => void): void {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "fbr-release-"));

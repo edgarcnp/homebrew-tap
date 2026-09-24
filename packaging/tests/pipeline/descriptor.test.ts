@@ -29,7 +29,7 @@ describe("descriptor loading", () => {
   it("resolves app ids, which are also the cask tokens", () => {
     // Dispatch names apps by id or cask token; validateDescriptor requires the
     // two to be the same string, so both forms resolve directly.
-    assert.equal(resolveApp("commandcode-desktop"), "commandcode-desktop");
+    assert.equal(resolveApp("cline-desktop"), "cline-desktop");
     assert.equal(resolveApp("opencode-desktop"), "opencode-desktop");
     assert.equal(resolveApp("gitcomet"), "gitcomet");
     assert.equal(resolveApp("vscode"), "vscode");
@@ -101,7 +101,7 @@ describe("descriptor contents (regression against the previous per-app scripts)"
     assert.equal(descriptor.oracle.kind, "apt");
     assert.equal(descriptor.needsWebkit, false);
     assert.equal(descriptor.debloatArgs, "--add-common");
-    assert.deepEqual(descriptor.architectures, ["amd64", "arm64"]);
+    assert.deepEqual(descriptor.architectures, ["amd64"]);
     assert.deepEqual(descriptor.payload.files, ["usr/bin/gitcomet"]);
     assert.equal(descriptor.icon.size, "512x512");
     // The upstream check is a read-only toast, so upstream's supported switch
@@ -113,27 +113,35 @@ describe("descriptor contents (regression against the previous per-app scripts)"
     assert.deepEqual(descriptor.quickSharun, { hooks: ["fix-namespaces.hook"] });
   });
 
-  it("keeps commandcode-desktop's versioned-asset oracle, deb staging and required feed removal", () => {
-    const descriptor = loadDescriptor("commandcode-desktop");
+  it("keeps cline-desktop's versioned-asset oracle, file staging and endpoint patch", () => {
+    const descriptor = loadDescriptor("cline-desktop");
     assert.equal(descriptor.oracle.kind, "github-release");
     assert.equal(
       descriptor.oracle.kind === "github-release" ? descriptor.oracle.assetNameTemplate : "",
-      "CommandCode-{version}-{arch}.deb",
+      "Cline_{version}_{arch}.deb",
     );
     assert.equal(
       descriptor.oracle.kind === "github-release" ? descriptor.oracle.tagPrefix : "",
-      "v",
+      "desktop-v",
     );
     assert.equal(
       descriptor.oracle.kind === "github-release" ? descriptor.oracle.packageName : "",
-      "command-code",
+      "cline",
     );
     assert.deepEqual(descriptor.architectures, ["amd64"]);
-    assert.equal(descriptor.payload.kind, "deb-tree");
-    assert.equal(descriptor.payload.kind === "deb-tree" ? descriptor.payload.tree : "", "opt/Command Code");
-    assert.equal(descriptor.icon.size, "512x512");
-    assert.equal(descriptor.updater.removeFeed?.required, true);
-    assert.deepEqual(descriptor.updater.env, { CC_DISABLE_AUTO_UPDATE: "1" });
+    assert.equal(descriptor.payload.kind, "deb-files");
+    assert.deepEqual(
+      descriptor.payload.kind === "deb-files" ? descriptor.payload.files : [],
+      ["usr/bin/cline-app", "usr/bin/code-sidecar"],
+    );
+    assert.equal(descriptor.icon.size, "256x256");
+    assert.equal(descriptor.needsWebkit, true);
+    assert.deepEqual(descriptor.buildPackages, ["libayatana-appindicator"]);
+    // The endpoint lives once in an ELF, so the replacement must not shift a
+    // byte; the scan then requires it gone from the whole AppDir.
+    assert.equal(descriptor.updater.patchEndpoint?.from.length, 75);
+    assert.equal(descriptor.updater.patchEndpoint?.binaryReplacement.length, 75);
+    assert.deepEqual(descriptor.updater.patchEndpoint?.targets, ["bin/cline-app"]);
     assert.equal(descriptor.updater.residualScan?.severity, "error");
   });
 
@@ -367,11 +375,11 @@ describe("release watch", () => {
       skipPattern: "^GitComet v\\d+\\.\\d+\\.\\d+-rc",
       repo: "Auto-Explore/GitComet",
     });
-    assert.deepEqual(loadDescriptor("commandcode-desktop").watch, {
-      feedUrl: "https://github.com/CommandCodeAI/desktop/releases.atom",
+    assert.deepEqual(loadDescriptor("cline-desktop").watch, {
+      feedUrl: "https://github.com/cline/cline/releases.atom",
       format: "atom",
-      versionPattern: "(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
-      repo: "CommandCodeAI/desktop",
+      versionPattern: "^Desktop v(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
+      repo: "cline/cline",
     });
     assert.deepEqual(loadDescriptor("little-genius").watch, {
       feedUrl: "https://api.avakot.org/lg/manifest.json",
@@ -388,12 +396,12 @@ describe("release watch", () => {
   });
 
   it("captures the version from a real feed title", () => {
-    // Feed titles are release names, not tags (e.g. "Command Code 0.1.29").
+    // Feed titles are release names, not tags (e.g. "Desktop v0.0.35").
     const titles: Record<string, [string, string]> = {
       vscode: ["1.137.0", "1.137.0"],
       "opencode-desktop": ["v1.18.30", "1.18.30"],
       gitcomet: ["GitComet v0.2.5", "0.2.5"],
-      "commandcode-desktop": ["Command Code 0.1.29", "0.1.29"],
+      "cline-desktop": ["Desktop v0.0.35", "0.0.35"],
       // JSON feeds carry no titles; the pattern applies to the versionField
       // value instead (here the manifest's top-level "0.6.7").
       "little-genius": ["0.6.7", "0.6.7"],
@@ -526,20 +534,20 @@ describe("descriptor validation", () => {
     assert.throws(
       () =>
         validateDescriptor(
-          mutated("commandcode-desktop", (copy) => {
+          mutated("cline-desktop", (copy) => {
             nested(copy, "updater")["env"] = { "bad key": "1" };
           }),
-          "commandcode-desktop",
+          "cline-desktop",
         ),
       /not a valid name/,
     );
     assert.throws(
       () =>
         validateDescriptor(
-          mutated("commandcode-desktop", (copy) => {
+          mutated("cline-desktop", (copy) => {
             nested(copy, "updater")["env"] = { OK: "value\ninjected" };
           }),
-          "commandcode-desktop",
+          "cline-desktop",
         ),
       /newlines or NUL/,
     );
@@ -606,24 +614,24 @@ describe("descriptor validation", () => {
     assert.throws(
       () =>
         validateDescriptor(
-          mutated("commandcode-desktop", (copy) => { delete nested(copy, "oracle")["tagPrefix"]; }),
-          "commandcode-desktop",
+          mutated("cline-desktop", (copy) => { delete nested(copy, "oracle")["tagPrefix"]; }),
+          "cline-desktop",
         ),
       /must be set together/,
     );
     assert.throws(
       () =>
         validateDescriptor(
-          mutated("commandcode-desktop", (copy) => { nested(copy, "oracle")["assetPrefix"] = "x"; }),
-          "commandcode-desktop",
+          mutated("cline-desktop", (copy) => { nested(copy, "oracle")["assetPrefix"] = "x"; }),
+          "cline-desktop",
         ),
       /mutually exclusive/,
     );
     assert.throws(
       () =>
         validateDescriptor(
-          mutated("commandcode-desktop", (copy) => { nested(copy, "oracle")["assetNameTemplate"] = "no-version-here.deb"; }),
-          "commandcode-desktop",
+          mutated("cline-desktop", (copy) => { nested(copy, "oracle")["assetNameTemplate"] = "no-version-here.deb"; }),
+          "cline-desktop",
         ),
       /must contain \{version\}/,
     );
@@ -836,22 +844,22 @@ describe("descriptor validation", () => {
 describe("descriptor env and output lines", () => {
   it("emits the workflow variables", () => {
     const env = new Map(
-      descriptorLines(loadDescriptor("commandcode-desktop"), "env").map((line) => {
+      descriptorLines(loadDescriptor("cline-desktop"), "env").map((line) => {
         const [key = "", ...rest] = line.split("=");
         return [key, rest.join("=")] as [string, string];
       }),
     );
-    assert.equal(env.get("APP_ID"), "commandcode-desktop");
-    assert.equal(env.get("APP_CASK"), "commandcode-desktop");
-    assert.equal(env.get("WATCH"), JSON.stringify(loadDescriptor("commandcode-desktop").watch));
-    assert.equal(env.get("TAG_PREFIX"), "commandcode-desktop-v");
-    assert.equal(env.get("SOURCE_DIR"), "packaging/apps/commandcode-desktop");
+    assert.equal(env.get("APP_ID"), "cline-desktop");
+    assert.equal(env.get("APP_CASK"), "cline-desktop");
+    assert.equal(env.get("WATCH"), JSON.stringify(loadDescriptor("cline-desktop").watch));
+    assert.equal(env.get("TAG_PREFIX"), "cline-desktop-v");
+    assert.equal(env.get("SOURCE_DIR"), "packaging/apps/cline-desktop");
     assert.equal(env.get("BUILD_COMMAND"), "./build.sh");
-    assert.equal(env.get("NEEDS_WEBKIT"), "false");
-    assert.equal(env.get("DEBLOAT_ARGS"), "--add-common --prefer-nano ffmpeg-mini");
+    assert.equal(env.get("NEEDS_WEBKIT"), "true");
+    assert.equal(env.get("DEBLOAT_ARGS"), "--add-common --prefer-nano webkit2gtk-4.1-mini");
     assert.equal(env.get("APP_ARCHITECTURES"), '["amd64"]');
-    // commandcode-desktop declares no build packages of its own.
-    assert.equal(env.get("BUILD_PACKAGES"), "");
+    // cline-desktop installs the tray indicator library at pack time.
+    assert.equal(env.get("BUILD_PACKAGES"), "libayatana-appindicator");
   });
 
   it("emits the build packages an app declares", () => {

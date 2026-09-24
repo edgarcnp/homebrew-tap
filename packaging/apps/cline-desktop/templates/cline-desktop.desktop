@@ -2,12 +2,11 @@
 [Desktop Entry]
 Name=__PACKAGE_DISPLAY_NAME__
 Comment=__PACKAGE_COMMENT__
-Exec=command-code %U
+Exec=cline-app
 Icon=__PACKAGE_NAME__
 Terminal=false
 Type=Application
 StartupNotify=true
-StartupWMClass=command-code
+StartupWMClass=cline-app
 Categories=Development;
-MimeType=x-scheme-handler/commandcode;
 X-AppImage-Version=__VERSION__

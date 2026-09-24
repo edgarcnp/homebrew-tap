@@ -20,11 +20,18 @@ brew install --cask <cask>
 | Cask | App | Notes |
 | --- | --- | --- |
 | `gitcomet` | [GitComet](https://gitcomet.dev/) | |
-| `commandcode-desktop` | [Command Code Desktop](https://commandcode.ai/desktop) | amd64 only |
+| `cline-desktop` | [Cline Desktop](https://cline.bot/) | |
 | `opencode-desktop` | [OpenCode Desktop](https://opencode.ai/) | |
-| `little-genius` | [Little Genius](https://lg.avakot.org/) | Soulframe companion, amd64 only |
-| `wfhelper` | [WFHelper](https://github.com/WFHelper/WFHelper) | Warframe companion, amd64 only |
+| `little-genius` | [Little Genius](https://lg.avakot.org/) | Soulframe companion |
+| `wfhelper` | [WFHelper](https://github.com/WFHelper/WFHelper) | Warframe companion |
 | `vscode` | [Visual Studio Code](https://code.visualstudio.com/) | |
+
+> [!NOTE]
+> Every cask in this tap is amd64-only. Each descriptor declares
+> `architectures: ["amd64"]`, so the pipeline builds, publishes and pins a
+> single `x86_64` AppImage, and each cask carries one `sha256` behind
+> `depends_on arch: :x86_64`. On an arm64 host `brew install --cask` refuses
+> up front instead of fetching an amd64 build.
 
 ## Requirements
 

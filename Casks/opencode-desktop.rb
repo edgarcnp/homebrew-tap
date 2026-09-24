@@ -1,11 +1,8 @@
 cask "opencode-desktop" do
-  arch arm: "aarch64", intel: "x86_64"
-
   version "2.0.16"
-  sha256 arm64_linux:  "f1985f54d7201ffac6d89fa4580d80cd8be35392a25f21c73294c42679787482",
-         x86_64_linux: "f1cfafa59de30517328bb2a5145d29014b3335df3f2f88812ae15f52ef59e1ec"
+  sha256 "f1cfafa59de30517328bb2a5145d29014b3335df3f2f88812ae15f52ef59e1ec"
 
-  url "https://github.com/edgarcnp/homebrew-tap/releases/download/opencode-desktop-v#{version}/opencode-desktop-#{version}-#{arch}.AppImage"
+  url "https://github.com/edgarcnp/homebrew-tap/releases/download/opencode-desktop-v#{version}/opencode-desktop-#{version}-x86_64.AppImage"
   name "OpenCode Desktop"
   desc "Open source AI coding agent"
   homepage "https://opencode.ai/"
@@ -17,10 +14,11 @@ cask "opencode-desktop" do
   end
 
   auto_updates false
+  depends_on arch: :x86_64
   depends_on :linux
 
-  app_image "opencode-desktop-#{version}-#{arch}.AppImage", target: "opencode-desktop-#{arch}.AppImage"
-  binary "opencode-desktop-#{version}-#{arch}.AppImage", target: "opencode-desktop"
+  app_image "opencode-desktop-#{version}-x86_64.AppImage", target: "opencode-desktop-x86_64.AppImage"
+  binary "opencode-desktop-#{version}-x86_64.AppImage", target: "opencode-desktop"
 
   postflight_steps do
     run "{{HOMEBREW_PREFIX}}/bin/opencode-desktop", args: ["--appimage-extract"], chdir: "{{staged_path}}"

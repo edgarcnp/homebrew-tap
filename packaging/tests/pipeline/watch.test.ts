@@ -51,8 +51,8 @@ describe("selectFeedVersion", () => {
   });
 
   it("reads titles that are release names rather than tags", () => {
-    const feed = atom("Release notes from CommandCodeAI/desktop", ["Command Code 0.1.29"]);
-    assert.equal(selectFeedVersion(watch("commandcode-desktop"), feed), "0.1.29");
+    const feed = atom("Release notes from cline", ["CLI v3.0.65", "Desktop v0.0.35"]);
+    assert.equal(selectFeedVersion(watch("cline-desktop"), feed), "0.0.35");
   });
 
   it("returns null when no entry matches", () => {

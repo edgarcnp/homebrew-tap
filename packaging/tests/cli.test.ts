@@ -39,9 +39,9 @@ describe("fbr CLI contract", () => {
   });
 
   it("resolves an app name the way the build plan calls it", () => {
-    const hyphenated = fbr(["resolve-app", "--name", "commandcode-desktop"]);
+    const hyphenated = fbr(["resolve-app", "--name", "cline-desktop"]);
     assert.equal(hyphenated.status, 0, hyphenated.stderr);
-    assert.equal(hyphenated.stdout.trim(), "commandcode-desktop");
+    assert.equal(hyphenated.stdout.trim(), "cline-desktop");
 
     const plain = fbr(["resolve-app", "--name", "vscode"]);
     assert.equal(plain.status, 0, plain.stderr);

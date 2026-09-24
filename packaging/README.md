@@ -195,8 +195,8 @@ non-FHS and old distros.
   the `appimagetool` invocation (so no zsync updater feed is embedded).
 - The workflow installs webkit2gtk/GTK (+ X11 libs, mirroring upstream
   `webkit2gtk4-demo-appimage.sh`) only for apps with `needsWebkit`
-  (little-genius); the other build deps are installed for every app.
-  Little Genius debloats with `--add-common --prefer-nano webkit2gtk-4.1-mini`.
+  (little-genius, cline-desktop); the other build deps are installed for every
+  app. Both debloat with `--add-common --prefer-nano webkit2gtk-4.1-mini`.
 
 `scripts/install-anylinux-tools.sh` fetches `quick-sharun` and
 `get-debloated-pkgs` from a URL addressed by a commit digest of

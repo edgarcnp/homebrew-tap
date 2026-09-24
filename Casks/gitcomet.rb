@@ -1,11 +1,8 @@
 cask "gitcomet" do
-  arch arm: "aarch64", intel: "x86_64"
-
   version "0.2.5"
-  sha256 arm64_linux:  "e495d1a196487ff11e928f3ce9fb6d787b69f45c8747b6a64459f021472c071e",
-         x86_64_linux: "701299dfd8f06d8ae98a8944c71e9bfb5e2221d79cea7e96d4f5379e8272a735"
+  sha256 "701299dfd8f06d8ae98a8944c71e9bfb5e2221d79cea7e96d4f5379e8272a735"
 
-  url "https://github.com/edgarcnp/homebrew-tap/releases/download/gitcomet-v#{version}/gitcomet-#{version}-#{arch}.AppImage"
+  url "https://github.com/edgarcnp/homebrew-tap/releases/download/gitcomet-v#{version}/gitcomet-#{version}-x86_64.AppImage"
   name "GitComet"
   desc "Fast, resource-efficient Git GUI written in Rust"
   homepage "https://gitcomet.dev/"
@@ -17,10 +14,11 @@ cask "gitcomet" do
   end
 
   auto_updates false
+  depends_on arch: :x86_64
   depends_on :linux
 
-  app_image "gitcomet-#{version}-#{arch}.AppImage", target: "gitcomet-#{arch}.AppImage"
-  binary "gitcomet-#{version}-#{arch}.AppImage", target: "gitcomet"
+  app_image "gitcomet-#{version}-x86_64.AppImage", target: "gitcomet-x86_64.AppImage"
+  binary "gitcomet-#{version}-x86_64.AppImage", target: "gitcomet"
 
   postflight_steps do
     run "{{HOMEBREW_PREFIX}}/bin/gitcomet", args: ["--appimage-extract"], chdir: "{{staged_path}}"

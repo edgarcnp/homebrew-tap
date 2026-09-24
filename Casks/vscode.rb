@@ -1,11 +1,8 @@
 cask "vscode" do
-  arch arm: "aarch64", intel: "x86_64"
-
   version "1.139.0"
-  sha256 arm64_linux:  "0f5ac2c640b8dbc39a6007a7f2a19c16e27e93a4c3e5d127af7c93a7bdf88c01",
-         x86_64_linux: "0be9824d177a14eba9bcb322d9d53861906f3c53e8ee2fa2078ffc676e57d7c8"
+  sha256 "0be9824d177a14eba9bcb322d9d53861906f3c53e8ee2fa2078ffc676e57d7c8"
 
-  url "https://github.com/edgarcnp/homebrew-tap/releases/download/vscode-v#{version}/vscode-#{version}-#{arch}.AppImage"
+  url "https://github.com/edgarcnp/homebrew-tap/releases/download/vscode-v#{version}/vscode-#{version}-x86_64.AppImage"
   name "Visual Studio Code"
   desc "Repackage of Visual Studio Code as an AppImage"
   homepage "https://code.visualstudio.com/"
@@ -18,10 +15,11 @@ cask "vscode" do
 
   auto_updates false
   conflicts_with cask: ["visual-studio-code", "vscodium"]
+  depends_on arch: :x86_64
   depends_on :linux
 
-  app_image "vscode-#{version}-#{arch}.AppImage", target: "vscode-#{arch}.AppImage"
-  binary "vscode-#{version}-#{arch}.AppImage", target: "code"
+  app_image "vscode-#{version}-x86_64.AppImage", target: "vscode-x86_64.AppImage"
+  binary "vscode-#{version}-x86_64.AppImage", target: "code"
 
   postflight_steps do
     run "{{HOMEBREW_PREFIX}}/bin/code", args: ["--appimage-extract"], chdir: "{{staged_path}}"
