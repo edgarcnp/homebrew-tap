@@ -1,9 +1,9 @@
 cask "opencode-desktop" do
   arch arm: "aarch64", intel: "x86_64"
 
-  version "2.0.15"
-  sha256 arm64_linux:  "253ba7a66cb3bf81a673dbee20c165fe58b3037bdaab85eaaba39ee8b648c21b",
-         x86_64_linux: "48785afe25c4b52f93fe9b2df3f2fdf48869bc63498910fff1b7eb03a2fe078b"
+  version "2.0.16"
+  sha256 arm64_linux:  "f1985f54d7201ffac6d89fa4580d80cd8be35392a25f21c73294c42679787482",
+         x86_64_linux: "f1cfafa59de30517328bb2a5145d29014b3335df3f2f88812ae15f52ef59e1ec"
 
   url "https://github.com/edgarcnp/homebrew-tap/releases/download/opencode-desktop-v#{version}/opencode-desktop-#{version}-#{arch}.AppImage"
   name "OpenCode Desktop"
