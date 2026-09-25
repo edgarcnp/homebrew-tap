@@ -39,6 +39,8 @@ jobs:
       version: ${{ steps.resolve.outputs.version }}
       skipped: ${{ steps.resolve.outputs.skipped }}
       repair_cask: ${{ steps.resolve.outputs.repair_cask }}
+      reason: ${{ steps.resolve.outputs.reason }}
+      feed_version: ${{ steps.resolve.outputs.feed_version }}
       source: ${{ steps.source.outputs.repo }}
       upstream_sha256_amd64: ${{ steps.resolve.outputs.upstream_sha256_amd64 }}
       upstream_sha256_arm64: ${{ steps.resolve.outputs.upstream_sha256_arm64 }}
@@ -169,6 +171,7 @@ jobs:
           done
           cd "${GITHUB_WORKSPACE}"
           {
+            echo "feed_version=${feed_version}"
             echo "upstream_sha256_amd64=${upstream_sha256_amd64}"
             echo "upstream_sha256_arm64=${upstream_sha256_arm64}"
             echo "upstream_url_amd64=${upstream_url_amd64}"
@@ -511,3 +514,105 @@ jobs:
           asset_prefix: ${{ needs.detect.outputs.asset_prefix }}
           token: ${{ secrets.HOMEBREW_PAT }}
           gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+
+  # The machine-readable run record: one JSON document per app, uploaded as
+  # run-report-<app>. The API that dispatches builds reads it to decide
+  # whether a failure is worth re-dispatching; retry policy lives there, not
+  # here. always() so every completed run answers with a record: an absent
+  # record means the run died before this job could start (runner loss,
+  # cancellation), which the API treats as infrastructure.
+  report:
+    needs: [detect, build, publish, pin-cask]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.2
+      - name: Write the run record
+        env:
+          DETECT_RESULT: ${{ needs.detect.result }}
+          BUILD_RESULT: ${{ needs.build.result }}
+          PUBLISH_RESULT: ${{ needs.publish.result }}
+          PIN_CASK_RESULT: ${{ needs.pin-cask.result }}
+          SKIPPED: ${{ needs.detect.outputs.skipped }}
+          REPAIR_CASK: ${{ needs.detect.outputs.repair_cask }}
+          REASON: ${{ needs.detect.outputs.reason }}
+          RESOLVED_VERSION: ${{ needs.detect.outputs.version }}
+          FEED_VERSION: ${{ needs.detect.outputs.feed_version }}
+          APP_ID: ${{ needs.detect.outputs.app_id }}
+          REQUESTED_APP: ${{ inputs.app }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          # The first unsuccessful job in pipeline order names the stage; a
+          # cancelled job counts too, so a partially cancelled run still
+          # answers instead of leaving the API to guess from silence.
+          stage=""
+          job_result=""
+          for pair in "detect:${DETECT_RESULT}" "build:${BUILD_RESULT}" \
+                     "publish:${PUBLISH_RESULT}" "pin-cask:${PIN_CASK_RESULT}"; do
+            result="${pair#*:}"
+            if [[ "${result}" == "failure" || "${result}" == "cancelled" ]]; then
+              stage="${pair%%:*}"
+              job_result="${result}"
+              break
+            fi
+          done
+
+          # detect may have failed before loading the descriptor.
+          app="${APP_ID:-${REQUESTED_APP}}"
+          code=""
+          if [[ -n "${stage}" ]]; then
+            status="failed"
+            # Fallback verdicts until each failure site classifies itself:
+            # publish and pin failures are precise, detect and build failures
+            # are not, and UNCLASSIFIED retries under the API's global budget
+            # rather than being dropped.
+            case "${stage}" in
+              publish) code="PUBLISH_FAILED" ;;
+              pin-cask) code="PIN_CASK_FAILED" ;;
+              *) code="UNCLASSIFIED" ;;
+            esac
+            message="${stage} job ${job_result}; see the run log"
+          elif [[ "${SKIPPED}" == "true" ]]; then
+            status="skipped"
+            stage="detect"
+            message="${REASON:-already at upstream}"
+          elif [[ "${REPAIR_CASK}" == "true" ]]; then
+            status="repair-cask"
+            stage="pin-cask"
+            message="${REASON:-cask pin caught up to the published release}"
+          else
+            status="success"
+            stage="publish"
+            message="${REASON:-run completed}"
+          fi
+
+          args=(
+            report
+            --app "${app}"
+            --stage "${stage}"
+            --status "${status}"
+            --message "${message}"
+            --run-id "${RUN_ID}"
+            --resolved-version "${RESOLVED_VERSION}"
+            --feed-version "${FEED_VERSION}"
+            --output "${RUNNER_TEMP}/run-report.json"
+          )
+          if [[ -n "${code}" ]]; then
+            args+=(--code "${code}")
+          fi
+          bun packaging/bin/fbr.ts "${args[@]}"
+      - name: Upload the run record
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: run-report-${{ inputs.app }}
+          path: ${{ runner.temp }}/run-report.json
+          if-no-files-found: error
+          retention-days: 7

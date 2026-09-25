@@ -114,7 +114,7 @@ fbr report --app X --stage S --status ST --message M --run-id N
      --output F [--code C] [--resolved-version V] [--feed-version V]
      [--evidence k=v]...
                                              write the machine-readable run record the API
-                                             reads off the run's failure-report artifact
+                                             reads from the run-report artifact
 fbr cask --action read|set-version|check     read, re-pin or check casks
 fbr release-check --app X --asset-dir D      release assets vs the cask pin (true|false,
      [--tap T]                               or nothing when it could not compare)
