@@ -332,64 +332,37 @@ jobs:
           # b3sum sidecars, which come from the same release as the binary, so a
           # sidecar check would add no trust over the HTTPS download itself.
           # quick-sharun invokes it via APPIMAGETOOL with no args (it reads the
-          # APPDIR/OUT* env). Release downloads flake with transient 500s, so
-          # retry a few times.
-          attempt=1
-          max_attempts=3
-          until curl -fL --retry 5 --retry-all-errors --retry-delay 5 \
-            -o /tmp/appimagetool-uruntime \
+          # APPDIR/OUT* env). One attempt: a flaked release download is the
+          # caller's to re-dispatch, not this job's to sleep through.
+          if ! curl -fL -o /tmp/appimagetool-uruntime \
             "https://github.com/pkgforge-dev/appimagetool/releases/download/0.5.2/appimagetool-${{ matrix.appimage_arch }}-linux" \
-            && test -s /tmp/appimagetool-uruntime; do
-            if [ "${attempt}" -ge "${max_attempts}" ]; then
-              echo "::error::appimagetool download failed after ${max_attempts} attempts" >&2
-              printf '{"code":"TOOLCHAIN_DOWNLOAD","message":"appimagetool download failed after %s attempts"}\n' "${max_attempts}" > "${GITHUB_WORKSPACE}/report-code.json"
-              exit 1
-            fi
-            sleep_seconds=$((attempt * 10))
-            echo "appimagetool download attempt ${attempt}/${max_attempts} failed; retrying in ${sleep_seconds}s..." >&2
-            sleep "${sleep_seconds}"
-            attempt=$((attempt + 1))
-          done
+            || ! test -s /tmp/appimagetool-uruntime; then
+            echo "::error::appimagetool download failed" >&2
+            printf '{"code":"TOOLCHAIN_DOWNLOAD","message":"appimagetool download failed"}\n' > "${GITHUB_WORKSPACE}/report-code.json"
+            exit 1
+          fi
           chmod +x /tmp/appimagetool-uruntime
           mv /tmp/appimagetool-uruntime /opt/appimagetool-uruntime
       - name: Install Anylinux build tools
         run: |
           # quick-sharun + get-debloated-pkgs, pinned to a commit digest;
           # Renovate owns the pin (packaging/scripts/install-anylinux-tools.sh).
-          # Raw release downloads flake with transient 500s, so retry a few
-          # times (the installer retries each tool internally as well).
-          attempt=1
-          max_attempts=3
-          until "${GITHUB_WORKSPACE}/tap/packaging/scripts/install-anylinux-tools.sh"; do
-            if [ "${attempt}" -ge "${max_attempts}" ]; then
-              echo "::error::install-anylinux-tools failed after ${max_attempts} attempts" >&2
-              printf '{"code":"TOOLCHAIN_DOWNLOAD","message":"install-anylinux-tools failed after %s attempts"}\n' "${max_attempts}" > "${GITHUB_WORKSPACE}/report-code.json"
-              exit 1
-            fi
-            sleep_seconds=$((attempt * 10))
-            echo "install-anylinux-tools attempt ${attempt}/${max_attempts} failed; retrying in ${sleep_seconds}s..." >&2
-            sleep "${sleep_seconds}"
-            attempt=$((attempt + 1))
-          done
+          # One attempt; a flaked download is re-dispatched, not slept on.
+          if ! "${GITHUB_WORKSPACE}/tap/packaging/scripts/install-anylinux-tools.sh"; then
+            echo "::error::install-anylinux-tools failed" >&2
+            printf '{"code":"TOOLCHAIN_DOWNLOAD","message":"install-anylinux-tools failed"}\n' > "${GITHUB_WORKSPACE}/report-code.json"
+            exit 1
+          fi
       - name: Install debloated packages
         run: |
           # Debloated Arch packages shrink the AppImage; flags are per app.
-          # The release downloads flake with transient 500s, so retry a few
-          # times before failing (a manual re-run also clears it).
+          # One attempt; a flaked download is re-dispatched, not slept on.
           read -r -a flags <<<"${DEBLOAT_ARGS}"
-          attempt=1
-          max_attempts=3
-          until get-debloated-pkgs "${flags[@]}"; do
-            if [ "${attempt}" -ge "${max_attempts}" ]; then
-              echo "::error::get-debloated-pkgs failed after ${max_attempts} attempts" >&2
-              printf '{"code":"TOOLCHAIN_DOWNLOAD","message":"get-debloated-pkgs failed after %s attempts"}\n' "${max_attempts}" > "${GITHUB_WORKSPACE}/report-code.json"
-              exit 1
-            fi
-            sleep_seconds=$((attempt * 10))
-            echo "get-debloated-pkgs attempt ${attempt}/${max_attempts} failed; retrying in ${sleep_seconds}s..." >&2
-            sleep "${sleep_seconds}"
-            attempt=$((attempt + 1))
-          done
+          if ! get-debloated-pkgs "${flags[@]}"; then
+            echo "::error::get-debloated-pkgs failed" >&2
+            printf '{"code":"TOOLCHAIN_DOWNLOAD","message":"get-debloated-pkgs failed"}\n' > "${GITHUB_WORKSPACE}/report-code.json"
+            exit 1
+          fi
       - name: Build AppImage
         env:
           TARGET_ARCH: ${{ matrix.architecture }}
@@ -520,6 +493,22 @@ jobs:
             printf 'deleting release %s%s\n' "${TAG_PREFIX}" "${version}"
             gh release delete "${TAG_PREFIX}${version}" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag
           done <<< "${stale}"
+
+      # A half-published release blocks the next dispatch (the gate would see
+      # the tag and skip), so any failure in this job removes the release and
+      # its tag; the caller's re-dispatch then rebuilds from scratch. pin-cask
+      # runs separately and keeps its tag: a pin failure repairs cheaply.
+      - name: Remove the partial release
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_PREFIX: ${{ needs.detect.outputs.tag_prefix }}
+          PACKAGE_VERSION: ${{ needs.detect.outputs.version }}
+        run: |
+          TAG="${TAG_PREFIX}${PACKAGE_VERSION}"
+          if gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release delete "${TAG}" --repo "${GITHUB_REPOSITORY}" --yes --cleanup-tag
+          fi
 
   # Covers both gate outcomes: a fresh build (after publish) and a cask-only
   # repair (publish skipped). always() runs it when publish was skipped; the

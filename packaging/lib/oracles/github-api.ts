@@ -3,7 +3,7 @@
 // release-listing helpers.
 
 import { assertSingleLine, fail, isRecord } from "../core/guards.ts";
-import { fetchWithRetry } from "../core/http.ts";
+import { fetchOnce } from "../core/http.ts";
 import { GITHUB_API_REPOSITORY } from "../core/patterns.ts";
 
 export const GITHUB_API_PREFIX = "https://api.github.com/repos/";
@@ -60,7 +60,7 @@ export async function githubApiFetch(url: string, token: string): Promise<unknow
     Accept: "application/vnd.github+json",
   };
   if (token !== "") headers["Authorization"] = `Bearer ${assertSingleLine(token, "token")}`;
-  const response = await fetchWithRetry(url, { headers, redirect: "error", timeoutMs: 30000 });
+  const response = await fetchOnce(url, { headers, redirect: "error", timeoutMs: 30000 });
   if (!response.ok) {
     throw new Error(`GitHub API request failed (${response.status}) for ${url}`);
   }

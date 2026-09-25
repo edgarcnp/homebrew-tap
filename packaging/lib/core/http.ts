@@ -1,11 +1,10 @@
-// Network layer: bounded downloads with retry/backoff, capped streaming reads,
-// hashing helpers and atomic writes.
+// Network layer: single-attempt fetch with a timeout guard, capped streaming
+// reads, hashing helpers and atomic writes.
 
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 
 export const MAX_PAYLOAD_BYTES = 512 * 1024 * 1024;
-export const MAX_RETRY_DELAY_MS = 30000;
 
 export interface FetchOptions {
   headers?: Record<string, string>;
@@ -22,56 +21,18 @@ function buildInit(options: FetchOptions, signal: AbortSignal | undefined): Requ
   return init;
 }
 
-function isTimeout(error: unknown): boolean {
-  const name = error instanceof Error ? error.name : "";
-  return name === "TimeoutError" || name === "AbortError";
-}
-
-// Retries 429/5xx with backoff (honoring Retry-After, capped at 30s) and
-// returns the final attempt's response, so callers keep their one
-// `response.ok` failure check. A timeout throws immediately; other network
-// errors retry.
-export async function fetchWithRetry(
+// One attempt, deliberately: retry and backoff policy belongs to the API that
+// dispatches builds — it holds the budget, the run record and the log. A
+// timeout throws; every other outcome (429/5xx included) is returned or
+// propagated for the caller's single `response.ok` check.
+export async function fetchOnce(
   url: string | URL,
   options: FetchOptions = {},
-  retries = 3,
 ): Promise<Response> {
   const { timeoutMs } = options;
-  let lastError: unknown;
-  for (let attempt = 0; attempt < retries; attempt += 1) {
-    const signal =
-      options.signal ?? (timeoutMs !== undefined ? AbortSignal.timeout(timeoutMs) : undefined);
-    try {
-      const response = await fetch(url, buildInit(options, signal));
-      if (response.status === 429 || (response.status >= 500 && response.status < 600)) {
-        if (attempt === retries - 1) return response;
-        let delayMs = 2 ** attempt * 1000;
-        const retryAfter = response.headers.get("retry-after");
-        if (retryAfter !== null) {
-          const secs = Number(retryAfter);
-          if (Number.isFinite(secs)) {
-            delayMs = Math.max(delayMs, secs * 1000);
-          } else {
-            const dateMs = Date.parse(retryAfter);
-            if (!Number.isNaN(dateMs)) delayMs = Math.max(delayMs, dateMs - Date.now());
-          }
-        }
-        await sleep(Math.min(delayMs, MAX_RETRY_DELAY_MS));
-        continue;
-      }
-      return response;
-    } catch (error) {
-      lastError = error;
-      if (isTimeout(error)) throw error;
-      if (attempt === retries - 1) throw lastError;
-      await sleep(2 ** attempt * 1000);
-    }
-  }
-  throw lastError;
-}
-
-export function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  const signal =
+    options.signal ?? (timeoutMs !== undefined ? AbortSignal.timeout(timeoutMs) : undefined);
+  return fetch(url, buildInit(options, signal));
 }
 
 // maxBytes is a parameter so the cap is testable without allocating 512 MiB.

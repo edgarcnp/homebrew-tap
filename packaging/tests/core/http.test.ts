@@ -7,7 +7,7 @@ import { after, before, describe, it } from "node:test";
 import {
   MAX_PAYLOAD_BYTES,
   digestMatchesHex,
-  fetchWithRetry,
+  fetchOnce,
   readPayload,
   sha256Digest,
   sha256Hex,
@@ -65,34 +65,33 @@ after(async () => {
   await new Promise<void>((resolve) => server.close(() => resolve()));
 });
 
-describe("fetchWithRetry", () => {
-  it("retries a 5xx and returns the eventual success", async () => {
+describe("fetchOnce", () => {
+  it("makes a single attempt against a 5xx", async () => {
     requests.length = 0;
-    const response = await fetchWithRetry(`${baseUrl}/flaky`, {}, 3);
-    assert.equal(response.status, 200);
-    assert.equal(await response.text(), "ok");
-    assert.equal(requests.length, 2);
+    const response = await fetchOnce(`${baseUrl}/flaky`);
+    assert.equal(response.status, 500);
+    assert.equal(requests.length, 1);
   });
 
-  it("returns the final 429 response instead of throwing", async () => {
+  it("makes a single attempt against a 429", async () => {
     requests.length = 0;
-    const response = await fetchWithRetry(`${baseUrl}/throttled`, {}, 2);
+    const response = await fetchOnce(`${baseUrl}/throttled`);
     assert.equal(response.status, 429);
-    assert.equal(requests.length, 2);
+    assert.equal(requests.length, 1);
   });
 
   it("does not retry a 404", async () => {
     requests.length = 0;
-    const response = await fetchWithRetry(`${baseUrl}/missing`, {}, 3);
+    const response = await fetchOnce(`${baseUrl}/missing`);
     assert.equal(response.status, 404);
     assert.equal(requests.length, 1);
   });
 
-  it("aborts on timeout without retrying", async () => {
+  it("aborts on timeout", async () => {
     requests.length = 0;
     delayMs = 300;
     try {
-      await assert.rejects(fetchWithRetry(`${baseUrl}/empty`, { timeoutMs: 30 }, 3), /abort|timeout/i);
+      await assert.rejects(fetchOnce(`${baseUrl}/empty`, { timeoutMs: 30 }), /abort|timeout/i);
       assert.equal(requests.length, 1);
     } finally {
       delayMs = 0;
@@ -102,7 +101,7 @@ describe("fetchWithRetry", () => {
 
 describe("readPayload", () => {
   it("reads a small body", async () => {
-    const response = await fetchWithRetry(`${baseUrl}/small`);
+    const response = await fetchOnce(`${baseUrl}/small`);
     assert.equal((await readPayload(response)).toString(), "payload");
   });
 

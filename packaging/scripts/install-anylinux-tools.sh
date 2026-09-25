@@ -30,19 +30,11 @@ for name in "${TOOLS[@]}"
 do
   dest="${tmp_dir}/${name}"
   info "Downloading ${name} from pinned commit ${PINNED_COMMIT}"
-  attempt=1
-  max_attempts=3
-  until curl -fL --retry 5 --retry-all-errors --retry-delay 5 -o "${dest}" "${BASE_URL}/${name}.sh" &&
-    test -s "${dest}"; do
-    if [[ "${attempt}" -ge "${max_attempts}" ]]
-    then
-      error "Failed to download ${name} after ${max_attempts} attempts"
-    fi
-    sleep_seconds=$((attempt * 10))
-    info "Download of ${name} attempt ${attempt}/${max_attempts} failed; retrying in ${sleep_seconds}s..."
-    sleep "${sleep_seconds}"
-    attempt=$((attempt + 1))
-  done
+  # Single attempt: retries belong to the caller that re-dispatches CI runs.
+  curl -fL -o "${dest}" "${BASE_URL}/${name}.sh" ||
+    error "Failed to download ${name}"
+  test -s "${dest}" ||
+    error "Downloaded ${name} is empty"
   chmod 0755 -- "${dest}"
   mv -- "${dest}" "${ANYLINUX_TOOLS_DIR}/${name}"
   info "Installed ${ANYLINUX_TOOLS_DIR}/${name}"

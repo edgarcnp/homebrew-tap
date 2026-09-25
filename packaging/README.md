@@ -249,7 +249,7 @@ on 6.x and `@types/bun` on the CI's Bun minor, both via `renovate.json` rules.
 
 `bun test` runs the unit suite (Bun's runner over `node:test`; no test
 dependencies): dpkg ordering, deb822/InRelease parsing and freshness, HTTP
-retry/cap/atomic write, guards and metadata validation, descriptor validation,
+timeout/cap/atomic write, guards and metadata validation, descriptor validation,
 cask read/update/consistency, the gate table, updater neutralization, desktop
 rendering, run records, and the oracle parsers.
 

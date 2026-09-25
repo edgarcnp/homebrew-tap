@@ -13,7 +13,7 @@ import {
   fail,
   isRecord,
 } from "../core/guards.ts";
-import { MAX_PAYLOAD_BYTES, fetchWithRetry, readPayload } from "../core/http.ts";
+import { MAX_PAYLOAD_BYTES, fetchOnce, readPayload } from "../core/http.ts";
 import { makeMetadata, writeMetadata } from "../core/metadata.ts";
 import { DEB_VERSION } from "../core/patterns.ts";
 import { substitutePlaceholders } from "../core/template.ts";
@@ -91,7 +91,7 @@ export function selectManifestAsset(
 // Shared with the provider-specific manifest oracles under custom/: fetch
 // and parse a pinned JSON manifest with the same size cap.
 export async function fetchManifest(repository: string): Promise<unknown> {
-  const response = await fetchWithRetry(repository, { redirect: "follow", timeoutMs: 30000 });
+  const response = await fetchOnce(repository, { redirect: "follow", timeoutMs: 30000 });
   if (!response.ok) {
     throw new Error(`Update manifest fetch failed (${response.status}) for ${repository}`);
   }

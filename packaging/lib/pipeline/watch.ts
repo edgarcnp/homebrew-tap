@@ -8,7 +8,7 @@
 // on it, so the run record carries both versions for the caller to watch.
 
 import { assertHttpsUrl, fail, isRecord } from "../core/guards.ts";
-import { fetchWithRetry, readPayload } from "../core/http.ts";
+import { fetchOnce, readPayload } from "../core/http.ts";
 import { DEB_VERSION } from "../core/patterns.ts";
 import type { WatchConfig } from "../core/types.ts";
 import { compareDebVersions, parseDebVersion } from "../core/version.ts";
@@ -104,7 +104,7 @@ export function selectFeedVersion(watch: WatchConfig, body: string): string | nu
 // fatal (the workflow treats the cross-check as advisory and warns instead).
 export async function fetchFeedVersion(watch: WatchConfig): Promise<string | null> {
   const url = assertHttpsUrl(watch.feedUrl, "release feed");
-  const response = await fetchWithRetry(url, { redirect: "follow", timeoutMs: 30000 });
+  const response = await fetchOnce(url, { redirect: "follow", timeoutMs: 30000 });
   if (!response.ok) {
     throw new Error(`Release feed fetch failed (${response.status}) for ${url}`);
   }

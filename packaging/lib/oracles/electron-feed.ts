@@ -9,7 +9,7 @@ import {
   assertPositiveSize,
   fail,
 } from "../core/guards.ts";
-import { MAX_PAYLOAD_BYTES, fetchWithRetry } from "../core/http.ts";
+import { MAX_PAYLOAD_BYTES, fetchOnce } from "../core/http.ts";
 import { makeMetadata, writeMetadata } from "../core/metadata.ts";
 import { SAFE_REFERENCE } from "../core/patterns.ts";
 import { substitutePlaceholders } from "../core/template.ts";
@@ -232,7 +232,7 @@ export async function resolveWithElectronFeed(
 
   // Redirect only: the Location header carries the exact release tag.
   const feedUrl = `${repository}/${layout.feedDir}/${layout.yml}`;
-  const probe = await fetchWithRetry(feedUrl, { redirect: "manual", timeoutMs: 30000 });
+  const probe = await fetchOnce(feedUrl, { redirect: "manual", timeoutMs: 30000 });
   const initialHost = new URL(feedUrl).hostname;
   const repositoryHost = new URL(repository).hostname;
   if (initialHost !== repositoryHost) {

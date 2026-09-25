@@ -1,11 +1,11 @@
-// The one download path every oracle shares: fetch with retry, enforce the host
-// allow-list and size cap, verify the digest(s), write atomically.
+// The one download path every oracle shares: single-attempt fetch, enforce the
+// host allow-list and size cap, verify the digest(s), write atomically.
 
 import { assertHostAllowed } from "../core/guards.ts";
 import {
   MAX_PAYLOAD_BYTES,
   digestMatchesHex,
-  fetchWithRetry,
+  fetchOnce,
   readPayload,
   sha256Digest,
   sha512Base64,
@@ -46,7 +46,7 @@ export async function fetchVerified(
   options: FetchVerifiedOptions,
 ): Promise<FetchedPayload> {
   const maxBytes = options.maxBytes ?? MAX_PAYLOAD_BYTES;
-  const response = await fetchWithRetry(url, {
+  const response = await fetchOnce(url, {
     redirect: options.redirect ?? "follow",
     timeoutMs: options.timeoutMs ?? 60000,
   });
