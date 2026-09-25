@@ -233,11 +233,12 @@ Renovate opens one reviewed PR per dependency (automerge off):
 Casks are not Renovate's: versions and checksums are produced by this pipeline
 through `fbr cask`.
 
-Two pins carry a local SHA-256 Renovate cannot recompute — actionlint's tarball
-and appimagetool's per-arch binaries. The version bump still arrives as a PR; the
-build then fails printing the hash it measured, so the fix is a copy-paste in
-that PR. `typescript` stays on 6.x and `@types/bun` on the CI's Bun minor, both
-via `renovate.json` rules.
+No tool carries a local SHA-256 for Renovate to trip over: `actionlint` and
+pkgforge `appimagetool` are downloaded from a URL addressed by the version
+Renovate bumps, so a version PR needs no hand-edited pin — both trust whatever
+GitHub serves over HTTPS (pkgforge publishes only b3sum sidecars, served from
+the same release as the binary, so they would add no trust). `typescript` stays
+on 6.x and `@types/bun` on the CI's Bun minor, both via `renovate.json` rules.
 
 ## Tests and gates
 

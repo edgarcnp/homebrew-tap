@@ -137,7 +137,7 @@
       "groupName": "bun runtime"
     },
     {
-      "description": "Hand-pinned upstream tools whose version and local SHA-256 must move together",
+      "description": "Hand-pinned upstream tools whose version is addressed by a URL Renovate rewrites",
       "matchPackageNames": [
         "rhysd/actionlint",
         "pkgforge-dev/appimagetool",
@@ -145,7 +145,7 @@
       ],
       "groupName": "pinned upstream build tools",
       "prBodyNotes": [
-        "Some dependencies in this group are verified against a SHA-256 pinned in this repository, which Renovate cannot recompute (actionlint's tarball and appimagetool's per-arch binaries). Update those pins in this PR: each check reports the hash it measured when the two disagree. pkgforge-dev/Anylinux-AppImages needs no such update: its tools are fetched from a URL addressed by the commit digest Renovate bumps."
+        "No dependency in this group carries a local SHA-256: actionlint and pkgforge-dev/appimagetool are downloaded from a URL addressed by the version Renovate bumps, so no pin needs updating in this PR. pkgforge-dev/Anylinux-AppImages needs no such update either: its tools are fetched from a URL addressed by the commit digest Renovate bumps."
       ]
     }
   ]

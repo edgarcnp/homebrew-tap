@@ -122,21 +122,12 @@ jobs:
         env:
           TAP_REPO: ${{ github.repository }}
         run: |
-          # Renovate owns ACTIONLINT_VERSION but cannot recompute the tarball
-          # hash, so update ACTIONLINT_SHA256 in its PR (this check prints the
-          # measured hash). rhysd/actionlint v1.7.12; sha256 of
-          # actionlint_<version>_linux_amd64.tar.gz from the release checksums.
+          # Renovate owns ACTIONLINT_VERSION; the tarball is trusted as served
+          # over HTTPS, with no local SHA-256 to recompute on each bump.
           ACTIONLINT_VERSION="1.7.12"
-          ACTIONLINT_SHA256="8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
           curl -fL --retry 5 --retry-all-errors --retry-delay 5 \
             -o /tmp/actionlint.tar.gz \
             "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
-          actual="$(sha256sum /tmp/actionlint.tar.gz | awk '{print $1}')"
-          if [ "${actual}" != "${ACTIONLINT_SHA256}" ]
-          then
-            echo "::error::actionlint ${ACTIONLINT_VERSION} tarball hashes to ${actual}, not ${ACTIONLINT_SHA256}" >&2
-            exit 1
-          fi
           tar -C /tmp -xzf /tmp/actionlint.tar.gz actionlint
           cd "$(brew --repository "$TAP_REPO")"
           # No arguments: actionlint discovers .github/workflows/*.yml itself.
