@@ -86,6 +86,19 @@
       ],
       "depNameTemplate": "ghcr.io/homebrew/brew",
       "datasourceTemplate": "docker"
+    },
+    {
+      "description": "Versioned runner labels assembled into the AppImage build matrix by jq, where runs-on: reads an expression the github-actions manager ignores",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/build-appimage\\.yml$/"
+      ],
+      "matchStrings": [
+        "runner: \"ubuntu-(?<currentValue>[0-9]+(?:\\.[0-9]+)+(?:-arm)?)\""
+      ],
+      "datasourceTemplate": "github-runners",
+      "depNameTemplate": "ubuntu runner",
+      "packageNameTemplate": "ubuntu"
     }
   ],
   "packageRules": [

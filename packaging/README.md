@@ -224,8 +224,8 @@ Renovate opens one reviewed PR per dependency (automerge off):
 | --- | --- | --- |
 | `typescript`, `@types/bun` | `package.json` | npm + bun (exact pins, no `^`) |
 | GitHub Actions | workflow `uses:` | github-actions (SHA re-pinned) |
-| Container images | workflow `container:` | docker |
-| Runner labels | `runs-on:` | github-runner |
+| Container images | workflow `container:`, including the nested matrix image | docker (regex for the matrix) |
+| Runner labels | `runs-on:`, and the labels the build matrix bakes in | github-runners (regex for the matrix) |
 | Bun version | `bun-version:` | uses-with |
 | actionlint, pkgforge `appimagetool` | workflows | regex custom managers |
 | `quick-sharun`, `get-debloated-pkgs` | `install-anylinux-tools.sh` | git-refs custom manager |
