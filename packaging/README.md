@@ -20,7 +20,7 @@ packaging/
   lib/core/                primitives: paths, types, guards, patterns, version,
                            architecture, template, http, deb822, metadata
   lib/pipeline/            descriptor-driven steps: descriptor, cask, gate, watch,
-                           release, neutralize, render
+                           release, neutralize, render, report
   lib/oracles/             one module per upstream source kind; custom/ holds
                            provider-specific oracles (e.g. avakot)
   lib/shell/               the bash pipeline
@@ -110,6 +110,11 @@ fbr gate --app X --upstream-version V [--release-exists]
 fbr feed-hold --app X --upstream-version V [--tap T]
                                              feed_version= and hold=: whether the run should
                                              wait for the oracle to catch the release feed
+fbr report --app X --stage S --status ST --message M --run-id N
+     --output F [--code C] [--resolved-version V] [--feed-version V]
+     [--evidence k=v]...
+                                             write the machine-readable run record the API
+                                             reads off the run's failure-report artifact
 fbr cask --action read|set-version|check     read, re-pin or check casks
 fbr release-check --app X --asset-dir D      release assets vs the cask pin (true|false,
      [--tap T]                               or nothing when it could not compare)
@@ -246,7 +251,7 @@ on 6.x and `@types/bun` on the CI's Bun minor, both via `renovate.json` rules.
 dependencies): dpkg ordering, deb822/InRelease parsing and freshness, HTTP
 retry/cap/atomic write, guards and metadata validation, descriptor validation,
 cask read/update/consistency, the gate table, updater neutralization, desktop
-rendering, and the oracle parsers.
+rendering, run records, and the oracle parsers.
 
 `bun run typecheck` runs `tsc --noEmit` (strict). `scripts/check-style.sh` runs
 the full local gate — shellcheck, typecheck, tests, cask check, brew

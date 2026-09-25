@@ -8,6 +8,16 @@ import { APPIMAGE_ARCH, resolveArchitecture } from "./core/architecture.ts";
 import { checkCask, readCaskFile, writeCask } from "./pipeline/cask.ts";
 import { descriptorLines, listApps, loadDescriptor, resolveApp } from "./pipeline/descriptor.ts";
 import { planGate } from "./pipeline/gate.ts";
+import {
+  buildReport,
+  FAILURE_CODES,
+  REPORT_STAGES,
+  REPORT_STATUSES,
+  writeReport,
+  type FailureCode,
+  type ReportStage,
+  type ReportStatus,
+} from "./pipeline/report.ts";
 import { fetchFeedVersion, planHold } from "./pipeline/watch.ts";
 import { readMetadataField } from "./core/metadata.ts";
 import {
@@ -354,6 +364,85 @@ const COMMANDS: Command[] = [
       });
       // Two KEY=VALUE lines; the workflow parses them out of stdout.
       process.stdout.write(`feed_version=${feedVersion ?? ""}\nhold=${hold}\n`);
+      return 0;
+    },
+  },
+  {
+    name: "report",
+    summary:
+      "Write the machine-readable run record (--app, --stage, --status, --message, --run-id, --output, [--code], [--resolved-version], [--feed-version], [--evidence k=v]...)",
+    options: {
+      app: APP,
+      stage: { type: "string" },
+      status: { type: "string" },
+      code: { type: "string" },
+      message: { type: "string" },
+      "run-id": { type: "string" },
+      "resolved-version": { type: "string" },
+      "feed-version": { type: "string" },
+      evidence: { type: "string", multiple: true },
+      output: { type: "string" },
+    },
+    run: (flags) => {
+      // Validated here as usage errors: a bad record is a caller bug, and the
+      // API must never receive a document this repository could not classify.
+      const stage = flags.str("stage");
+      if (!(REPORT_STAGES as readonly string[]).includes(stage)) {
+        throw new UsageError(`--stage must be one of ${REPORT_STAGES.join(", ")}`);
+      }
+      const status = flags.str("status");
+      if (!(REPORT_STATUSES as readonly string[]).includes(status)) {
+        throw new UsageError(`--status must be one of ${REPORT_STATUSES.join(", ")}`);
+      }
+      const code = flags.optStr("code");
+      if (code !== undefined && !Object.hasOwn(FAILURE_CODES, code)) {
+        throw new UsageError(`--code must be one of ${Object.keys(FAILURE_CODES).join(", ")}`);
+      }
+      if (status === "failed" && code === undefined) {
+        throw new UsageError("--status failed needs --code");
+      }
+      if (status !== "failed" && code !== undefined) {
+        throw new UsageError(`--status ${status} carries no --code`);
+      }
+      const rawRunId = flags.str("run-id");
+      const runId = Number(rawRunId);
+      if (!Number.isSafeInteger(runId) || runId <= 0) {
+        throw new UsageError(`--run-id must be a positive run number, got "${rawRunId}"`);
+      }
+      // An empty value means "unknown", which the record stores as null (an
+      // app with no watch feed, or a feed that could not be read).
+      const version = (value: string | undefined): string | null =>
+        value === undefined || value === "" ? null : value;
+
+      const evidence: Record<string, string> = {};
+      for (const spec of flags.strList("evidence")) {
+        const separator = spec.indexOf("=");
+        if (separator <= 0) throw new UsageError(`--evidence must be key=value, got "${spec}"`);
+        const key = spec.slice(0, separator);
+        const value = spec.slice(separator + 1);
+        if (!/^[a-z][a-z0-9_]*$/.test(key)) {
+          throw new UsageError(`--evidence key must be snake_case, got "${key}"`);
+        }
+        if (/[\r\n\u0000]/.test(value)) {
+          throw new UsageError(`--evidence value for ${key} must be a single line`);
+        }
+        if (Object.hasOwn(evidence, key)) throw new UsageError(`Duplicate --evidence key ${key}`);
+        evidence[key] = value;
+      }
+
+      const output = flags.str("output");
+      const report = buildReport({
+        app: flags.str("app"),
+        runId,
+        status: status as ReportStatus,
+        stage: stage as ReportStage,
+        code: code as FailureCode | undefined,
+        message: flags.str("message"),
+        resolvedVersion: version(flags.optStr("resolved-version")),
+        feedVersion: version(flags.optStr("feed-version")),
+        evidence,
+      });
+      process.stdout.write(`${writeReport(output, report)}\n`);
       return 0;
     },
   },
