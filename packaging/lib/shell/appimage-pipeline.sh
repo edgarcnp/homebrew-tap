@@ -174,7 +174,15 @@ pipeline_stage() {
 
 # Neutralizes the app's own updater and fails when a declared endpoint survives.
 pipeline_neutralize() {
-  fbr neutralize --app "${APP_ID}" --appdir "${APPDIR}"
+  # FBR_FAILURE_OUT (set by the workflow) lets a surviving updater endpoint be
+  # classified as UPDATER_RESIDUAL instead of the generic build failure the
+  # step would otherwise record.
+  if [[ -n "${FBR_FAILURE_OUT:-}" ]]
+  then
+    fbr neutralize --app "${APP_ID}" --appdir "${APPDIR}" --failure-out "${FBR_FAILURE_OUT}"
+  else
+    fbr neutralize --app "${APP_ID}" --appdir "${APPDIR}"
+  fi
 }
 
 pipeline_render_desktop() {
@@ -401,7 +409,13 @@ Install the Anylinux tools (packaging/scripts/install-anylinux-tools.sh) or add 
   fi
 
   local output_file="${DIST_DIR}/${OUTNAME}"
-  ensure_file_exists "${output_file}" "AppImage output"
+  if [[ ! -f "${output_file}" ]]
+  then
+    # The earliest site that knows the artifact is missing; the workflow's
+    # post-build check is the backstop for a build command that exits 0.
+    classify_failure ARTIFACT_MISSING "the build produced no AppImage at ${output_file}"
+    error "Missing AppImage output: ${output_file}"
+  fi
   chmod 0755 -- "${output_file}"
   smoke_test_appimage "${output_file}"
   info "Built AppImage: ${output_file}"

@@ -60,9 +60,53 @@ jobs:
             # ids; the two are the same string (the descriptor requires
             # id === cask), so resolve-app is one lookup and fails loudly when
             # the name matches no app.
-            resolved="$(bun packaging/bin/fbr.ts resolve-app --name "${REQUESTED}")"
+            resolved_rc=0
+            resolved="$(bun packaging/bin/fbr.ts resolve-app --name "${REQUESTED}")" || resolved_rc=$?
+            if [ "${resolved_rc}" -ne 0 ]; then
+              # A namable request gets a classified fragment; the run-record
+              # step below turns it into UNKNOWN_APP, so the API fixes the name
+              # instead of re-dispatching the typo until its budget runs out. An
+              # unnamable one (not a safe app id) stays unclassified on purpose.
+              if [[ "${REQUESTED}" =~ ^[a-z0-9][a-z0-9-]*$ ]]; then
+                printf '{"code":"UNKNOWN_APP","message":"no app matches %s; see the run log"}\n' "${REQUESTED}" > report-code.json
+              fi
+              exit "${resolved_rc}"
+            fi
             echo "apps=$(jq -c --arg app "${resolved}" '[ $app ]' <<<"${all}")" >> "${GITHUB_OUTPUT}"
           fi
+
+      # A planning failure is a caller-side config error, not infrastructure, so
+      # it answers with the same run record the build jobs write. The record is
+      # best-effort: an unsafe token cannot be named in a record, and fbr
+      # refuses rather than writing one the API could not attribute.
+      - name: Write the run record
+        id: plan_report
+        if: failure()
+        continue-on-error: true
+        env:
+          REQUESTED: ${{ inputs.app }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          code="$(jq -r '.code // empty' report-code.json 2>/dev/null || true)"
+          message="$(jq -r '.message // empty' report-code.json 2>/dev/null || true)"
+          if bun packaging/bin/fbr.ts report \
+            --app "${REQUESTED}" \
+            --stage plan \
+            --status failed \
+            --code "${code:-UNCLASSIFIED}" \
+            --message "${message:-the build plan failed; see the run log}" \
+            --run-id "${RUN_ID}" \
+            --output "${RUNNER_TEMP}/run-report.json"; then
+            echo "wrote=true" >> "${GITHUB_OUTPUT}"
+          fi
+      - name: Upload the run record
+        if: steps.plan_report.outputs.wrote == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: run-report-${{ inputs.app }}
+          path: ${{ runner.temp }}/run-report.json
+          if-no-files-found: error
+          retention-days: 7
 
   build:
     needs: plan

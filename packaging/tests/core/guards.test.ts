@@ -5,6 +5,7 @@ import * as path from "node:path";
 import { describe, it } from "node:test";
 import {
   GITHUB_ASSET_HOSTS,
+  assertHostAllowed,
   assertHttpsUrl,
   assertInside,
   assertMatches,
@@ -13,6 +14,7 @@ import {
   assertSha256Hex,
   assertSingleLine,
 } from "../../lib/core/guards.ts";
+import { GuardViolationError } from "../../lib/core/errors.ts";
 import { assertMetadata, METADATA_KEYS, metadataUrl, readMetadataField, writeMetadata } from "../../lib/core/metadata.ts";
 import type { Metadata } from "../../lib/core/types.ts";
 
@@ -61,6 +63,19 @@ describe("guards", () => {
   it("shares one GitHub asset host list", () => {
     assert.ok(GITHUB_ASSET_HOSTS.includes("github-releases.githubusercontent.com"));
     assert.ok(GITHUB_ASSET_HOSTS.includes("release-assets.githubusercontent.com"));
+  });
+
+  it("classifies an off-allow-list host as a permanent guard violation", () => {
+    const url = new URL("https://evil.example/asset");
+    assert.throws(
+      () => assertHostAllowed(url, GITHUB_ASSET_HOSTS, "download"),
+      (error: unknown) => {
+        assert.ok(error instanceof GuardViolationError);
+        assert.match(error.message, /Unexpected download host \(evil\.example\)/);
+        return true;
+      },
+    );
+    assert.doesNotThrow(() => assertHostAllowed(url, ["evil.example"], "download"));
   });
 
   it("validates sizes and digests", () => {

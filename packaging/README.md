@@ -102,17 +102,19 @@ fbr resolve-app --name X                     app name -> app id
 fbr descriptor --app X [--field a.b]         validated descriptor (or one field)
 fbr descriptor-env --app X [--format env|output]
                                              KEY=VALUE lines for $GITHUB_ENV/$GITHUB_OUTPUT
-fbr resolve --app X --arch A ...             resolve upstream metadata
+fbr resolve --app X --arch A ... [--failure-out F]
+                                             resolve upstream metadata; a classified
+                                             failure writes its verdict to F
 fbr metadata --file F --field version|sha256|url|path
 fbr gate --app X --upstream-version V [--release-exists]
      [--release-matches-cask true|false]     cask gate decision; omit the match flag when
                                              the asset comparison could not run
-fbr feed-hold --app X --upstream-version V [--tap T]
-                                             feed_version= and hold=: the feed is ahead of
-                                             the version resolve just returned (advisory)
+fbr feed-version --app X [--tap T]           newest version the release feed advertises,
+                                             as feed_version= (advisory: the API compares
+                                             it against resolved_version and cask_version)
 fbr report --app X --stage S --status ST --message M --run-id N
-     --output F [--code C] [--resolved-version V] [--feed-version V]
-     [--evidence k=v]...
+     --output F [--code C] [--resolved-version V] [--cask-version V]
+     [--feed-version V] [--evidence k=v]...
                                              write the machine-readable run record the API
                                              reads from the run-report artifact
 fbr cask --action read|set-version|check     read, re-pin or check casks
@@ -121,7 +123,9 @@ fbr release-check --app X --asset-dir D      release assets vs the cask pin (tru
 fbr release-prune --prefix P --keep N TAGS   stale release versions to prune, oldest first
 fbr release-notes --app X --asset-dir D      release-notes markdown
      [--upstream arch=SHA=URL]... [--output F]
-fbr neutralize --app X --appdir D            disable the in-AppDir updater
+fbr neutralize --app X --appdir D [--failure-out F]
+                                             disable the in-AppDir updater; a surviving
+                                             endpoint is classified as UPDATER_RESIDUAL
 fbr finalize --app X --appdir D              write .env and install the hook
 fbr render-desktop --app X --version V --appdir D
 fbr arch --arch S                            arch spelling -> "<deb-arch> <appimage-arch>"
@@ -130,7 +134,34 @@ fbr version-compare --sort A B [C ...]       dpkg-order a list ascending, one pe
 ```
 
 Every command declares its flags: an unknown or duplicate flag is a usage error
-(exit 2), never silently ignored.
+(exit 2), never silently ignored. A classified failure exits 3 (upstream
+unavailable), 4 (guard violation), 5 (checksum mismatch) or 6 (updater
+residual) and, when the caller passed `--failure-out`, leaves the run-record
+fragment there. Every other failure exits 1, which the record reports as
+UNCLASSIFIED.
+
+## The run record
+
+Each build answers with one JSON document per app, uploaded as the
+`run-report-<app>` artifact (`schema: 1`, written by `fbr report`). Retry policy
+lives in the API that dispatches builds, so the record classifies rather than
+retries:
+
+- `status`/`stage`/`code` — what happened, where, and why. `code` carries its
+  own verdict (`class`, `retryable`, `retry_after_seconds`), so a reader needs
+  no table from this repository.
+- `evidence` — what the transport said, e.g. `http_status`,
+  `retry_after_seconds`, `reason`, `rate_limited` on a transient failure.
+- `resolved_version` / `cask_version` / `feed_version` — the three versions a
+  caller needs to judge a *skip*: re-dispatch only when the feed is newer than
+  both the resolved version and the cask pin, which is the signature of a skip
+  that raced the feed's own publish.
+
+A failure site writes a fragment (`{"code","message","stage"?,"evidence"?}`)
+before exiting; the report job uploads the fragments and prefers the site's
+verdict over its job-level fallback. An absent record means the run died before
+the report job could start (runner loss, cancellation), which is
+infrastructure, not a verdict.
 
 ## Verification model
 

@@ -5,20 +5,28 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { parseArgs, type ParseArgsConfig } from "node:util";
 import { APPIMAGE_ARCH, resolveArchitecture } from "./core/architecture.ts";
+import {
+  ChecksumMismatchError,
+  GuardViolationError,
+  UpdaterResidualError,
+  UpstreamUnavailableError,
+} from "./core/errors.ts";
 import { checkCask, readCaskFile, writeCask } from "./pipeline/cask.ts";
 import { descriptorLines, listApps, loadDescriptor, resolveApp } from "./pipeline/descriptor.ts";
 import { planGate } from "./pipeline/gate.ts";
 import {
   buildReport,
+  EVIDENCE_KEY_PATTERN,
   FAILURE_CODES,
   REPORT_STAGES,
   REPORT_STATUSES,
+  writeFailureFragment,
   writeReport,
   type FailureCode,
   type ReportStage,
   type ReportStatus,
 } from "./pipeline/report.ts";
-import { fetchFeedVersion, planHold } from "./pipeline/watch.ts";
+import { fetchFeedVersion } from "./pipeline/watch.ts";
 import { readMetadataField } from "./core/metadata.ts";
 import {
   compareReleasedAssets,
@@ -277,13 +285,14 @@ const COMMANDS: Command[] = [
   },
   {
     name: "resolve",
-    summary: `Resolve upstream metadata (--app, --arch <${ARCHITECTURES.join("|")}>, --output-dir, --metadata, [--metadata-only])`,
+    summary: `Resolve upstream metadata (--app, --arch <${ARCHITECTURES.join("|")}>, --output-dir, --metadata, [--metadata-only], [--failure-out F])`,
     options: {
       app: APP,
       arch: { type: "string" },
       "output-dir": { type: "string" },
       metadata: { type: "string" },
       "metadata-only": { type: "boolean" },
+      "failure-out": { type: "string" },
     },
     run: async (flags) => {
       const descriptor = descriptorFor(flags);
@@ -345,32 +354,26 @@ const COMMANDS: Command[] = [
     },
   },
   {
-    name: "feed-hold",
+    name: "feed-version",
     summary:
-      "Should the run wait for the oracle to catch the release feed? (--app, --upstream-version, [--tap]); prints feed_version= and hold=",
+      "Newest version the release feed advertises (--app, [--tap]); prints feed_version=. Advisory: the caller compares it against resolved_version and cask_version",
     options: {
       app: APP,
       tap: TAP,
-      "upstream-version": { type: "string" },
     },
     run: async (flags) => {
       const descriptor = descriptorFor(flags);
       const feedVersion =
         descriptor.watch === undefined ? null : await fetchFeedVersion(descriptor.watch);
-      const hold = planHold({
-        caskVersion: readCaskFile(caskFileFor(flags, descriptor)).version,
-        upstreamVersion: flags.str("upstream-version"),
-        feedVersion,
-      });
-      // Two KEY=VALUE lines; the workflow parses them out of stdout.
-      process.stdout.write(`feed_version=${feedVersion ?? ""}\nhold=${hold}\n`);
+      // One KEY=VALUE line; the workflow parses it out of stdout.
+      process.stdout.write(`feed_version=${feedVersion ?? ""}\n`);
       return 0;
     },
   },
   {
     name: "report",
     summary:
-      "Write the machine-readable run record (--app, --stage, --status, --message, --run-id, --output, [--code], [--resolved-version], [--feed-version], [--evidence k=v]...)",
+      "Write the machine-readable run record (--app, --stage, --status, --message, --run-id, --output, [--code], [--resolved-version], [--cask-version], [--feed-version], [--evidence k=v]...)",
     options: {
       app: APP,
       stage: { type: "string" },
@@ -379,6 +382,7 @@ const COMMANDS: Command[] = [
       message: { type: "string" },
       "run-id": { type: "string" },
       "resolved-version": { type: "string" },
+      "cask-version": { type: "string" },
       "feed-version": { type: "string" },
       evidence: { type: "string", multiple: true },
       output: { type: "string" },
@@ -420,7 +424,7 @@ const COMMANDS: Command[] = [
         if (separator <= 0) throw new UsageError(`--evidence must be key=value, got "${spec}"`);
         const key = spec.slice(0, separator);
         const value = spec.slice(separator + 1);
-        if (!/^[a-z][a-z0-9_]*$/.test(key)) {
+        if (!EVIDENCE_KEY_PATTERN.test(key)) {
           throw new UsageError(`--evidence key must be snake_case, got "${key}"`);
         }
         if (/[\r\n\u0000]/.test(value)) {
@@ -439,6 +443,7 @@ const COMMANDS: Command[] = [
         code: code as FailureCode | undefined,
         message: flags.str("message"),
         resolvedVersion: version(flags.optStr("resolved-version")),
+        caskVersion: version(flags.optStr("cask-version")),
         feedVersion: version(flags.optStr("feed-version")),
         evidence,
       });
@@ -521,8 +526,8 @@ const COMMANDS: Command[] = [
   },
   {
     name: "neutralize",
-    summary: "Neutralize the in-AppDir updater (--app, --appdir)",
-    options: { app: APP, appdir: { type: "string" } },
+    summary: "Neutralize the in-AppDir updater (--app, --appdir, [--failure-out F])",
+    options: { app: APP, appdir: { type: "string" }, "failure-out": { type: "string" } },
     run: (flags) => {
       const appdir = flags.str("appdir");
       const report = neutralizeUpdater(descriptorFor(flags), appdir);
@@ -604,6 +609,34 @@ export function usage(): string {
   return `${lines.join("\n")}\n`;
 }
 
+// A classified failure is a verdict, not just an error: the CLI writes it to the
+// run-record fragment the workflow uploads (--failure-out) and exits with a code
+// that says "this one was classified", so the workflow passes it through
+// unchanged. Every other error stays exit 1 — the record reports those as
+// UNCLASSIFIED, which retries under the API's global budget.
+interface FailureVerdict {
+  readonly code: FailureCode;
+  readonly exitCode: number;
+  readonly evidence?: Record<string, string>;
+}
+
+function classifyFailure(error: unknown): FailureVerdict | undefined {
+  if (error instanceof UpstreamUnavailableError) {
+    return { code: "UPSTREAM_UNAVAILABLE", exitCode: 3, evidence: { ...error.evidence } };
+  }
+  if (error instanceof GuardViolationError) return { code: "GUARD_VIOLATION", exitCode: 4 };
+  if (error instanceof ChecksumMismatchError) return { code: "CHECKSUM_MISMATCH", exitCode: 5 };
+  if (error instanceof UpdaterResidualError) return { code: "UPDATER_RESIDUAL", exitCode: 6 };
+  return undefined;
+}
+
+// The process exit code for a failed command: usage errors keep 2, classified
+// failures use their own code (3-6), everything else is the generic 1.
+export function errorExitCode(error: unknown): number {
+  if (isUsageError(error)) return error.exitCode;
+  return classifyFailure(error)?.exitCode ?? 1;
+}
+
 export async function runCli(argv: string[]): Promise<number> {
   const [commandName, ...rest] = argv;
   if (commandName === undefined) {
@@ -631,7 +664,24 @@ export async function runCli(argv: string[]): Promise<number> {
     // duplicated or valueless flag exits 2 with the parser's explanation.
     throw new UsageError(error instanceof Error ? error.message : String(error));
   }
-  return command.run(new Flags(parsed.values as Values), [...parsed.positionals]);
+  const flags = new Flags(parsed.values as Values);
+  try {
+    // Awaited: several commands are async, so a failure arrives as a rejected
+    // promise rather than a thrown value.
+    return await command.run(flags, [...parsed.positionals]);
+  } catch (error) {
+    const verdict = classifyFailure(error);
+    const failureOut = flags.optStr("failure-out");
+    if (verdict !== undefined && failureOut !== undefined) {
+      const message = error instanceof Error ? error.message : String(error);
+      writeFailureFragment(failureOut, {
+        code: verdict.code,
+        message,
+        evidence: verdict.evidence,
+      });
+    }
+    throw error;
+  }
 }
 
 export function isUsageError(error: unknown): error is UsageError {

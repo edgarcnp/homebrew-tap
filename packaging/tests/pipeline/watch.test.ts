@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { loadDescriptor } from "../../lib/pipeline/descriptor.ts";
-import { atomEntryTitles, planHold, selectFeedVersion } from "../../lib/pipeline/watch.ts";
+import { atomEntryTitles, selectFeedVersion } from "../../lib/pipeline/watch.ts";
 import type { WatchConfig } from "../../lib/core/types.ts";
 
 // Shaped like releases.atom: the feed carries its own <title>, and entries
@@ -98,40 +98,5 @@ describe("selectFeedVersion", () => {
     // A capture big enough to carry a workflow command line is still one line.
     const injected = atom("Release notes", ["v1.0.0\n::error::boom", "v2.0.0"]);
     assert.equal(selectFeedVersion(loose, injected), "2.0.0");
-  });
-});
-
-describe("planHold", () => {
-  it("holds when the feed is ahead of the cask and resolve has not moved", () => {
-    // The 2.0.14 incident: the feed had published, the update manifest had not.
-    assert.equal(planHold({ caskVersion: "2.0.13", upstreamVersion: "2.0.13", feedVersion: "2.0.14" }), true);
-  });
-
-  it("does not hold a run that is already up to date", () => {
-    assert.equal(planHold({ caskVersion: "2.0.13", upstreamVersion: "2.0.13", feedVersion: "2.0.13" }), false);
-    assert.equal(planHold({ caskVersion: "2.0.13", upstreamVersion: "2.0.13", feedVersion: null }), false);
-    assert.equal(planHold({ caskVersion: "2.0.13", upstreamVersion: "2.0.13", feedVersion: "" }), false);
-  });
-
-  it("does not hold a run whose build is already due", () => {
-    // resolve moved past the cask: build now instead of waiting for the feed.
-    assert.equal(planHold({ caskVersion: "2.0.12", upstreamVersion: "2.0.13", feedVersion: "2.0.14" }), false);
-    assert.equal(planHold({ caskVersion: "2.0.13", upstreamVersion: "2.0.14", feedVersion: "2.0.14" }), false);
-  });
-
-  it("does not hold when the cask is ahead of the feed", () => {
-    assert.equal(planHold({ caskVersion: "2.0.14", upstreamVersion: "2.0.13", feedVersion: "2.0.14" }), false);
-  });
-
-  it("ignores a feed version that is not a cask version", () => {
-    assert.equal(planHold({ caskVersion: "2.0.13", upstreamVersion: "2.0.13", feedVersion: "nightly" }), false);
-  });
-
-  it("ignores a feed version dpkg cannot order", () => {
-    assert.equal(planHold({ caskVersion: "1.0.0", upstreamVersion: "1.0.0", feedVersion: "1.0_bad" }), false);
-  });
-
-  it("leaves a broken cask pin to the gate", () => {
-    assert.equal(planHold({ caskVersion: "", upstreamVersion: "2.0.13", feedVersion: "2.0.14" }), false);
   });
 });

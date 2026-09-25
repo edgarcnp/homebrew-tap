@@ -2,6 +2,7 @@
 // single-line rules cannot drift between callers.
 
 import * as path from "node:path";
+import { GuardViolationError } from "./errors.ts";
 import { SAFE_IDENTIFIER } from "./patterns.ts";
 
 export function fail(message: string): never {
@@ -60,9 +61,12 @@ export function assertHttpsUrl(raw: string, label: string): URL {
   return url;
 }
 
+// The host allow-list is a security guard, not a validation nicety: a hit means
+// the request resolved somewhere the descriptor never declared, which no re-run
+// would fix. Classified so the run record can say exactly that.
 export function assertHostAllowed(url: URL, allowed: readonly string[], label: string): void {
   if (!allowed.includes(url.hostname)) {
-    fail(`Unexpected ${label} host (${url.hostname})`);
+    throw new GuardViolationError(`Unexpected ${label} host (${url.hostname})`);
   }
 }
 

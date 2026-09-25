@@ -3,7 +3,7 @@
 // release-listing helpers.
 
 import { assertSingleLine, fail, isRecord } from "../core/guards.ts";
-import { fetchOnce } from "../core/http.ts";
+import { fetchOnce, httpFailure } from "../core/http.ts";
 import { GITHUB_API_REPOSITORY } from "../core/patterns.ts";
 
 export const GITHUB_API_PREFIX = "https://api.github.com/repos/";
@@ -62,7 +62,9 @@ export async function githubApiFetch(url: string, token: string): Promise<unknow
   if (token !== "") headers["Authorization"] = `Bearer ${assertSingleLine(token, "token")}`;
   const response = await fetchOnce(url, { headers, redirect: "error", timeoutMs: 30000 });
   if (!response.ok) {
-    throw new Error(`GitHub API request failed (${response.status}) for ${url}`);
+    // A rate-limited 403 or 5xx is the API being busy; a 404 or 401 is not, and
+    // must not be dressed up as something to retry.
+    throw httpFailure(response, `GitHub API request failed (${response.status}) for ${url}`);
   }
   return response.json();
 }

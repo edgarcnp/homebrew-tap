@@ -69,6 +69,20 @@ ensure_file_exists() {
   [[ -f "${path}" ]] || error "Missing ${label}: ${path}"
 }
 
+# Writes the machine-readable failure fragment the build workflow uploads with
+# its run record (FBR_FAILURE_OUT, set by the workflow). A no-op outside CI, so
+# a local build keeps failing loudly without inventing a record. The message is
+# flattened and stripped of quotes/backslashes so the fragment stays one JSON
+# line; callers pass ASCII messages without them anyway.
+classify_failure() {
+  local code="$1"
+  local message="$2"
+  [[ -n "${FBR_FAILURE_OUT:-}" ]] || return 0
+  local flat
+  flat="$(printf '%s' "${message}" | tr -d '\r\\"' | tr '\n' ' ')"
+  printf '{"code":"%s","message":"%s"}\n' "${code}" "${flat}" > "${FBR_FAILURE_OUT}"
+}
+
 normalize_package_payload_permissions() {
   local root="$1"
 
@@ -86,8 +100,16 @@ smoke_test_appimage() {
   local appimage="$1"
   local output
 
-  [[ -f "${appimage}" ]] || error "Smoke test: missing AppImage: ${appimage}"
-  [[ -x "${appimage}" ]] || error "Smoke test: AppImage is not executable: ${appimage}"
+  if [[ ! -f "${appimage}" ]]
+  then
+    classify_failure ARTIFACT_MISSING "smoke test: missing AppImage"
+    error "Smoke test: missing AppImage: ${appimage}"
+  fi
+  if [[ ! -x "${appimage}" ]]
+  then
+    classify_failure ARTIFACT_MISSING "smoke test: AppImage is not executable"
+    error "Smoke test: AppImage is not executable: ${appimage}"
+  fi
 
   [[ "${SMOKE_TIMEOUT:-20}" =~ ^[0-9]+$ ]] || SMOKE_TIMEOUT=20
   local timeout_seconds="${SMOKE_TIMEOUT:-20}"
@@ -102,6 +124,9 @@ smoke_test_appimage() {
 
   if grep -Eq 'symbol lookup error|undefined symbol|error while loading shared libraries|cannot open shared object|Cannot mount AppImage|AppRun not found|Failed to execute dwarfsextract' <<<"${output}"
   then
+    # The artifact is broken, not the runner: permanent, so the record must not
+    # invite a re-dispatch of the same build.
+    classify_failure SMOKE_FAILED "smoke test: loader errors"
     error "$(printf 'Smoke test failed: loader errors in %s\n%s' "${appimage}" "${output}")"
   fi
   info "Smoke test passed: ${appimage}"

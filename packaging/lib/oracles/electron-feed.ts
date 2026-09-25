@@ -9,7 +9,7 @@ import {
   assertPositiveSize,
   fail,
 } from "../core/guards.ts";
-import { MAX_PAYLOAD_BYTES, fetchOnce } from "../core/http.ts";
+import { MAX_PAYLOAD_BYTES, fetchOnce, httpFailure } from "../core/http.ts";
 import { makeMetadata, writeMetadata } from "../core/metadata.ts";
 import { SAFE_REFERENCE } from "../core/patterns.ts";
 import { substitutePlaceholders } from "../core/template.ts";
@@ -239,7 +239,12 @@ export async function resolveWithElectronFeed(
     fail(`Unexpected feed host (${initialHost})`);
   }
   if (probe.status !== 302) {
-    throw new Error(`Feed did not answer with a redirect (${probe.status}) for ${feedUrl}`);
+    const message = `Feed did not answer with a redirect (${probe.status}) for ${feedUrl}`;
+    // A busy or broken feed host is transient; a 200 answering directly or a 404
+    // feed is a descriptor problem, so only the former is classified.
+    throw probe.status === 429 || probe.status >= 500
+      ? httpFailure(probe, message)
+      : new Error(message);
   }
   const location = probe.headers.get("location");
   if (location === null) throw new Error(`Feed redirect has no Location header for ${feedUrl}`);

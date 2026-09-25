@@ -10,6 +10,8 @@ import {
   buildReport,
   FAILURE_CODES,
   REPORT_SCHEMA,
+  REPORT_STAGES,
+  writeFailureFragment,
   type FailureCode,
   type FailureCodeSpec,
 } from "../../lib/pipeline/report.ts";
@@ -138,6 +140,8 @@ describe("fbr report command", () => {
       "123456",
       "--resolved-version",
       "1.139.0",
+      "--cask-version",
+      "1.138.0",
       "--feed-version",
       "",
       "--evidence",
@@ -159,6 +163,9 @@ describe("fbr report command", () => {
     assert.equal(record["retryable"], true);
     assert.equal(record["retry_after_seconds"], null);
     assert.equal(record["resolved_version"], "1.139.0");
+    // The cask pin is what lets the API tell a raced publish from a cask that
+    // is already ahead; it must survive the round trip.
+    assert.equal(record["cask_version"], "1.138.0");
     // An empty flag value means "unknown", not the empty string.
     assert.equal(record["feed_version"], null);
     assert.deepEqual(record["evidence"], { http_status: "503" });
@@ -188,6 +195,8 @@ describe("fbr report command", () => {
     assert.equal(record["status"], "skipped");
     assert.equal(record["code"], undefined);
     assert.equal(record["class"], undefined);
+    // No detect output means "unknown", never a stale or empty string.
+    assert.equal(record["cask_version"], null);
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
@@ -243,26 +252,157 @@ describe("fbr report command", () => {
   });
 });
 
-describe("workflow failure sites", () => {
-  it("writes only failure codes the record contract knows", () => {
-    const workflow = fs.readFileSync(
-      path.join(REPO_ROOT, ".github", "workflows", "build-appimage.yml"),
-      "utf8",
+describe("failure fragments", () => {
+  it("writes the code, the flattened message, the stage and the evidence", () => {
+    const dir = tempDir();
+    const output = path.join(dir, "report-code.json");
+    writeFailureFragment(output, {
+      code: "UPSTREAM_UNAVAILABLE",
+      message: "line one\nline two",
+      stage: "toolchain",
+      evidence: { http_status: "503", retry_after_seconds: "30" },
+    });
+    const fragment = JSON.parse(fs.readFileSync(output, "utf8")) as Record<string, unknown>;
+    assert.equal(fragment["code"], "UPSTREAM_UNAVAILABLE");
+    assert.equal(fragment["stage"], "toolchain");
+    assert.equal(fragment["message"], "line one line two");
+    assert.deepEqual(fragment["evidence"], { http_status: "503", retry_after_seconds: "30" });
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("omits stage and evidence unless the site supplied them", () => {
+    const dir = tempDir();
+    const output = path.join(dir, "report-code.json");
+    writeFailureFragment(output, { code: "BUILD_FAILED", message: "boom" });
+    const fragment = JSON.parse(fs.readFileSync(output, "utf8")) as Record<string, unknown>;
+    assert.equal(fragment["stage"], undefined);
+    assert.equal(fragment["evidence"], undefined);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("refuses a fragment the report job could not merge", () => {
+    const output = path.join(tempDir(), "report-code.json");
+    // The report job copies evidence through `fbr report --evidence`, so a key
+    // that fails there must fail at the site, not silently cost the record.
+    assert.throws(
+      () =>
+        writeFailureFragment(output, {
+          code: "BUILD_FAILED",
+          message: "boom",
+          evidence: { "HTTP-Status": "503" },
+        }),
+      /not snake_case/,
     );
-    // Each classified site writes {"code":"...","message":"..."} to
-    // report-code.json right before exiting; the report job merges it in.
-    const pattern = /"code":"([A-Z_]+)"/g;
-    const codes: string[] = [];
-    let match: RegExpExecArray | null;
-    while ((match = pattern.exec(workflow)) !== null) {
-      const code = match[1];
-      assert.ok(code !== undefined, "failure-code pattern produced no capture");
-      codes.push(code);
+    assert.throws(
+      () =>
+        writeFailureFragment(output, {
+          code: "BUILD_FAILED",
+          message: "boom",
+          evidence: { retry_after: "30\n60" },
+        }),
+      /single line/,
+    );
+    assert.throws(
+      () =>
+        writeFailureFragment(output, {
+          code: "BUILD_FAILED",
+          message: "boom",
+          stage: "teleport" as never,
+        }),
+      /Unknown fragment stage/,
+    );
+    assert.equal(fs.existsSync(output), false);
+  });
+});
+
+describe("workflow failure sites", () => {
+  // Every file that can emit a verdict: the workflows (fragment literals,
+  // --code flags, the report job's fallback arms), the CLI's classification of
+  // typed failures, and the shell pipeline's classify_failure calls. The
+  // contract module itself and the tests are excluded: they name codes without
+  // emitting anything.
+  function emittingSources(): Array<{ file: string; text: string }> {
+    const roots = [
+      path.join(REPO_ROOT, ".github"),
+      path.join(REPO_ROOT, "packaging", "lib"),
+      path.join(REPO_ROOT, "packaging", "bin"),
+    ];
+    const files: string[] = [];
+    const visit = (dir: string): void => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          visit(full);
+          continue;
+        }
+        if (!/\.(yml|ts|sh)$/.test(entry.name)) continue;
+        if (full.endsWith(path.join("pipeline", "report.ts"))) continue;
+        files.push(full);
+      }
+    };
+    for (const root of roots) visit(root);
+    return files.map((file) => ({ file, text: fs.readFileSync(file, "utf8") }));
+  }
+
+  const sources = emittingSources();
+  const combined = sources.map((source) => source.text).join("\n");
+
+  function captured(pattern: RegExp, files = sources): string[] {
+    const found: string[] = [];
+    for (const source of files) {
+      for (const match of source.text.matchAll(pattern)) {
+        const token = match[1];
+        assert.ok(token !== undefined, `pattern ${String(pattern)} produced no capture`);
+        found.push(token);
+      }
     }
-    assert.ok(codes.length > 0, "expected classified failure sites in the workflow");
+    return found;
+  }
+
+  it("writes only failure codes and stages the record contract knows", () => {
+    // Three shapes write a code: a fragment literal, the `--code` flag, and the
+    // report job's shell case arms. A stage comes from a fragment when the
+    // failing site knows it better than the job.
+    const codes = [
+      ...captured(/"code":"([A-Z_]+)"/g),
+      ...captured(/--code\s+([A-Z_]+)(?![A-Za-z0-9_])/g),
+      ...captured(/\bcode="([A-Z_]+)"/g),
+    ];
+    assert.ok(codes.length > 0, "expected classified failure sites");
     for (const code of codes) {
-      assert.ok(code in FAILURE_CODES, `workflow writes unknown failure code ${code}`);
+      assert.ok(code in FAILURE_CODES, `writes unknown failure code ${code}`);
     }
+
+    // A site names its stage in a fragment when it knows it better than the job
+    // (a toolchain download inside a build), or in a workflow's `--stage` flag
+    // when the site is the whole job (the plan job). The flag is only read out of
+    // the workflows: the CLI's own usage strings mention it too.
+    const workflows = sources.filter((source) =>
+      source.file.startsWith(path.join(REPO_ROOT, ".github")),
+    );
+    const stages = [
+      ...captured(/"stage":"([a-z-]+)"/g),
+      ...captured(/--stage\s+([a-z][a-z-]*)(?![A-Za-z0-9_-])/g, workflows),
+    ];
+    assert.ok(stages.length > 0, "expected fragment stages");
+    for (const stage of stages) {
+      assert.ok(
+        (REPORT_STAGES as readonly string[]).includes(stage),
+        `writes unknown stage ${stage}`,
+      );
+    }
+    for (const expected of ["plan", "toolchain"] as const) {
+      assert.ok(stages.includes(expected), `no failure site reports the ${expected} stage`);
+    }
+  });
+
+  it("emits every code the contract declares, so none is a promise without a site", () => {
+    // Membership in the table is only useful to the API if something can
+    // actually produce it; a declared-but-unreachable code would silently make
+    // the API's verdict handling dead code.
+    const tokens = new Set(combined.match(/\b[A-Z][A-Z0-9_]{3,}\b/g) ?? []);
+    const missing = Object.keys(FAILURE_CODES).filter((code) => !tokens.has(code));
+    assert.deepEqual(missing, [], `failure codes nothing can emit: ${missing.join(", ")}`);
   });
 
   it("keeps app names from absorbing each other's fragment artifacts", () => {

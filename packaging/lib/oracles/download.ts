@@ -2,10 +2,12 @@
 // host allow-list and size cap, verify the digest(s), write atomically.
 
 import { assertHostAllowed } from "../core/guards.ts";
+import { ChecksumMismatchError, GuardViolationError } from "../core/errors.ts";
 import {
   MAX_PAYLOAD_BYTES,
   digestMatchesHex,
   fetchOnce,
+  httpFailure,
   readPayload,
   sha256Digest,
   sha512Base64,
@@ -51,35 +53,44 @@ export async function fetchVerified(
     timeoutMs: options.timeoutMs ?? 60000,
   });
   if (!response.ok) {
-    throw new Error(`${options.label} download failed (${response.status}) for ${url}`);
+    throw httpFailure(
+      response,
+      `${options.label} download failed (${response.status}) for ${url}`,
+    );
   }
   const finalUrl = new URL(response.url);
   if (finalUrl.protocol !== "https:") {
-    throw new Error(
+    throw new GuardViolationError(
       `${options.label} redirected to non-HTTPS URL (${finalUrl.protocol}) for ${url}`,
     );
   }
   assertHostAllowed(finalUrl, options.allowedHosts, options.hostLabel ?? "download");
   const contentLength = Number(response.headers.get("content-length") ?? 0);
   if (Number.isFinite(contentLength) && contentLength > maxBytes) {
-    throw new Error(`${options.label} too large (Content-Length ${contentLength}) for ${url}`);
+    throw new GuardViolationError(
+      `${options.label} too large (Content-Length ${contentLength}) for ${url}`,
+    );
   }
   return { bytes: await readPayload(response, maxBytes), finalUrl };
 }
 
 // Verifies against whatever the caller could pin, checking size → SHA-256 →
-// SHA-512 so the cheapest failing expectation reports first.
+// SHA-512 so the cheapest failing expectation reports first. A mismatch is
+// permanent: the record must not invite a re-dispatch that downloads the same
+// bytes again.
 export function verifyPayload(bytes: Buffer, expected: PayloadExpectation, label: string): void {
   if (expected.size !== undefined && bytes.length !== expected.size) {
-    throw new Error(`${label} size mismatch: expected ${expected.size}, got ${bytes.length}`);
+    throw new ChecksumMismatchError(
+      `${label} size mismatch: expected ${expected.size}, got ${bytes.length}`,
+    );
   }
   if (expected.sha256 !== undefined && !digestMatchesHex(expected.sha256, sha256Digest(bytes))) {
-    throw new Error(
+    throw new ChecksumMismatchError(
       `${label} SHA256 mismatch: expected ${expected.sha256}, got ${sha256Digest(bytes).toString("hex")}`,
     );
   }
   if (expected.sha512 !== undefined && sha512Base64(bytes) !== expected.sha512) {
-    throw new Error(`${label} SHA512 mismatch against the upstream update feed`);
+    throw new ChecksumMismatchError(`${label} SHA512 mismatch against the upstream update feed`);
   }
 }
 

@@ -5,6 +5,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { assertSameLength, assertSingleLine, fail } from "../core/guards.ts";
+import { UpdaterResidualError } from "../core/errors.ts";
 import { appDir } from "../core/paths.ts";
 import type { AppDescriptor, EndpointPatch } from "../core/types.ts";
 
@@ -182,7 +183,9 @@ export function neutralizeUpdater(descriptor: AppDescriptor, appDirPath: string)
     if (report.survivors.length > 0) {
       const detail = report.survivors.map((entry) => `${entry.file} (${entry.pattern})`).join(", ");
       if (severity === "error") {
-        fail(`updater neutralization incomplete: ${detail}`);
+        // The artifact still talks to its own updater: permanent, so the run
+        // record must not invite a re-dispatch.
+        throw new UpdaterResidualError(`updater neutralization incomplete: ${detail}`);
       }
       report.warnings.push(`updater neutralization incomplete: ${detail}`);
     }

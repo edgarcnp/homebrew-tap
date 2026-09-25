@@ -40,6 +40,7 @@ jobs:
       skipped: ${{ steps.resolve.outputs.skipped }}
       repair_cask: ${{ steps.resolve.outputs.repair_cask }}
       reason: ${{ steps.resolve.outputs.reason }}
+      cask_version: ${{ steps.resolve.outputs.cask_version }}
       feed_version: ${{ steps.resolve.outputs.feed_version }}
       source: ${{ steps.source.outputs.repo }}
       upstream_sha256_amd64: ${{ steps.resolve.outputs.upstream_sha256_amd64 }}
@@ -106,8 +107,9 @@ jobs:
           # their own schedules (opencode's update manifest lagged its own
           # release feed by ~1min on 2.0.14, and that run gated on the stale
           # read and skipped). Read the feed once and record what it advertises:
-          # nothing waits here -- the caller compares feed_version against
-          # resolved_version and re-dispatches a skip that raced the publish.
+          # nothing waits here -- the caller re-dispatches a skip only when the
+          # feed is newer than both the resolved version and the cask pin, which
+          # is exactly the signature of a raced publish.
           version=""
           upstream_sha256_amd64=""
           upstream_sha256_arm64=""
@@ -117,16 +119,20 @@ jobs:
             [ -n "${arch}" ] || continue
             file="upstream/metadata-${arch}.json"
             resolve_rc=0
+            # --failure-out: fbr classifies its own failure (a transient upstream
+            # outage, a guard violation, a checksum mismatch) and writes the
+            # fragment, so this loop never has to guess from an exit code.
             bun packaging/bin/fbr.ts resolve \
               --app "${APP_ID}" --arch "${arch}" --metadata-only \
-              --output-dir upstream --metadata "${file}" || resolve_rc=$?
+              --output-dir upstream --metadata "${file}" \
+              --failure-out "${GITHUB_WORKSPACE}/report-code.json" || resolve_rc=$?
             if [ "${resolve_rc}" -eq 2 ]; then
               # A usage error is our own bug: classify it so it is never retried.
               printf '{"code":"USAGE","message":"fbr resolve rejected its inputs"}\n' > "${GITHUB_WORKSPACE}/report-code.json"
               exit 2
             elif [ "${resolve_rc}" -ne 0 ]; then
-              # Not classified further: guard violations and upstream outages
-              # both land here, and the caller's bounded budget covers both.
+              # 3-6 came back with a fragment already written; anything else has
+              # no classification, and the caller's bounded budget covers it.
               exit "${resolve_rc}"
             fi
             arch_version="$(jq -r '.version' "${file}")"
@@ -161,12 +167,11 @@ jobs:
 
           feed_version=""
           feed_rc=0
-          feed_report="$(bun "${GITHUB_WORKSPACE}/tap/packaging/bin/fbr.ts" feed-hold \
-            --app "${APP_ID}" --tap "${GITHUB_WORKSPACE}/tap" \
-            --upstream-version "${version}")" || feed_rc=$?
+          feed_report="$(bun "${GITHUB_WORKSPACE}/tap/packaging/bin/fbr.ts" feed-version \
+            --app "${APP_ID}" --tap "${GITHUB_WORKSPACE}/tap")" || feed_rc=$?
           if [ "${feed_rc}" -eq 2 ]; then
             # A usage error is our own bug: fail rather than gate blind.
-            printf '{"code":"USAGE","message":"fbr feed-hold rejected its inputs"}\n' > "${GITHUB_WORKSPACE}/report-code.json"
+            printf '{"code":"USAGE","message":"fbr feed-version rejected its inputs"}\n' > "${GITHUB_WORKSPACE}/report-code.json"
             exit "${feed_rc}"
           elif [ "${feed_rc}" -ne 0 ]; then
             # The cross-check is advisory: a feed outage must not fail a run
@@ -334,11 +339,13 @@ jobs:
           # quick-sharun invokes it via APPIMAGETOOL with no args (it reads the
           # APPDIR/OUT* env). One attempt: a flaked release download is the
           # caller's to re-dispatch, not this job's to sleep through.
-          if ! curl -fL -o /tmp/appimagetool-uruntime \
-            "https://github.com/pkgforge-dev/appimagetool/releases/download/0.5.2/appimagetool-${{ matrix.appimage_arch }}-linux" \
-            || ! test -s /tmp/appimagetool-uruntime; then
-            echo "::error::appimagetool download failed" >&2
-            printf '{"code":"TOOLCHAIN_DOWNLOAD","message":"appimagetool download failed"}\n' > "${GITHUB_WORKSPACE}/report-code.json"
+          http_status="$(curl -fL -o /tmp/appimagetool-uruntime -w '%{http_code}' \
+            "https://github.com/pkgforge-dev/appimagetool/releases/download/0.5.2/appimagetool-${{ matrix.appimage_arch }}-linux" || true)"
+          if [ ! -s /tmp/appimagetool-uruntime ]; then
+            echo "::error::appimagetool download failed (HTTP ${http_status:-none})" >&2
+            # The status rides along as evidence: a 429/503 tells the API to come
+            # back later, a 404 says the pinned release is gone.
+            printf '{"code":"TOOLCHAIN_DOWNLOAD","message":"appimagetool download failed","stage":"toolchain","evidence":{"http_status":"%s"}}\n' "${http_status:-none}" > "${GITHUB_WORKSPACE}/report-code.json"
             exit 1
           fi
           chmod +x /tmp/appimagetool-uruntime
@@ -372,11 +379,27 @@ jobs:
           # brew owns updates: UPINFO="" keeps an update-info section out of the
           # artifact (quick-sharun would otherwise guess one from the repo).
           UPINFO: ""
+          # Scripts running inside this step classify themselves through the CLI
+          # (--failure-out); only a failure nobody claimed gets BUILD_FAILED.
+          FBR_FAILURE_OUT: ${{ github.workspace }}/report-code.json
         run: |
           cd source
           [ -z "${SOURCE_DIR}" ] || cd "${SOURCE_DIR}"
           if ! bash -c "${BUILD_COMMAND}"; then
-            printf '{"code":"BUILD_FAILED","message":"build command failed on %s; see the run log"}\n' "${TARGET_ARCH}" > "${GITHUB_WORKSPACE}/report-code.json"
+            # A site inside the build (an updater residual, the smoke test) has
+            # already named the failure: never overwrite a precise verdict with
+            # a generic one.
+            if [ ! -s "${FBR_FAILURE_OUT}" ]; then
+              printf '{"code":"BUILD_FAILED","message":"build command failed on %s; see the run log"}\n' "${TARGET_ARCH}" > "${FBR_FAILURE_OUT}"
+            fi
+            exit 1
+          fi
+          # The command exited 0 but the artifact the publish job downloads is
+          # missing: permanent, and the upload step below would report it as an
+          # unclassified failure.
+          appimage="${GITHUB_WORKSPACE}/source/dist/${ASSET_PREFIX}-${PACKAGE_VERSION}-${TARGET_ARCH}.AppImage"
+          if [ ! -s "${appimage}" ]; then
+            printf '{"code":"ARTIFACT_MISSING","message":"the build produced no AppImage at %s"}\n' "${appimage}" > "${FBR_FAILURE_OUT}"
             exit 1
           fi
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -506,8 +529,17 @@ jobs:
           PACKAGE_VERSION: ${{ needs.detect.outputs.version }}
         run: |
           TAG="${TAG_PREFIX}${PACKAGE_VERSION}"
+          REF="repos/${GITHUB_REPOSITORY}/git/refs/tags/${TAG}"
           if gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
             gh release delete "${TAG}" --repo "${GITHUB_REPOSITORY}" --yes --cleanup-tag
+            exit 0
+          fi
+          # A tag with no release (a half-failed --cleanup-tag above, or a tag
+          # pushed by hand) would fail every later `gh release create` with
+          # nothing left to clean up, so remove the ref too.
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" >/dev/null 2>&1; then
+            echo "removing tag ${TAG}, which has no release"
+            gh api --method DELETE "${REF}"
           fi
 
   # Covers both gate outcomes: a fresh build (after publish) and a cask-only
@@ -581,6 +613,7 @@ jobs:
           REPAIR_CASK: ${{ needs.detect.outputs.repair_cask }}
           REASON: ${{ needs.detect.outputs.reason }}
           RESOLVED_VERSION: ${{ needs.detect.outputs.version }}
+          CASK_VERSION: ${{ needs.detect.outputs.cask_version }}
           FEED_VERSION: ${{ needs.detect.outputs.feed_version }}
           APP_ID: ${{ needs.detect.outputs.app_id }}
           REQUESTED_APP: ${{ inputs.app }}
@@ -589,13 +622,13 @@ jobs:
           # The first unsuccessful job in pipeline order names the stage; a
           # cancelled job counts too, so a partially cancelled run still
           # answers instead of leaving the API to guess from silence.
-          stage=""
+          job_stage=""
           job_result=""
           for pair in "detect:${DETECT_RESULT}" "build:${BUILD_RESULT}" \
                      "publish:${PUBLISH_RESULT}" "pin-cask:${PIN_CASK_RESULT}"; do
             result="${pair#*:}"
             if [[ "${result}" == "failure" || "${result}" == "cancelled" ]]; then
-              stage="${pair%%:*}"
+              job_stage="${pair%%:*}"
               job_result="${result}"
               break
             fi
@@ -604,34 +637,45 @@ jobs:
           # detect may have failed before loading the descriptor.
           app="${APP_ID:-${REQUESTED_APP}}"
 
-          # Prefer the verdict the failing job wrote for itself over the stage
-          # fallback. Multiple parallel failures (a two-arch build that lost
-          # both races) resolve deterministically: alphabetical glob order.
+          # Prefer the verdict the failing site wrote for itself over the stage
+          # fallback: code, message, the stage it knows it failed in, and any
+          # transport-level evidence. Multiple parallel failures (a two-arch
+          # build that lost both races) resolve deterministically: alphabetical
+          # glob order.
           shopt -s nullglob
           fragments=(report-codes/*/report-code.json)
           fragment_code=""
           fragment_message=""
+          fragment_stage=""
+          fragment_evidence=()
           if (( ${#fragments[@]} > 0 )); then
             fragment_code="$(jq -r '.code // empty' "${fragments[0]}" 2>/dev/null || true)"
             fragment_message="$(jq -r '.message // empty' "${fragments[0]}" 2>/dev/null || true)"
+            fragment_stage="$(jq -r '.stage // empty' "${fragments[0]}" 2>/dev/null || true)"
+            while IFS= read -r pair; do
+              [ -n "${pair}" ] && fragment_evidence+=(--evidence "${pair}")
+            done < <(jq -r '.evidence // {} | to_entries[] | "\(.key)=\(.value)"' \
+              "${fragments[0]}" 2>/dev/null || true)
           fi
 
+          stage=""
           code=""
-          if [[ -n "${stage}" ]]; then
+          if [[ -n "${job_stage}" ]]; then
             status="failed"
+            stage="${fragment_stage:-${job_stage}}"
             if [[ -n "${fragment_code}" ]]; then
               code="${fragment_code}"
-              message="${fragment_message:-${stage} job ${job_result}; see the run log}"
+              message="${fragment_message:-${job_stage} job ${job_result}; see the run log}"
             else
               # No classified site: publish and pin failures are still precise
               # at job granularity, and everything else is UNCLASSIFIED, which
               # retries under the API's global budget rather than being dropped.
-              case "${stage}" in
+              case "${job_stage}" in
                 publish) code="PUBLISH_FAILED" ;;
                 pin-cask) code="PIN_CASK_FAILED" ;;
                 *) code="UNCLASSIFIED" ;;
               esac
-              message="${stage} job ${job_result}; see the run log"
+              message="${job_stage} job ${job_result}; see the run log"
             fi
           elif [[ "${SKIPPED}" == "true" ]]; then
             status="skipped"
@@ -655,11 +699,17 @@ jobs:
             --message "${message}"
             --run-id "${RUN_ID}"
             --resolved-version "${RESOLVED_VERSION}"
+            --cask-version "${CASK_VERSION}"
             --feed-version "${FEED_VERSION}"
             --output "${RUNNER_TEMP}/run-report.json"
           )
           if [[ -n "${code}" ]]; then
             args+=(--code "${code}")
+          fi
+          # Only a classified failure carries evidence; the CLI rejects it on
+          # any other status.
+          if [[ -n "${code}" && ${#fragment_evidence[@]} -gt 0 ]]; then
+            args+=("${fragment_evidence[@]}")
           fi
           bun packaging/bin/fbr.ts "${args[@]}"
       - name: Upload the run record

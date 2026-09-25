@@ -3,6 +3,7 @@
 
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
+import { GuardViolationError, UpstreamUnavailableError } from "./errors.ts";
 
 export const MAX_PAYLOAD_BYTES = 512 * 1024 * 1024;
 
@@ -32,7 +33,54 @@ export async function fetchOnce(
   const { timeoutMs } = options;
   const signal =
     options.signal ?? (timeoutMs !== undefined ? AbortSignal.timeout(timeoutMs) : undefined);
-  return fetch(url, buildInit(options, signal));
+  try {
+    return await fetch(url, buildInit(options, signal));
+  } catch (error) {
+    // Classified, not swallowed: a transport failure is exactly what the API's
+    // budget exists for, and the record can tell a timeout from a refused
+    // connection.
+    const detail = error instanceof Error ? error.message : String(error);
+    const name = error instanceof Error ? error.name : "";
+    const reason = name === "TimeoutError" || name === "AbortError" ? "timeout" : "network";
+    throw new UpstreamUnavailableError(`Request to ${url} failed: ${detail}`, { reason });
+  }
+}
+
+// Classifies a non-2xx response for the caller's `response.ok` check: 429, a
+// rate-limited 403 and 5xx are transient upstream failures the API may come
+// back for, carrying whatever retry hint the transport sent; every other
+// status stays a plain error, which the run record reports as UNCLASSIFIED.
+export function httpFailure(response: Response, message: string): Error {
+  const { status } = response;
+  const rateLimited =
+    status === 403 && response.headers.get("x-ratelimit-remaining") === "0";
+  if (status !== 429 && !rateLimited && status < 500) return new Error(message);
+  const evidence: Record<string, string> = { http_status: String(status) };
+  if (rateLimited) evidence["rate_limited"] = "true";
+  const retryAfter = retryAfterSeconds(response.headers);
+  if (retryAfter !== null) evidence["retry_after_seconds"] = String(retryAfter);
+  return new UpstreamUnavailableError(message, evidence);
+}
+
+// The retry hints upstreams actually send: Retry-After (seconds or an HTTP
+// date) and GitHub's x-ratelimit-reset (epoch seconds). Both normalize to whole
+// seconds from now, so the API never parses a date.
+function retryAfterSeconds(headers: Headers): number | null {
+  const header = headers.get("retry-after");
+  if (header !== null) {
+    const seconds = Number(header);
+    if (Number.isFinite(seconds) && seconds >= 0) return Math.ceil(seconds);
+    const dateMs = Date.parse(header);
+    if (!Number.isNaN(dateMs)) return Math.max(0, Math.ceil((dateMs - Date.now()) / 1000));
+  }
+  const reset = headers.get("x-ratelimit-reset");
+  if (reset !== null) {
+    const epochSeconds = Number(reset);
+    if (Number.isFinite(epochSeconds)) {
+      return Math.max(0, Math.ceil(epochSeconds - Date.now() / 1000));
+    }
+  }
+  return null;
 }
 
 // maxBytes is a parameter so the cap is testable without allocating 512 MiB.
@@ -43,7 +91,7 @@ export async function readPayload(
   if (!response.body) {
     const bytes = Buffer.from(await response.arrayBuffer());
     if (bytes.length > maxBytes) {
-      throw new Error(`Payload too large (${bytes.length} bytes) for ${response.url}`);
+      throw new GuardViolationError(`Payload too large (${bytes.length} bytes) for ${response.url}`);
     }
     return bytes;
   }
@@ -57,7 +105,9 @@ export async function readPayload(
       total += value.length;
       if (total > maxBytes) {
         await reader.cancel();
-        throw new Error(`Payload exceeds size cap (${maxBytes} bytes) for ${response.url}`);
+        throw new GuardViolationError(
+          `Payload exceeds size cap (${maxBytes} bytes) for ${response.url}`,
+        );
       }
       chunks.push(Buffer.from(value));
     }

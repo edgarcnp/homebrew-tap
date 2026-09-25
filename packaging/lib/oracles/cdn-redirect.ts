@@ -5,6 +5,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { ChecksumMismatchError, GuardViolationError } from "../core/errors.ts";
 import {
   assertHostAllowed,
   assertMatches,
@@ -41,7 +42,7 @@ export interface RedirectTarget {
 export function parseFinalUrl(finalUrl: string, redirectHosts: readonly string[]): RedirectTarget {
   const url = new URL(finalUrl);
   if (url.protocol !== "https:") {
-    fail(`Redirected to non-HTTPS URL (${url.protocol}) for ${finalUrl}`);
+    throw new GuardViolationError(`Redirected to non-HTTPS URL (${url.protocol}) for ${finalUrl}`);
   }
   assertHostAllowed(url, redirectHosts, "redirect");
   const segments = url.pathname.split("/").filter(Boolean);
@@ -109,7 +110,9 @@ export async function resolveWithCdnRedirect(
     writeFileAtomic(packagePath, bytes);
     const onDisk = sha256Digest(fs.readFileSync(packagePath));
     if (!digestMatchesHex(sha256, onDisk)) {
-      throw new Error(`Downloaded .deb SHA256 mismatch after write: got ${onDisk.toString("hex")}`);
+      throw new ChecksumMismatchError(
+        `Downloaded .deb SHA256 mismatch after write: got ${onDisk.toString("hex")}`,
+      );
     }
   }
 

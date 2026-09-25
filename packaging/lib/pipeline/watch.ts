@@ -3,16 +3,15 @@
 // source (the oracle) which version to build. The two publish on their own
 // schedules, so a run can land in the window where the feed already lists the
 // new version and the oracle still serves the old one: gating on that stale
-// read skips a build that is already due. This module reads the feed and
-// reports whether it is ahead of what resolve returned; the run does not wait
-// on it, so the run record carries both versions for the caller to watch.
+// read skips a build that is already due. This module reads the feed once and
+// reports the newest version it advertises; the run does not wait on it, and
+// the record carries both versions (plus the cask pin) for the caller to watch.
 
 import { assertHttpsUrl, fail, isRecord } from "../core/guards.ts";
 import { fetchOnce, readPayload } from "../core/http.ts";
 import { DEB_VERSION } from "../core/patterns.ts";
 import type { WatchConfig } from "../core/types.ts";
 import { compareDebVersions, parseDebVersion } from "../core/version.ts";
-import { isNewer } from "./gate.ts";
 
 // Feeds are a few hundred entries of text; the cap keeps a runaway response
 // from being read into memory whole.
@@ -110,24 +109,4 @@ export async function fetchFeedVersion(watch: WatchConfig): Promise<string | nul
   }
   const bytes = await readPayload(response, MAX_FEED_BYTES);
   return selectFeedVersion(watch, bytes.toString("utf8"));
-}
-
-export interface HoldInput {
-  caskVersion: string;
-  upstreamVersion: string;
-  // null when the app watches no feed, or the feed matched no version.
-  feedVersion: string | null;
-}
-
-// Hold only when the feed advertises a version the cask does not have yet AND
-// resolve has not moved past the cask: waiting is worth it solely when the run
-// would otherwise make no progress. So a run that is already due builds at
-// once, a run that is genuinely up to date skips at once, and only the
-// lagging-oracle window waits.
-export function planHold(input: HoldInput): boolean {
-  const { caskVersion, upstreamVersion } = input;
-  const feedVersion = comparableVersion(input.feedVersion ?? undefined);
-  if (feedVersion === null) return false;
-  if (!isNewer(caskVersion, feedVersion)) return false;
-  return !isNewer(caskVersion, upstreamVersion);
 }

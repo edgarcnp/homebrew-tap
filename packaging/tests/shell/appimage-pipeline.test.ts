@@ -15,6 +15,7 @@ import { afterEach, beforeEach, describe, it } from "node:test";
 import { REPO_ROOT } from "../../lib/core/paths.ts";
 
 const PIPELINE_LIB = path.join(REPO_ROOT, "packaging", "lib", "shell", "appimage-pipeline.sh");
+const SHELL_COMMON = path.join(REPO_ROOT, "packaging", "lib", "shell", "shell-common.sh");
 const STAGE = "pipeline_reconcile_sharun_sidecars";
 
 // Every shell stage reads the descriptor through jq (which the pipeline
@@ -450,5 +451,77 @@ describe("pipeline_collect_targets", () => {
     );
     assert.equal(status, 1);
     assert.match(stderr, /Missing quick-sharun library/);
+  });
+});
+
+// The shell half of the failure contract: a pipeline site that knows why it
+// failed hands the workflow a fragment, and a site that does not stays silent
+// so the record job's UNCLASSIFIED fallback is the only guess in play.
+describe("classify_failure", () => {
+  function classify(
+    script: string,
+    env: Record<string, string>,
+  ): { status: number | null; stdout: string; stderr: string } {
+    const result = spawnSync("bash", ["-c", script], {
+      encoding: "utf8",
+      env: { ...process.env, COMMON: SHELL_COMMON, ...env },
+    });
+    return { status: result.status, stdout: result.stdout, stderr: result.stderr };
+  }
+
+  it("writes a one-line fragment when the workflow asked for one", () => {
+    const fragment = path.join(workDir, "report-code.json");
+    const result = classify(
+      `set -Eeuo pipefail; . "$COMMON"; classify_failure SMOKE_FAILED "$(printf 'a\\n"b"')"`,
+      { FBR_FAILURE_OUT: fragment },
+    );
+    assert.equal(result.status, 0, result.stderr);
+    const parsed = JSON.parse(fs.readFileSync(fragment, "utf8")) as Record<string, unknown>;
+    assert.equal(parsed["code"], "SMOKE_FAILED");
+    // Newlines flattened and quotes dropped, so the fragment stays valid JSON
+    // for the report job's jq.
+    assert.equal(parsed["message"], "a b");
+  });
+
+  it("is a no-op outside the workflow", () => {
+    const fragment = path.join(workDir, "report-code.json");
+    const result = classify(
+      `set -Eeuo pipefail; . "$COMMON"; classify_failure SMOKE_FAILED boom; echo no-fragment`,
+      {},
+    );
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /no-fragment/);
+    assert.equal(fs.existsSync(fragment), false);
+  });
+});
+
+describe("pipeline_neutralize", () => {
+  function neutralize(env: Record<string, string>): { status: number | null; args: string } {
+    const log = path.join(workDir, "fbr-args.txt");
+    const result = spawnSync(
+      "bash",
+      [
+        "-c",
+        `set -Eeuo pipefail; . "$PIPELINE_LIB"; APP_ID=vscode; APPDIR=/tmp/appdir; fbr() { printf '%s\\n' "$*" >> "$ARGS_LOG"; }; pipeline_neutralize`,
+      ],
+      { encoding: "utf8", env: { ...process.env, PIPELINE_LIB, ARGS_LOG: log, ...env } },
+    );
+    return {
+      status: result.status,
+      args: fs.existsSync(log) ? fs.readFileSync(log, "utf8") : "",
+    };
+  }
+
+  it("hands the workflow's fragment path to fbr", () => {
+    const result = neutralize({ FBR_FAILURE_OUT: "/tmp/failure-fragment.json" });
+    assert.equal(result.status, 0);
+    assert.match(result.args, /neutralize --app vscode --appdir \/tmp\/appdir/);
+    assert.match(result.args, /--failure-out \/tmp\/failure-fragment\.json/);
+  });
+
+  it("keeps the local invocation clean when no fragment path is set", () => {
+    const result = neutralize({});
+    assert.equal(result.status, 0);
+    assert.equal(result.args.includes("--failure-out"), false);
   });
 });

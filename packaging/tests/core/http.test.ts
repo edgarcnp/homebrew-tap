@@ -4,10 +4,12 @@ import * as http from "node:http";
 import * as os from "node:os";
 import * as path from "node:path";
 import { after, before, describe, it } from "node:test";
+import { GuardViolationError, UpstreamUnavailableError } from "../../lib/core/errors.ts";
 import {
   MAX_PAYLOAD_BYTES,
   digestMatchesHex,
   fetchOnce,
+  httpFailure,
   readPayload,
   sha256Digest,
   sha256Hex,
@@ -91,11 +93,56 @@ describe("fetchOnce", () => {
     requests.length = 0;
     delayMs = 300;
     try {
-      await assert.rejects(fetchOnce(`${baseUrl}/empty`, { timeoutMs: 30 }), /abort|timeout/i);
+      await assert.rejects(fetchOnce(`${baseUrl}/empty`, { timeoutMs: 30 }), (error: unknown) => {
+        // Classified, not just thrown: the API's budget needs to know this was
+        // the transport giving up rather than a bad response.
+        assert.ok(error instanceof UpstreamUnavailableError);
+        assert.equal(error.evidence["reason"], "timeout");
+        return true;
+      });
       assert.equal(requests.length, 1);
     } finally {
       delayMs = 0;
     }
+  });
+});
+
+describe("httpFailure", () => {
+  it("classifies 429 and 5xx as transient, keeping the retry hint", () => {
+    const throttled = httpFailure(
+      new Response("", { status: 429, headers: { "retry-after": "30" } }),
+      "boom (429)",
+    );
+    assert.ok(throttled instanceof UpstreamUnavailableError);
+    assert.deepEqual(throttled.evidence, { http_status: "429", retry_after_seconds: "30" });
+
+    const unavailable = httpFailure(new Response("", { status: 503 }), "boom (503)");
+    assert.ok(unavailable instanceof UpstreamUnavailableError);
+    assert.deepEqual(unavailable.evidence, { http_status: "503" });
+  });
+
+  it("classifies a rate-limited GitHub 403 as transient", () => {
+    const reset = Math.floor(Date.now() / 1000) + 60;
+    const limited = httpFailure(
+      new Response("", {
+        status: 403,
+        headers: { "x-ratelimit-remaining": "0", "x-ratelimit-reset": String(reset) },
+      }),
+      "boom (403)",
+    );
+    assert.ok(limited instanceof UpstreamUnavailableError);
+    assert.equal(limited.evidence["http_status"], "403");
+    assert.equal(limited.evidence["rate_limited"], "true");
+    const seconds = Number(limited.evidence["retry_after_seconds"]);
+    assert.ok(seconds > 0 && seconds <= 60, `unexpected retry hint ${seconds}`);
+  });
+
+  it("leaves a plain 4xx unclassified", () => {
+    // A 404 is a descriptor problem, not a busy upstream: dressing it up as
+    // transient would invite a re-dispatch that cannot succeed.
+    const missing = httpFailure(new Response("", { status: 404 }), "boom (404)");
+    assert.equal(missing instanceof UpstreamUnavailableError, false);
+    assert.equal(missing.message, "boom (404)");
   });
 });
 
@@ -114,7 +161,13 @@ describe("readPayload", () => {
         },
       }),
     );
-    await assert.rejects(readPayload(oversized, 4), /size cap/);
+    await assert.rejects(readPayload(oversized, 4), (error: unknown) => {
+      // A payload over the cap is a guard violation: permanent, so the record
+      // does not offer the API a retry.
+      assert.ok(error instanceof GuardViolationError);
+      assert.match(error.message, /size cap/);
+      return true;
+    });
     assert.equal(MAX_PAYLOAD_BYTES, 512 * 1024 * 1024);
   });
 });

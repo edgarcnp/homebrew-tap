@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import { describe, it } from "node:test";
 import { listApps } from "../lib/pipeline/descriptor.ts";
@@ -130,5 +132,70 @@ describe("fbr CLI contract", () => {
     const unknownApp = fbr(["descriptor", "--app", "nope"]);
     assert.equal(unknownApp.status, 1);
     assert.match(unknownApp.stderr, /Unknown app/);
+  });
+
+  it("exposes the feed cross-check only as an advisory feed-version read", () => {
+    // The run no longer waits on the feed, so the hold flag and the command
+    // that printed it are gone: the workflow calls this exact shape.
+    const removed = fbr(["feed-hold", "--app", "vscode"]);
+    assert.equal(removed.status, 2);
+    assert.match(removed.stderr, /Unknown command: feed-hold/);
+
+    const staleFlag = fbr(["feed-version", "--app", "vscode", "--upstream-version", "1.0.0"]);
+    assert.equal(staleFlag.status, 2);
+    assert.match(staleFlag.stderr, /Unknown option '--upstream-version'/);
+
+    const missingApp = fbr(["feed-version"]);
+    assert.equal(missingApp.status, 2);
+    assert.match(missingApp.stderr, /--app/);
+  });
+
+  it("classifies a permanent failure and writes the fragment the workflow uploads", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "fbr-cli-"));
+    try {
+      // vscode's descriptor scans for its patched endpoint and fails when one
+      // survives; node_modules is never patched, so a copy there survives.
+      fs.mkdirSync(path.join(dir, "node_modules", "pkg"), { recursive: true });
+      fs.writeFileSync(
+        path.join(dir, "node_modules", "pkg", "index.js"),
+        'const url = "update.code.visualstudio.com";\n',
+      );
+      const fragment = path.join(dir, "report-code.json");
+
+      const classified = fbr([
+        "neutralize",
+        "--app",
+        "vscode",
+        "--appdir",
+        dir,
+        "--failure-out",
+        fragment,
+      ]);
+      assert.equal(classified.status, 6, classified.stderr);
+      const parsed = JSON.parse(fs.readFileSync(fragment, "utf8")) as Record<string, unknown>;
+      assert.equal(parsed["code"], "UPDATER_RESIDUAL");
+      assert.match(String(parsed["message"]), /neutralization incomplete/);
+      assert.equal(String(parsed["message"]).includes("\n"), false);
+
+      // An unclassified failure keeps exit 1 and writes nothing: UNCLASSIFIED
+      // is the record job's verdict, not something a failure site may invent.
+      const unclassified = fbr([
+        "neutralize",
+        "--app",
+        "vscode",
+        "--appdir",
+        path.join(dir, "absent"),
+        "--failure-out",
+        path.join(dir, "never.json"),
+      ]);
+      assert.equal(unclassified.status, 1, unclassified.stderr);
+      assert.equal(fs.existsSync(path.join(dir, "never.json")), false);
+
+      // Nor may a usage error write one.
+      const usage = fbr(["neutralize", "--app", "vscode"]);
+      assert.equal(usage.status, 2);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

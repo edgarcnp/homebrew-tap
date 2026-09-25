@@ -2,7 +2,7 @@
 // Entry point for the packaging CLI. Runs directly on Bun (TypeScript), so the
 // repository needs no build step and no runtime dependencies.
 
-import { isUsageError, runCli } from "../lib/cli.ts";
+import { errorExitCode, runCli } from "../lib/cli.ts";
 
 // Piping into a pager or head closes stdout early; that is not a failure.
 process.stdout.on("error", (error: NodeJS.ErrnoException) => {
@@ -16,5 +16,8 @@ try {
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);
   process.stderr.write(`ERROR: ${message}\n`);
-  process.exitCode = isUsageError(error) ? 2 : 1;
+  // 2 for usage errors, 3-6 for classified failures, 1 for everything else;
+  // the workflow passes the code through and reads the verdict from the
+  // fragment when --failure-out was given.
+  process.exitCode = errorExitCode(error);
 }

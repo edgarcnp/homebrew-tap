@@ -2,6 +2,11 @@
 // builds. One JSON document per app per run, uploaded as a failure-report
 // artifact. Retry policy lives in the API; this module only classifies, so a
 // failure site cannot emit prose without a code the API can act on.
+//
+// A failure site writes a *fragment* first (writeFailureFragment), which the
+// workflow uploads and the report job merges into the record: code, message,
+// and — where the site knows better than the job — the stage it failed in and
+// transport-level evidence.
 
 import { assertSafeName, assertSingleLine, fail } from "../core/guards.ts";
 import { writeFileAtomic } from "../core/http.ts";
@@ -28,6 +33,10 @@ export interface FailureCodeSpec {
 // inventing a code the workflow alone knows. `UNCLASSIFIED` is the deliberate
 // fallback: unknown failures retry under the API's global budget instead of
 // being silently dropped.
+//
+// Evidence conventions: a transient upstream failure reports what the transport
+// said (http_status, retry_after_seconds, reason, rate_limited), so the API can
+// wait out a rate limit instead of guessing.
 export const FAILURE_CODES = {
   UPSTREAM_UNAVAILABLE: { class: "transient", retryable: true },
   UPSTREAM_CONFLICT: { class: "transient", retryable: true, retryAfterSeconds: 60 },
@@ -58,6 +67,10 @@ export interface ReportInput {
   code?: FailureCode | undefined;
   message: string;
   resolvedVersion?: string | null;
+  // The cask pin the gate compared against. Without it the API cannot tell a
+  // skip that raced a publish (worth re-dispatching) from one whose cask is
+  // already ahead of the oracle (re-dispatching changes nothing).
+  caskVersion?: string | null;
   feedVersion?: string | null;
   evidence?: Record<string, string>;
   finishedAt?: Date;
@@ -78,6 +91,7 @@ export interface RunReport {
   retry_after_seconds: number | null;
   message: string;
   resolved_version: string | null;
+  cask_version: string | null;
   feed_version: string | null;
   evidence?: Record<string, string>;
   finished_at: string;
@@ -108,6 +122,7 @@ export function buildReport(input: ReportInput): RunReport {
     retry_after_seconds: null,
     message,
     resolved_version: input.resolvedVersion ?? null,
+    cask_version: input.caskVersion ?? null,
     feed_version: input.feedVersion ?? null,
     finished_at: (input.finishedAt ?? new Date()).toISOString(),
   };
@@ -128,5 +143,51 @@ export function buildReport(input: ReportInput): RunReport {
 // Writes the record atomically and returns the path it wrote.
 export function writeReport(outputPath: string, report: RunReport): string {
   writeFileAtomic(outputPath, `${JSON.stringify(report, null, 2)}\n`);
+  return outputPath;
+}
+
+// Evidence keys and values are part of the record's contract: the report job
+// copies them through `fbr report --evidence`, which rejects a key that is not
+// snake_case or a value that is not one line. Validated here too, so a hint
+// fails at the site that produced it instead of costing the run its record.
+export const EVIDENCE_KEY_PATTERN = /^[a-z][a-z0-9_]*$/;
+
+export function assertEvidenceValue(value: string, label: string): string {
+  if (/[\r\n\u0000]/.test(value)) fail(`${label} must be a single line`);
+  return value;
+}
+
+export interface FailureFragment {
+  code: FailureCode;
+  message: string;
+  // Only when the site's stage differs from the job the workflow watched, e.g.
+  // a toolchain download failing before the build command runs.
+  stage?: ReportStage | undefined;
+  evidence?: Record<string, string> | undefined;
+}
+
+// What a failure site writes for itself: the workflow uploads this file as a
+// report-code artifact and the report job prefers it over its own stage
+// heuristic. The message is flattened to one line here so a multi-line error
+// cannot produce a fragment the report job would have to reject.
+export function writeFailureFragment(outputPath: string, failure: FailureFragment): string {
+  if (failure.stage !== undefined && !REPORT_STAGES.includes(failure.stage)) {
+    fail(`Unknown fragment stage: ${failure.stage}`);
+  }
+  if (failure.evidence !== undefined) {
+    for (const [key, value] of Object.entries(failure.evidence)) {
+      if (!EVIDENCE_KEY_PATTERN.test(key)) fail(`Fragment evidence key is not snake_case: ${key}`);
+      assertEvidenceValue(value, `Fragment evidence value for ${key}`);
+    }
+  }
+  const fragment: Record<string, unknown> = {
+    code: failure.code,
+    message: failure.message.replace(/[\r\n\u0000]+/g, " "),
+  };
+  if (failure.stage !== undefined) fragment["stage"] = failure.stage;
+  if (failure.evidence !== undefined && Object.keys(failure.evidence).length > 0) {
+    fragment["evidence"] = { ...failure.evidence };
+  }
+  writeFileAtomic(outputPath, `${JSON.stringify(fragment)}\n`);
   return outputPath;
 }

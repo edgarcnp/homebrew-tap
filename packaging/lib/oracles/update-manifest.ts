@@ -13,7 +13,7 @@ import {
   fail,
   isRecord,
 } from "../core/guards.ts";
-import { MAX_PAYLOAD_BYTES, fetchOnce, readPayload } from "../core/http.ts";
+import { MAX_PAYLOAD_BYTES, fetchOnce, httpFailure, readPayload } from "../core/http.ts";
 import { makeMetadata, writeMetadata } from "../core/metadata.ts";
 import { DEB_VERSION } from "../core/patterns.ts";
 import { substitutePlaceholders } from "../core/template.ts";
@@ -93,7 +93,10 @@ export function selectManifestAsset(
 export async function fetchManifest(repository: string): Promise<unknown> {
   const response = await fetchOnce(repository, { redirect: "follow", timeoutMs: 30000 });
   if (!response.ok) {
-    throw new Error(`Update manifest fetch failed (${response.status}) for ${repository}`);
+    throw httpFailure(
+      response,
+      `Update manifest fetch failed (${response.status}) for ${repository}`,
+    );
   }
   const bytes = await readPayload(response, MAX_MANIFEST_BYTES);
   return JSON.parse(bytes.toString("utf8"));
