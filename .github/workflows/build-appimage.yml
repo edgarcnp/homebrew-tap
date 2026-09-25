@@ -315,7 +315,7 @@ jobs:
           max_attempts=3
           until curl -fL --retry 5 --retry-all-errors --retry-delay 5 \
             -o /tmp/appimagetool-uruntime \
-            "https://github.com/pkgforge-dev/appimagetool/releases/download/0.5.1/appimagetool-${{ matrix.appimage_arch }}-linux" \
+            "https://github.com/pkgforge-dev/appimagetool/releases/download/0.5.2/appimagetool-${{ matrix.appimage_arch }}-linux" \
             && test -s /tmp/appimagetool-uruntime; do
             if [ "${attempt}" -ge "${max_attempts}" ]; then
               echo "::error::appimagetool download failed after ${max_attempts} attempts" >&2
