@@ -5,6 +5,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { describe, it } from "node:test";
 import { REPO_ROOT } from "../../lib/core/paths.ts";
+import { listApps } from "../../lib/pipeline/descriptor.ts";
 import {
   buildReport,
   FAILURE_CODES,
@@ -239,5 +240,44 @@ describe("fbr report command", () => {
     assert.match(duplicateEvidence.stderr, /Duplicate --evidence key/);
 
     fs.rmSync(path.dirname(output), { recursive: true, force: true });
+  });
+});
+
+describe("workflow failure sites", () => {
+  it("writes only failure codes the record contract knows", () => {
+    const workflow = fs.readFileSync(
+      path.join(REPO_ROOT, ".github", "workflows", "build-appimage.yml"),
+      "utf8",
+    );
+    // Each classified site writes {"code":"...","message":"..."} to
+    // report-code.json right before exiting; the report job merges it in.
+    const pattern = /"code":"([A-Z_]+)"/g;
+    const codes: string[] = [];
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(workflow)) !== null) {
+      const code = match[1];
+      assert.ok(code !== undefined, "failure-code pattern produced no capture");
+      codes.push(code);
+    }
+    assert.ok(codes.length > 0, "expected classified failure sites in the workflow");
+    for (const code of codes) {
+      assert.ok(code in FAILURE_CODES, `workflow writes unknown failure code ${code}`);
+    }
+  });
+
+  it("keeps app names from absorbing each other's fragment artifacts", () => {
+    // Fragments are named report-code-<app>-<stage>, fetched with the glob
+    // report-code-<app>-*: an app named "<other>-<suffix>" would match the
+    // other app's artifacts and merge the wrong verdict into its record.
+    const apps = listApps();
+    for (const app of apps) {
+      for (const other of apps) {
+        if (other === app) continue;
+        assert.ok(
+          !other.startsWith(`${app}-`),
+          `${other} would match the fragment pattern of ${app}; rename one of them`,
+        );
+      }
+    }
   });
 });

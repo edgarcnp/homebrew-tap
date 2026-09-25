@@ -69,7 +69,11 @@ jobs:
           # Single-arch apps build one AppImage, dual-arch both; the matrix
           # comes from the descriptor, so no workflow edit is needed.
           matrix="$(jq -c '{include: [.[] | select(. == "amd64" or . == "arm64") | if . == "amd64" then {architecture: ., runner: "ubuntu-latest", appimage_arch: "x86_64"} else {architecture: ., runner: "ubuntu-26.04-arm", appimage_arch: "aarch64"} end]}' <<<"${APP_ARCHITECTURES}")"
-          [ "$(jq '.include | length' <<<"${matrix}")" -gt 0 ] || { echo "::error::no supported architectures in ${APP_ARCHITECTURES}" >&2; exit 1; }
+          [ "$(jq '.include | length' <<<"${matrix}")" -gt 0 ] || {
+            echo "::error::no supported architectures in ${APP_ARCHITECTURES}" >&2
+            printf '{"code":"DESCRIPTOR_INVALID","message":"descriptor declares no supported architectures"}\n' > "${GITHUB_WORKSPACE}/report-code.json"
+            exit 1
+          }
           echo "matrix=${matrix}" >> "${GITHUB_OUTPUT}"
       - name: Select source repository
         id: source
@@ -116,14 +120,25 @@ jobs:
             while IFS= read -r arch; do
               [ -n "${arch}" ] || continue
               file="upstream/metadata-${arch}.json"
+              resolve_rc=0
               bun packaging/bin/fbr.ts resolve \
                 --app "${APP_ID}" --arch "${arch}" --metadata-only \
-                --output-dir upstream --metadata "${file}"
+                --output-dir upstream --metadata "${file}" || resolve_rc=$?
+              if [ "${resolve_rc}" -eq 2 ]; then
+                # A usage error is our own bug: classify it so it is never retried.
+                printf '{"code":"USAGE","message":"fbr resolve rejected its inputs"}\n' > "${GITHUB_WORKSPACE}/report-code.json"
+                exit 2
+              elif [ "${resolve_rc}" -ne 0 ]; then
+                # Not classified further: guard violations and upstream outages
+                # both land here, and the caller's bounded budget covers both.
+                exit "${resolve_rc}"
+              fi
               arch_version="$(jq -r '.version' "${file}")"
               if [ -z "${version}" ]; then
                 version="${arch_version}"
               elif [ "${version}" != "${arch_version}" ]; then
                 echo "upstream version mismatch: ${version} vs ${arch_version} (${arch})" >&2
+                printf '{"code":"UPSTREAM_CONFLICT","message":"upstream serves a different version per architecture"}\n' > "${GITHUB_WORKSPACE}/report-code.json"
                 exit 1
               fi
               sha="$(jq -r '.sha256' "${file}")"
@@ -137,7 +152,11 @@ jobs:
                   upstream_sha256_arm64="${sha}"
                   upstream_url_arm64="${url}"
                   ;;
-                *) echo "unsupported architecture: ${arch}" >&2; exit 1 ;;
+                *)
+                  echo "unsupported architecture: ${arch}" >&2
+                  printf '{"code":"DESCRIPTOR_INVALID","message":"descriptor declares an unsupported architecture"}\n' > "${GITHUB_WORKSPACE}/report-code.json"
+                  exit 1
+                  ;;
               esac
             done < <(jq -r '.[]' <<<"${APP_ARCHITECTURES}")
             [ -n "${version}" ] || { echo "no architectures resolved" >&2; exit 1; }
@@ -150,6 +169,7 @@ jobs:
               --upstream-version "${version}")" || hold_rc=$?
             if [ "${hold_rc}" -eq 2 ]; then
               # A usage error is our own bug: fail rather than gate blind.
+              printf '{"code":"USAGE","message":"fbr feed-hold rejected its inputs"}\n' > "${GITHUB_WORKSPACE}/report-code.json"
               exit "${hold_rc}"
             elif [ "${hold_rc}" -ne 0 ]; then
               # The cross-check is advisory: a feed outage must not fail a run
@@ -225,6 +245,18 @@ jobs:
             gate_args+=(--release-matches-cask "${matches}")
           fi
           bun tap/packaging/bin/fbr.ts gate "${gate_args[@]}" | tee -a "${GITHUB_OUTPUT}"
+
+      # A step above classified its own failure in report-code.json; publish it
+      # so the report job can prefer the precise verdict over the stage fallback.
+      - name: Upload the failure code
+        if: failure()
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: report-code-${{ inputs.app }}-detect
+          path: report-code.json
+          if-no-files-found: ignore
+          retention-days: 7
 
   build:
     needs: detect
@@ -324,6 +356,7 @@ jobs:
             && test -s /tmp/appimagetool-uruntime; do
             if [ "${attempt}" -ge "${max_attempts}" ]; then
               echo "::error::appimagetool download failed after ${max_attempts} attempts" >&2
+              printf '{"code":"TOOLCHAIN_DOWNLOAD","message":"appimagetool download failed after %s attempts"}\n' "${max_attempts}" > "${GITHUB_WORKSPACE}/report-code.json"
               exit 1
             fi
             sleep_seconds=$((attempt * 10))
@@ -344,6 +377,7 @@ jobs:
           until "${GITHUB_WORKSPACE}/tap/packaging/scripts/install-anylinux-tools.sh"; do
             if [ "${attempt}" -ge "${max_attempts}" ]; then
               echo "::error::install-anylinux-tools failed after ${max_attempts} attempts" >&2
+              printf '{"code":"TOOLCHAIN_DOWNLOAD","message":"install-anylinux-tools failed after %s attempts"}\n' "${max_attempts}" > "${GITHUB_WORKSPACE}/report-code.json"
               exit 1
             fi
             sleep_seconds=$((attempt * 10))
@@ -362,6 +396,7 @@ jobs:
           until get-debloated-pkgs "${flags[@]}"; do
             if [ "${attempt}" -ge "${max_attempts}" ]; then
               echo "::error::get-debloated-pkgs failed after ${max_attempts} attempts" >&2
+              printf '{"code":"TOOLCHAIN_DOWNLOAD","message":"get-debloated-pkgs failed after %s attempts"}\n' "${max_attempts}" > "${GITHUB_WORKSPACE}/report-code.json"
               exit 1
             fi
             sleep_seconds=$((attempt * 10))
@@ -381,12 +416,29 @@ jobs:
         run: |
           cd source
           [ -z "${SOURCE_DIR}" ] || cd "${SOURCE_DIR}"
-          bash -c "${BUILD_COMMAND}"
+          if ! bash -c "${BUILD_COMMAND}"; then
+            printf '{"code":"BUILD_FAILED","message":"build command failed on %s; see the run log"}\n' "${TARGET_ARCH}" > "${GITHUB_WORKSPACE}/report-code.json"
+            exit 1
+          fi
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ needs.detect.outputs.asset_prefix }}-${{ matrix.appimage_arch }}
           path: source/dist/${{ needs.detect.outputs.asset_prefix }}-${{ needs.detect.outputs.version }}-${{ matrix.appimage_arch }}.AppImage
           if-no-files-found: error
+          retention-days: 7
+
+      # Same contract as detect: a classified build failure (toolchain download
+      # or the build command itself) is worth retrying on different terms than
+      # an unclassified one, and the per-arch name keeps parallel failures from
+      # colliding.
+      - name: Upload the failure code
+        if: failure()
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: report-code-${{ inputs.app }}-build-${{ matrix.architecture }}
+          path: report-code.json
+          if-no-files-found: ignore
           retention-days: 7
 
   publish:
@@ -535,6 +587,15 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.2
+      # Failure sites that classified themselves upload report-code.json under a
+      # per-job name. continue-on-error covers the normal case: nothing to
+      # classify, or a failure the site itself did not recognize.
+      - name: Download the failure codes
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: report-code-${{ inputs.app }}-*
+          path: report-codes
+        continue-on-error: true
       - name: Write the run record
         env:
           DETECT_RESULT: ${{ needs.detect.result }}
@@ -567,19 +628,36 @@ jobs:
 
           # detect may have failed before loading the descriptor.
           app="${APP_ID:-${REQUESTED_APP}}"
+
+          # Prefer the verdict the failing job wrote for itself over the stage
+          # fallback. Multiple parallel failures (a two-arch build that lost
+          # both races) resolve deterministically: alphabetical glob order.
+          shopt -s nullglob
+          fragments=(report-codes/*/report-code.json)
+          fragment_code=""
+          fragment_message=""
+          if (( ${#fragments[@]} > 0 )); then
+            fragment_code="$(jq -r '.code // empty' "${fragments[0]}" 2>/dev/null || true)"
+            fragment_message="$(jq -r '.message // empty' "${fragments[0]}" 2>/dev/null || true)"
+          fi
+
           code=""
           if [[ -n "${stage}" ]]; then
             status="failed"
-            # Fallback verdicts until each failure site classifies itself:
-            # publish and pin failures are precise, detect and build failures
-            # are not, and UNCLASSIFIED retries under the API's global budget
-            # rather than being dropped.
-            case "${stage}" in
-              publish) code="PUBLISH_FAILED" ;;
-              pin-cask) code="PIN_CASK_FAILED" ;;
-              *) code="UNCLASSIFIED" ;;
-            esac
-            message="${stage} job ${job_result}; see the run log"
+            if [[ -n "${fragment_code}" ]]; then
+              code="${fragment_code}"
+              message="${fragment_message:-${stage} job ${job_result}; see the run log}"
+            else
+              # No classified site: publish and pin failures are still precise
+              # at job granularity, and everything else is UNCLASSIFIED, which
+              # retries under the API's global budget rather than being dropped.
+              case "${stage}" in
+                publish) code="PUBLISH_FAILED" ;;
+                pin-cask) code="PIN_CASK_FAILED" ;;
+                *) code="UNCLASSIFIED" ;;
+              esac
+              message="${stage} job ${job_result}; see the run log"
+            fi
           elif [[ "${SKIPPED}" == "true" ]]; then
             status="skipped"
             stage="detect"
