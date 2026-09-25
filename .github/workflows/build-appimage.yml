@@ -66,7 +66,7 @@ jobs:
         run: |
           # Single-arch apps build one AppImage, dual-arch both; the matrix
           # comes from the descriptor, so no workflow edit is needed.
-          matrix="$(jq -c '{include: [.[] | select(. == "amd64" or . == "arm64") | if . == "amd64" then {architecture: ., runner: "ubuntu-latest", appimage_arch: "x86_64"} else {architecture: ., runner: "ubuntu-24.04-arm", appimage_arch: "aarch64"} end]}' <<<"${APP_ARCHITECTURES}")"
+          matrix="$(jq -c '{include: [.[] | select(. == "amd64" or . == "arm64") | if . == "amd64" then {architecture: ., runner: "ubuntu-latest", appimage_arch: "x86_64"} else {architecture: ., runner: "ubuntu-26.04-arm", appimage_arch: "aarch64"} end]}' <<<"${APP_ARCHITECTURES}")"
           [ "$(jq '.include | length' <<<"${matrix}")" -gt 0 ] || { echo "::error::no supported architectures in ${APP_ARCHITECTURES}" >&2; exit 1; }
           echo "matrix=${matrix}" >> "${GITHUB_OUTPUT}"
       - name: Select source repository
