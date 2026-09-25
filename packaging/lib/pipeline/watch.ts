@@ -3,8 +3,9 @@
 // source (the oracle) which version to build. The two publish on their own
 // schedules, so a run can land in the window where the feed already lists the
 // new version and the oracle still serves the old one: gating on that stale
-// read skips a build that is already due, and nothing retries it. This module
-// reads the feed and decides whether to hold the run until the oracle agrees.
+// read skips a build that is already due. This module reads the feed and
+// reports whether it is ahead of what resolve returned; the run does not wait
+// on it, so the run record carries both versions for the caller to watch.
 
 import { assertHttpsUrl, fail, isRecord } from "../core/guards.ts";
 import { fetchWithRetry, readPayload } from "../core/http.ts";

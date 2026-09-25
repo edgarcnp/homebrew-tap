@@ -108,8 +108,8 @@ fbr gate --app X --upstream-version V [--release-exists]
      [--release-matches-cask true|false]     cask gate decision; omit the match flag when
                                              the asset comparison could not run
 fbr feed-hold --app X --upstream-version V [--tap T]
-                                             feed_version= and hold=: whether the run should
-                                             wait for the oracle to catch the release feed
+                                             feed_version= and hold=: the feed is ahead of
+                                             the version resolve just returned (advisory)
 fbr report --app X --stage S --status ST --message M --run-id N
      --output F [--code C] [--resolved-version V] [--feed-version V]
      [--evidence k=v]...
