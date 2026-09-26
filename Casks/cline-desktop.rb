@@ -1,6 +1,6 @@
 cask "cline-desktop" do
-  version "0.0.36"
-  sha256 "bc840e9d84d93b98db081f29de04694916ccafc3370fa9c1a3699e551fd2c36b"
+  version "0.0.37"
+  sha256 "d775219c05748a5bd442422c6f7ac3c009144a0ea43f85ad20e4de051ba67e48"
 
   url "https://github.com/edgarcnp/homebrew-tap/releases/download/cline-desktop-v#{version}/cline-desktop-#{version}-x86_64.AppImage"
   name "Cline Desktop"
