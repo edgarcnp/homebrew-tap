@@ -397,7 +397,10 @@ jobs:
           # The command exited 0 but the artifact the publish job downloads is
           # missing: permanent, and the upload step below would report it as an
           # unclassified failure.
-          appimage="${GITHUB_WORKSPACE}/source/dist/${ASSET_PREFIX}-${PACKAGE_VERSION}-${TARGET_ARCH}.AppImage"
+          # The pipeline names the file with the AppImage arch (x86_64/aarch64),
+          # not the deb/matrix arch (amd64/arm64) -- same mapping the upload
+          # step below uses.
+          appimage="${GITHUB_WORKSPACE}/source/dist/${ASSET_PREFIX}-${PACKAGE_VERSION}-${{ matrix.appimage_arch }}.AppImage"
           if [ ! -s "${appimage}" ]; then
             printf '{"code":"ARTIFACT_MISSING","message":"the build produced no AppImage at %s"}\n' "${appimage}" > "${FBR_FAILURE_OUT}"
             exit 1
