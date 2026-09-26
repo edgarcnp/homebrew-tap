@@ -40,14 +40,14 @@ describe("atomEntryTitles", () => {
 
 describe("selectFeedVersion", () => {
   it("picks the newest version an atom feed advertises", () => {
-    const feed = atom("Release notes from opencode", ["v2.0.14", "v2.0.13", "v2.0.12"]);
-    assert.equal(selectFeedVersion(watch("opencode-desktop"), feed), "2.0.14");
+    const feed = atom("Release notes from wfhelper", ["v2.1.0", "v2.0.9", "v2.0.8"]);
+    assert.equal(selectFeedVersion(watch("wfhelper"), feed), "2.1.0");
   });
 
   it("orders by dpkg semantics, not by feed position", () => {
     // Date order puts the older 1.x backport first; 2.0.12 is still newer.
-    const feed = atom("Release notes from opencode", ["v1.18.32", "v2.0.12", "v2.0.11"]);
-    assert.equal(selectFeedVersion(watch("opencode-desktop"), feed), "2.0.12");
+    const feed = atom("Release notes from wfhelper", ["v1.18.32", "v2.0.12", "v2.0.11"]);
+    assert.equal(selectFeedVersion(watch("wfhelper"), feed), "2.0.12");
   });
 
   it("reads titles that are release names rather than tags", () => {
@@ -56,8 +56,12 @@ describe("selectFeedVersion", () => {
   });
 
   it("returns null when no entry matches", () => {
-    assert.equal(selectFeedVersion(watch("opencode-desktop"), atom("Release notes", ["nightly"])), null);
-    assert.equal(selectFeedVersion(watch("opencode-desktop"), "<feed></feed>"), null);
+    assert.equal(selectFeedVersion(watch("wfhelper"), atom("Release notes", ["nightly"])), null);
+    assert.equal(selectFeedVersion(watch("wfhelper"), "<feed></feed>"), null);
+    // opencode-desktop reads the v2 update manifest: a version the pattern
+    // rejects, or no version at all, advertises nothing either.
+    assert.equal(selectFeedVersion(watch("opencode-desktop"), "{\"version\":\"nightly\"}"), null);
+    assert.equal(selectFeedVersion(watch("opencode-desktop"), "{\"metadata\":{}}"), null);
   });
 
   it("applies skipPattern before the version pattern", () => {
@@ -73,6 +77,8 @@ describe("selectFeedVersion", () => {
 
   it("reads a JSON feed at its dotted versionField", () => {
     assert.equal(selectFeedVersion(watch("little-genius"), "{\"version\":\"0.6.7\"}"), "0.6.7");
+    // The same shape serves opencode-desktop's v2 update manifest.
+    assert.equal(selectFeedVersion(watch("opencode-desktop"), "{\"version\":\"2.0.18\"}"), "2.0.18");
     const nested: WatchConfig = {
       feedUrl: "https://example.com/manifest.json",
       format: "json",

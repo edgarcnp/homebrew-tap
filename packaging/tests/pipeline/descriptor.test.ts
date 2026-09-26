@@ -363,9 +363,10 @@ describe("release watch", () => {
       repo: "microsoft/vscode",
     });
     assert.deepEqual(loadDescriptor("opencode-desktop").watch, {
-      feedUrl: "https://github.com/anomalyco/opencode/releases.atom",
-      format: "atom",
-      versionPattern: "^v(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
+      feedUrl: "https://opencode.ai/update/api/latest/desktop/opencode",
+      format: "json",
+      versionField: "version",
+      versionPattern: "^(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
       repo: "anomalyco/opencode",
     });
     assert.deepEqual(loadDescriptor("gitcomet").watch, {
@@ -399,11 +400,12 @@ describe("release watch", () => {
     // Feed titles are release names, not tags (e.g. "Desktop v0.0.35").
     const titles: Record<string, [string, string]> = {
       vscode: ["1.137.0", "1.137.0"],
-      "opencode-desktop": ["v1.18.30", "1.18.30"],
+      "opencode-desktop": ["2.0.18", "2.0.18"],
       gitcomet: ["GitComet v0.2.5", "0.2.5"],
       "cline-desktop": ["Desktop v0.0.35", "0.0.35"],
       // JSON feeds carry no titles; the pattern applies to the versionField
-      // value instead (here the manifest's top-level "0.6.7").
+      // value instead — the manifest's top-level "version" ("2.0.18" for
+      // opencode-desktop, "0.6.7" for little-genius).
       "little-genius": ["0.6.7", "0.6.7"],
       wfhelper: ["v2.1.0", "2.1.0"],
     };

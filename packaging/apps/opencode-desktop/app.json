@@ -5,9 +5,10 @@
   "comment": "Open source AI coding agent",
   "cask": "opencode-desktop",
   "watch": {
-    "feedUrl": "https://github.com/anomalyco/opencode/releases.atom",
-    "format": "atom",
-    "versionPattern": "^v(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
+    "feedUrl": "https://opencode.ai/update/api/latest/desktop/opencode",
+    "format": "json",
+    "versionField": "version",
+    "versionPattern": "^(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
     "repo": "anomalyco/opencode"
   },
   "assetPrefix": "opencode-desktop",
