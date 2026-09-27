@@ -145,7 +145,7 @@
     {
       "description": "The tests workflow brew image is extracted by the regex customManager above; keep both brew digests in the GitHub Actions PR so the two files move together",
       "matchManagers": [
-        "regex"
+        "custom.regex"
       ],
       "matchPackageNames": [
         "ghcr.io/homebrew/brew"
