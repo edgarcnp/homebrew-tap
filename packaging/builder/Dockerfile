@@ -6,6 +6,17 @@
 #   base   - the shared toolchain
 #   webkit - base plus the webkit2gtk/GTK closure little-genius and cline need
 #
+# The package list is deliberately small. This pipeline repackages released
+# binaries and never compiles, so build systems (the base-devel meta: gcc,
+# autoconf, automake, gettext, groff, texinfo, ...) stay out; the GUI libraries
+# a payload links against come from get-debloated-pkgs at build time, as they
+# always have. What is here:
+#   - binutils: quick-sharun's strip pass (skipped, with a warning, when absent)
+#   - file: the magic database quick-sharun can bundle
+#   - nss: Electron's libnss3 must exist in the build environment for the
+#     closure scan to find it
+#   - the rest is download, extract, verify and packing tooling.
+#
 # Renovate owns the pins: the FROM digest (docker manager), the appimagetool
 # version in the URL below (regex manager), the Bun ARG (regex manager), and
 # packaging/scripts/install-anylinux-tools.sh (git-refs manager).
@@ -19,15 +30,13 @@ ARG VARIANT=base
 # renovate: datasource=npm depName=bun
 ARG BUN_VERSION=1.4.2
 
-# The shared build toolchain; keep this list in step with what
-# .github/workflows/build-appimage.yml installed before this image existed.
 RUN pacman-key --init \
  && pacman -Syy --noconfirm archlinux-keyring \
  && pacman -Syu --noconfirm \
-      7zip \
-      base-devel \
+      binutils \
       curl \
       dpkg \
+      file \
       git \
       gnupg \
       jq \
