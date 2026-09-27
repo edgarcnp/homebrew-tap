@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import { describe, it } from "node:test";
 import { descriptorLines, listApps, loadDescriptor, resolveApp, validateDescriptor } from "../../lib/pipeline/descriptor.ts";
 import { descriptorPath } from "../../lib/core/paths.ts";
+import { APP_ID } from "../../lib/core/patterns.ts";
 
 const APPS = listApps();
 
@@ -55,6 +56,44 @@ describe("descriptor loading", () => {
   it("rejects unknown apps and missing descriptors", () => {
     assert.throws(() => loadDescriptor("nope"), /Unknown app/);
     assert.throws(() => loadDescriptor("../etc"), /Invalid app name/);
+  });
+
+  it("enforces the API's app-id shape for the id, cask and asset prefix", () => {
+    // The API's discovery regex: it skips app directories that do not match,
+    // and POST /v1/homebrew/tap/events rejects a record whose `app` does not.
+    assert.equal(APP_ID.source, "^[a-z0-9][a-z0-9-]{0,63}$");
+    assert.equal(APP_ID.test("a".repeat(64)), true, "64 characters is the cap");
+    assert.equal(APP_ID.test("a".repeat(65)), false, "65 characters is too long");
+    for (const app of APPS) {
+      assert.ok(APP_ID.test(app), `${app} must match the API's app id`);
+    }
+    assert.throws(() => loadDescriptor("VSCode"), /Invalid app name/);
+    assert.throws(() => loadDescriptor("cline_desktop"), /Invalid app name/);
+    assert.throws(() => loadDescriptor(`a${"b".repeat(64)}`), /Invalid app name/);
+  });
+
+  it("rejects an app id the API's discovery would skip, even when the directory agrees", () => {
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("vscode", (copy) => {
+            copy["id"] = "vscode_2";
+          }),
+          "vscode_2",
+        ),
+      /\.id is not a valid app id/,
+    );
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("vscode", (copy) => {
+            copy["cask"] = "VSCode";
+            copy["assetPrefix"] = "VSCode";
+          }),
+          "vscode",
+        ),
+      /cask is not a valid app id/,
+    );
   });
 });
 

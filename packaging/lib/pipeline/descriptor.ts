@@ -4,7 +4,7 @@
 import * as fs from "node:fs";
 import { assertSameLength, assertSingleLine, fail } from "../core/guards.ts";
 import { APPS_DIR, descriptorPath } from "../core/paths.ts";
-import { GITHUB_API_REPOSITORY, SAFE_IDENTIFIER, SAFE_REFERENCE } from "../core/patterns.ts";
+import { APP_ID, GITHUB_API_REPOSITORY, SAFE_REFERENCE } from "../core/patterns.ts";
 import { ARCHITECTURES, isArchitecture } from "../core/types.ts";
 import type {
   AppDescriptor,
@@ -522,6 +522,7 @@ export function validateDescriptor(raw: unknown, expectedId: string): AppDescrip
   const source = asObject(raw, label);
   rejectUnknownKeys(source, TOP_LEVEL_KEYS, label);
   const id = str(source, "id", label);
+  if (!APP_ID.test(id)) fail(`${label}.id is not a valid app id: ${id}`);
   if (id !== expectedId) fail(`${label}: id ${id} does not match directory ${expectedId}`);
 
   const watch = validateWatch(source["watch"], `${label}.watch`);
@@ -553,11 +554,13 @@ export function validateDescriptor(raw: unknown, expectedId: string): AppDescrip
   if (watch !== undefined) descriptor.watch = watch;
   if (hostHelpers !== undefined) descriptor.hostHelpers = hostHelpers;
 
+  // The app id is the API's app id end to end: cask token and asset prefix are
+  // the same string, checked below.
   for (const [field, value] of [
     ["cask", descriptor.cask],
     ["assetPrefix", descriptor.assetPrefix],
   ] as const) {
-    if (!SAFE_IDENTIFIER.test(value)) fail(`${label}.${field} is not a safe name: ${value}`);
+    if (!APP_ID.test(value)) fail(`${label}.${field} is not a valid app id: ${value}`);
   }
   // Release tags and upstream package names may carry "+".
   if (!SAFE_REFERENCE.test(descriptor.tagPrefix)) {
@@ -584,7 +587,7 @@ export function validateDescriptor(raw: unknown, expectedId: string): AppDescrip
 
 export function loadDescriptor(app: string): AppDescriptor {
   const file = descriptorPath(app);
-  if (!SAFE_IDENTIFIER.test(app)) fail(`Invalid app name: ${app}`);
+  if (!APP_ID.test(app)) fail(`Invalid app name: ${app}`);
   if (!fs.existsSync(file)) fail(`Unknown app "${app}" (no ${file})`);
   return validateDescriptor(JSON.parse(fs.readFileSync(file, "utf8")), app);
 }

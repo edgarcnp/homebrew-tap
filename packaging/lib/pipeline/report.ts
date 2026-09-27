@@ -11,7 +11,8 @@
 // and — where the site knows better than the job — the stage it failed in and
 // transport-level evidence.
 
-import { assertMatches, assertSafeName, assertSingleLine, fail } from "../core/guards.ts";
+import { APP_ID } from "../core/patterns.ts";
+import { assertMatches, assertSingleLine, fail } from "../core/guards.ts";
 import { writeFileAtomic } from "../core/http.ts";
 
 export const REPORT_SCHEMA = 1;
@@ -129,7 +130,9 @@ function assertCorrelationId(value: string, label: string): string {
 }
 
 export function buildReport(input: ReportInput): RunReport {
-  const app = assertSafeName(input.app, "report app");
+  // The API validates this field against the same pattern as its discovery, so
+  // refuse a record it would 422 rather than writing one it cannot attribute.
+  const app = assertMatches(input.app, APP_ID, "report app");
   const message = assertSingleLine(input.message, "report message");
   if (message === "") fail("Report message must not be empty");
   if (!Number.isSafeInteger(input.runId) || input.runId <= 0) {
@@ -176,6 +179,13 @@ export function buildReport(input: ReportInput): RunReport {
     report.retry_after_seconds = spec.retryAfterSeconds ?? null;
   }
   if (input.evidence !== undefined && Object.keys(input.evidence).length > 0) {
+    for (const [key, value] of Object.entries(input.evidence)) {
+      assertEvidenceValue(value, `report evidence value for ${key}`);
+    }
+    const bytes = Buffer.byteLength(JSON.stringify(input.evidence), "utf8");
+    if (bytes > EVIDENCE_MAX_BYTES) {
+      fail(`Report evidence is ${bytes} bytes serialized; the API caps it at ${EVIDENCE_MAX_BYTES}`);
+    }
     report.evidence = { ...input.evidence };
   }
   return report;
@@ -193,8 +203,18 @@ export function writeReport(outputPath: string, report: RunReport): string {
 // fails at the site that produced it instead of costing the run its record.
 export const EVIDENCE_KEY_PATTERN = /^[a-z][a-z0-9_]*$/;
 
+// The API's evidence bounds: one value over 1 KiB, or a serialized map over
+// 4096 bytes, is answered 422. Enforced at the source so a site fails before
+// the record is built rather than after the API rejects it.
+export const EVIDENCE_VALUE_MAX_BYTES = 1024;
+export const EVIDENCE_MAX_BYTES = 4096;
+
 export function assertEvidenceValue(value: string, label: string): string {
   if (/[\r\n\u0000]/.test(value)) fail(`${label} must be a single line`);
+  const bytes = Buffer.byteLength(value, "utf8");
+  if (bytes > EVIDENCE_VALUE_MAX_BYTES) {
+    fail(`${label} is ${bytes} bytes; the API caps an evidence value at ${EVIDENCE_VALUE_MAX_BYTES}`);
+  }
   return value;
 }
 

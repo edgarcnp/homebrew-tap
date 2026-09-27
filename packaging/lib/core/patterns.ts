@@ -4,6 +4,12 @@
 // package, cask and asset basenames (no path separators, no leading dash).
 export const SAFE_IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
+// The API's app id contract: discovery skips `apps/<id>` directories that do
+// not match, and POST /v1/homebrew/tap/events answers 422 for a record whose
+// `app` does not. Unlike SAFE_IDENTIFIER it is lowercase-only, hyphenated and
+// capped at 64 characters.
+export const APP_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
+
 // Same as SAFE_IDENTIFIER but also allowing "+", for release tag prefixes and
 // upstream package names (which may carry a "+" build marker).
 export const SAFE_REFERENCE = /^[A-Za-z0-9][A-Za-z0-9._+-]*$/;

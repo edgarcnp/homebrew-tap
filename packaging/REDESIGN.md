@@ -93,7 +93,7 @@ in shell or `jq`.
 | `fbr publish --manifest M` | Creates the release with generated notes, attests, prunes old releases, removes a partial release on failure. |
 | `fbr cask render --app X --manifest M` | Writes `Casks/X.rb` from descriptor + manifest (see "Generated casks"). |
 | `fbr report compose ...` | Merges plan output, per-job results and fragments into one schema-1 record. Pure and unit-tested, replacing the workflow's `jq` assembly. |
-| `fbr report deliver --record R` | Fetches the OIDC token and POSTs the record with today's semantics: 2xx delivered, 4xx permanent warning, 000/5xx retried to three attempts total with 5/10/15 s sleeps; never logs the token; never fails the run. |
+| `fbr report deliver --record R` | Fetches the OIDC token and POSTs the record with today's semantics: 2xx delivered, 429 backs off per Retry-After (capped) while other 4xx is a permanent warning, 000/5xx retried to three attempts total with 5/10/15 s sleeps; never logs the token; never fails the run. |
 | `fbr check [--app X \| --all]` | Descriptor schema, generated-file freshness (the cask, once casks are generated), toolchain doctor; `--resolve` adds a metadata-only oracle dry-run. |
 | `fbr app new --id X [--from Y]` | Scaffolds descriptor, desktop templates, placeholder cask and README row. |
 

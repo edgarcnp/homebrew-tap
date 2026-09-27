@@ -76,8 +76,9 @@ jobs:
               # A namable request gets a classified fragment; the run-record
               # step below turns it into UNKNOWN_APP, so the API fixes the name
               # instead of re-dispatching the typo until its budget runs out. An
-              # unnamable one (not a safe app id) stays unclassified on purpose.
-              if [[ "${REQUESTED}" =~ ^[a-z0-9][a-z0-9-]*$ ]]; then
+              # unnamable one (not an app id the API would accept) stays
+              # unclassified on purpose.
+              if [[ "${REQUESTED}" =~ ^[a-z0-9][a-z0-9-]{0,63}$ ]]; then
                 printf '{"code":"UNKNOWN_APP","message":"no app matches %s; see the run log"}\n' "${REQUESTED}" > report-code.json
               fi
               exit "${resolved_rc}"
@@ -125,8 +126,9 @@ jobs:
       # humans. Auth is GitHub OIDC: a fresh ~5-minute JWT per delivery, bound to
       # this run; there is no shared secret. Best-effort by design — a delivery
       # failure must never fail the run, and the API reconciles a lost report
-      # from the run id it dispatched with. 4xx is permanent (bad/expired token,
-      # unknown cask, invalid body) and is reported once; 000/5xx are retried.
+      # from the run id it dispatched with. A bad/expired token, an unknown cask
+      # or an invalid body is permanent 4xx and is reported once; 429 is the rate
+      # limiter, retried after Retry-After; 000/5xx are retried.
       # The workflow's default -x would trace the JWT into the log, so this
       # step turns xtrace off before touching it.
       - name: Deliver the run record to the API
@@ -151,15 +153,37 @@ jobs:
             exit 0
           fi
           endpoint="https://api.edgarcnp.dev/v1/homebrew/tap/events"
+          headers="${RUNNER_TEMP}/delivery-headers.txt"
+          # Three attempts total. A 429 is the API's rate limiter, not a
+          # verdict: back off for Retry-After (capped, defaulted when absent)
+          # and try again instead of dropping the record.
           for attempt in 1 2 3; do
             status="$(curl --silent --show-error --max-time 10 --output /dev/null \
-              --write-out '%{http_code}' \
+              --dump-header "${headers}" --write-out '%{http_code}' \
               -X POST "${endpoint}" \
               -H "Authorization: Bearer ${id_token}" \
               -H "Content-Type: application/json" \
               --data-binary "@${RECORD}" || true)"
             case "${status}" in
               2??) echo "run record delivered (HTTP ${status})"; exit 0 ;;
+              429)
+                retry_after="$(
+                  tr -d '\r' <"${headers}" \
+                    | awk -F: 'tolower($1) == "retry-after" { print $2 }' \
+                    | tail -n 1 \
+                    | tr -d '[:space:]'
+                )"
+                if [[ ! "${retry_after}" =~ ^[0-9]+$ ]]; then
+                  # No parsable Retry-After: the API's usual window.
+                  retry_after=60
+                fi
+                if ((retry_after > 120)); then
+                  retry_after=120
+                fi
+                echo "::warning::API rate-limited the run record (HTTP 429); retrying in ${retry_after}s"
+                sleep "${retry_after}"
+                continue
+                ;;
               4??) echo "::warning::API rejected the run record (HTTP ${status})"; exit 0 ;;
             esac
             sleep $((attempt * 5))

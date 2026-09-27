@@ -5,6 +5,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { describe, it } from "node:test";
 import { REPO_ROOT } from "../../lib/core/paths.ts";
+import { APP_ID } from "../../lib/core/patterns.ts";
 import { listApps } from "../../lib/pipeline/descriptor.ts";
 import {
   buildReport,
@@ -190,6 +191,24 @@ describe("run records", () => {
     assert.throws(() => buildReport({ ...base, app: "vscode", message: "two\nlines" }));
   });
 
+  it("accepts the API's app ids and rejects everything else", () => {
+    // The record's `app` is exactly what the API validates on POST, so the
+    // descriptor's shape must hold here too — a manual run can pass any string.
+    const base = {
+      runId: 1,
+      status: "failed",
+      stage: "build",
+      code: "BUILD_FAILED",
+      message: "x",
+    } as const;
+    for (const app of listApps()) {
+      assert.equal(buildReport({ ...base, app }).app, app);
+    }
+    for (const app of ["VSCode", "cline_desktop", "a.b", "a".repeat(65)]) {
+      assert.throws(() => buildReport({ ...base, app }), /Invalid report app/);
+    }
+  });
+
   it("emits evidence only when the caller supplied some", () => {
     const bare = buildReport({
       app: "vscode",
@@ -213,6 +232,46 @@ describe("run records", () => {
     });
     assert.deepEqual(withEvidence.evidence, { http_status: "503" });
     assert.equal(withEvidence.finished_at, "2026-09-25T00:00:00.000Z");
+  });
+
+  it("caps evidence at the API's value and record bounds", () => {
+    const base = {
+      app: "vscode",
+      runId: 1,
+      status: "failed",
+      stage: "detect",
+      code: "UPSTREAM_UNAVAILABLE",
+      message: "boom",
+    } as const;
+
+    // Today's emitters fit both bounds.
+    const transport = buildReport({
+      ...base,
+      evidence: { http_status: "429", rate_limited: "true", retry_after_seconds: "60" },
+    });
+    assert.deepEqual(transport.evidence, {
+      http_status: "429",
+      rate_limited: "true",
+      retry_after_seconds: "60",
+    });
+    const reason = buildReport({ ...base, evidence: { reason: "upstream said no" } });
+    assert.deepEqual(reason.evidence, { reason: "upstream said no" });
+
+    // A single value over 1 KiB fails at the site.
+    assert.throws(
+      () => buildReport({ ...base, evidence: { reason: "x".repeat(5 * 1024) } }),
+      /caps an evidence value at 1024/,
+    );
+    // The bound is bytes, not characters: 513 two-byte characters are over it.
+    assert.throws(
+      () => buildReport({ ...base, evidence: { reason: "é".repeat(513) } }),
+      /caps an evidence value at 1024/,
+    );
+    // Each value under 1 KiB, but the serialized map over 4096 bytes.
+    const wide: Record<string, string> = {};
+    for (let index = 0; index < 5; index++) wide[`detail_${index}`] = "x".repeat(1000);
+    assert.ok(JSON.stringify(wide).length > 4096, "fixture must exceed the record bound");
+    assert.throws(() => buildReport({ ...base, evidence: wide }), /caps it at 4096/);
   });
 });
 
@@ -414,6 +473,40 @@ describe("fbr report command", () => {
     assert.equal(badRequestId.status, 1);
     assert.match(badRequestId.stderr, /Invalid report request id/);
 
+    const oversizedEvidence = fbr([
+      ...base,
+      "--stage",
+      "detect",
+      "--status",
+      "failed",
+      "--code",
+      "UPSTREAM_UNAVAILABLE",
+      "--run-id",
+      "1",
+      "--evidence",
+      `reason=${"x".repeat(5 * 1024)}`,
+    ]);
+    assert.equal(oversizedEvidence.status, 1);
+    assert.match(oversizedEvidence.stderr, /caps an evidence value at 1024/);
+
+    const unsafeApp = fbr([
+      "report",
+      "--app",
+      "VSCode",
+      "--stage",
+      "detect",
+      "--status",
+      "skipped",
+      "--message",
+      "x",
+      "--run-id",
+      "1",
+      "--output",
+      output,
+    ]);
+    assert.equal(unsafeApp.status, 1);
+    assert.match(unsafeApp.stderr, /Invalid report app/);
+
     fs.rmSync(path.dirname(output), { recursive: true, force: true });
   });
 });
@@ -467,6 +560,17 @@ describe("failure fragments", () => {
           evidence: { retry_after: "30\n60" },
         }),
       /single line/,
+    );
+    // The per-value cap is mirrored here so a fragment fails at its site, not
+    // when the report job merges it.
+    assert.throws(
+      () =>
+        writeFailureFragment(output, {
+          code: "UPSTREAM_UNAVAILABLE",
+          message: "boom",
+          evidence: { reason: "x".repeat(5 * 1024) },
+        }),
+      /caps an evidence value at 1024/,
     );
     assert.throws(
       () =>
@@ -585,5 +689,66 @@ describe("workflow failure sites", () => {
         );
       }
     }
+  });
+});
+
+describe("record delivery", () => {
+  // The delivery step is duplicated between the plan job (no record yet) and
+  // the per-app report job. Pin it here as one contract — 429 is the rate
+  // limiter and retries after Retry-After, every other 4xx stays permanent,
+  // three attempts total — and keep the two copies from drifting.
+  function deliveryStep(file: string): string {
+    const lines = fs.readFileSync(path.join(REPO_ROOT, file), "utf8").split("\n");
+    const start = lines.findIndex((line) => line.includes("- name: Deliver the run record to the API"));
+    assert.ok(start >= 0, `${file} has no delivery step`);
+    const step: string[] = [];
+    for (const [index, line] of lines.entries()) {
+      if (index < start) continue;
+      // A list item at the step indentation or a less-indented job key ends it.
+      if (index > start && /^ {0,6}\S/.test(line)) break;
+      step.push(line);
+    }
+    return step.join("\n");
+  }
+
+  const files = [
+    path.join(".github", "workflows", "build.yml"),
+    path.join(".github", "workflows", "build-appimage.yml"),
+  ] as const;
+  const [buildStep, appimageStep] = files.map(deliveryStep);
+
+  it("keeps both copies identical apart from their job guard", () => {
+    assert.ok(buildStep !== undefined && appimageStep !== undefined);
+    // The plan job guards on its report step's `wrote` output, the per-app job
+    // on its write step's outcome; everything else must match byte for byte.
+    const normalize = (step: string): string => step.replace(/^.*if: always\(\).*$/m, "");
+    assert.equal(normalize(buildStep), normalize(appimageStep));
+  });
+
+  it("retries a 429 after Retry-After and keeps other 4xx permanent", () => {
+    assert.ok(buildStep !== undefined, "no delivery step to inspect");
+    const step = buildStep;
+    assert.match(step, /continue-on-error: true/);
+    assert.match(step, /for attempt in 1 2 3/);
+    assert.match(step, /--dump-header/);
+    assert.match(step, /retry-after/i);
+    // A hostile or broken Retry-After must not stall the job.
+    assert.match(step, /retry_after > 120/);
+    const throttled = step.indexOf("429)");
+    const permanent = step.indexOf("4??)");
+    assert.ok(throttled >= 0, "429 needs its own case arm");
+    assert.ok(permanent > throttled, "the 429 arm must precede the 4xx arm");
+    assert.match(step, /4\?\?\) echo "::warning::API rejected the run record/);
+  });
+
+  it("classifies only requests the API could record as app ids", () => {
+    // The plan job's fragment gate decides whether a bogus app name gets
+    // UNKNOWN_APP; it must agree with the record guard, or it writes a code
+    // that can never become a record.
+    const plan = fs.readFileSync(path.join(REPO_ROOT, ".github", "workflows", "build.yml"), "utf8");
+    assert.ok(
+      plan.includes(APP_ID.source),
+      `the plan job's fragment gate must use the API's app-id shape (${APP_ID.source})`,
+    );
   });
 });

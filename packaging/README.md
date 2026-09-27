@@ -72,7 +72,11 @@ content and hosts. Shared regexes, the arch table and name templating live in
 ## Descriptor
 
 `apps/<app>/app.json` is the single source of truth. `<app>` is the app id and
-must equal `id`, `cask` and `assetPrefix` — one name end to end.
+must equal `id`, `cask` and `assetPrefix` — one name end to end. An app id is
+the API's app id too: lowercase alphanumeric or `-`, starting with an
+alphanumeric, at most 64 characters (`^[a-z0-9][a-z0-9-]{0,63}$`). The API's
+discovery skips app directories that do not match, and it answers 422 for a run
+record whose `app` does not — `fbr report` refuses such a record first.
 
 | Field | Meaning |
 | --- | --- |
@@ -170,7 +174,10 @@ dispatches builds, so the record classifies rather than retries:
   own verdict (`class`, `retryable`, `retry_after_seconds`), so a reader needs
   no table from this repository.
 - `evidence` — what the transport said, e.g. `http_status`,
-  `retry_after_seconds`, `reason`, `rate_limited` on a transient failure.
+  `retry_after_seconds`, `reason`, `rate_limited` on a transient failure. A
+  value is one line of at most 1 KiB, and the serialized map at most 4096
+  bytes; the API rejects a record beyond either bound, so `fbr report` and the
+  failure-fragment writer refuse it first.
 - `resolved_version` / `cask_version` / `feed_version` — the three versions a
   caller needs to judge a *skip*: re-dispatch only when the feed is newer than
   both the resolved version and the cask pin, which is the signature of a skip
