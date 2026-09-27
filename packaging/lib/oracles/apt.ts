@@ -44,8 +44,8 @@ export function verifySigningKey(keyPath: string, expectedFingerprint: string): 
   const fingerprints = (result.stdout ?? "")
     .split(/\r?\n/)
     .filter((line) => line.startsWith("fpr:"))
-    .map((line) => line.split(":")[9]);
-  if (!fingerprints.includes(expectedFingerprint)) {
+    .map((line) => (line.split(":")[9] ?? "").toUpperCase());
+  if (!fingerprints.includes(expectedFingerprint.toUpperCase())) {
     throw new Error(
       `Pinned signing key does not contain expected fingerprint ${expectedFingerprint}`,
     );

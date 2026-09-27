@@ -76,6 +76,10 @@ describe("guards", () => {
       },
     );
     assert.doesNotThrow(() => assertHostAllowed(url, ["evil.example"], "download"));
+    assert.throws(
+      () => assertHostAllowed(new URL("https://evil.example:8443/x"), ["evil.example"], "download"),
+      /Unexpected download host \(evil\.example:8443\)/,
+    );
   });
 
   it("validates sizes and digests", () => {
@@ -105,6 +109,10 @@ describe("metadata", () => {
     assert.throws(
       () => assertMetadata({ ...validMetadata(), repositoryPath: "../../etc/passwd" }),
       /Unsafe metadata.repositoryPath/,
+    );
+    assert.throws(
+      () => assertMetadata({ ...validMetadata(), repositoryPath: "" }),
+      /must not be empty/,
     );
     assert.throws(
       () => assertMetadata({ ...validMetadata(), repository: "http://example.com" }),

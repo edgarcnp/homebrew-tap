@@ -107,6 +107,32 @@ describe("fbr CLI contract", () => {
     assert.match(duplicated.stderr, /--app was given more than once/);
   });
 
+  it("rejects malformed or duplicate --upstream specs", () => {
+    const base = ["release-notes", "--app", "vscode", "--asset-dir", "unused"];
+
+    const badSha = fbr([...base, "--upstream", "amd64=zzz=https://example.com/a.deb"]);
+    assert.equal(badSha.status, 2);
+    assert.match(badSha.stderr, /64 hex/);
+
+    const insecure = fbr([
+      ...base,
+      "--upstream",
+      `amd64=${"a".repeat(64)}=http://example.com/a.deb`,
+    ]);
+    assert.equal(insecure.status, 2);
+    assert.match(insecure.stderr, /must be https/);
+
+    const duplicate = fbr([
+      ...base,
+      "--upstream",
+      `amd64=${"a".repeat(64)}=https://example.com/a.deb`,
+      "--upstream",
+      `amd64=${"b".repeat(64)}=https://example.com/b.deb`,
+    ]);
+    assert.equal(duplicate.status, 2);
+    assert.match(duplicate.stderr, /more than once/);
+  });
+
   it("sorts a release-tag version list the way the retention step calls it", () => {
     // The workflow runs exactly this shape: --sort then the stripped versions.
     const sorted = fbr([

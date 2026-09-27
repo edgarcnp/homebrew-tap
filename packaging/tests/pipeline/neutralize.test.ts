@@ -124,6 +124,14 @@ describe("neutralizeUpdater", () => {
     assert.equal(report.survivors.length, 1);
   });
 
+  it("warns when a declared JSON file is missing", () => {
+    const report = neutralizeUpdater(
+      descriptorWith({ removeJsonKeys: { file: "resources/app/product.json", keys: ["update"] } }),
+      appDir,
+    );
+    assert.match(report.warnings.join("\n"), /not found/);
+  });
+
   it("refuses a length-changing ELF patch", () => {
     write("bin/app", elfWith(ENDPOINT));
     assert.throws(

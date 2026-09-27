@@ -87,6 +87,21 @@ describe("validateAgainstSchema", () => {
     assert.deepEqual(issues(schema, { name: "a" }), ["$.name: must be at least 2 characters"]);
   });
 
+  it("fails closed on prototype-name refs and malformed bounds", () => {
+    assert.throws(
+      () => validateAgainstSchema({ $defs: {}, $ref: "#/$defs/__proto__" }, { any: 1 }),
+      /does not resolve/,
+    );
+    assert.throws(
+      () => validateAgainstSchema({ uniqueItems: "true" }, ["a", "a"]),
+      /uniqueItems must be a boolean/,
+    );
+    assert.throws(
+      () => validateAgainstSchema({ minItems: 1.5 }, ["a"]),
+      /non-negative integer/,
+    );
+  });
+
   it("requires exactly one oneOf alternative", () => {
     const schema = {
       oneOf: [

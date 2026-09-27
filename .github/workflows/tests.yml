@@ -59,9 +59,9 @@ jobs:
           restore-keys: ${{ matrix.os }}-rubygems-
 
       - name: Save Homebrew Bundler RubyGems
-        # PR runs only restore; saving is skipped so a fork PR cannot write
-        # attacker Ruby into a cache entry main would later restore (poisoning).
-        if: github.event_name != 'pull_request'
+        # Same-repo PR runs may save; fork PRs only restore, so a fork cannot
+        # write attacker Ruby into a cache entry main would later restore.
+        if: github.event.pull_request.head.repo.full_name == github.repository
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ steps.set-up-homebrew.outputs.gems-path }}

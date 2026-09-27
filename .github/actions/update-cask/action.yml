@@ -88,6 +88,7 @@ runs:
       env:
         GPG_PRIVATE_KEY: ${{ inputs.gpg_private_key }}
       run: |
+        set +x
         echo "${GPG_PRIVATE_KEY}" | gpg --batch --import
         uid="$(gpg --list-secret-keys --keyid-format=long | awk '/^uid/ {print; exit}')"
         key_id="$(gpg --list-secret-keys --keyid-format=long | awk '/^sec/ {print $2; exit}' | cut -d/ -f2)"

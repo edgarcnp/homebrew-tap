@@ -442,6 +442,12 @@ describe("pipeline_collect_targets", () => {
     assert.deepEqual(targets, [pathIn("bin/electron-app")]);
   });
 
+  it("fails when a tree payload staged nothing", { skip: !HAS_JQ }, () => {
+    const { status, stderr } = collectTargets(JSON.stringify({ payload: { kind: "appimage-tree" } }));
+    assert.equal(status, 1);
+    assert.match(stderr, /No staged binaries/);
+  });
+
   it("fails when a declared library is not in the build environment", { skip: !HAS_JQ }, () => {
     const { status, stderr } = collectTargets(
       JSON.stringify({

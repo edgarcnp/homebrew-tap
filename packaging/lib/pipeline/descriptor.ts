@@ -325,16 +325,20 @@ function validateUpdater(raw: unknown, label: string): UpdaterConfig {
     const binaryReplacement = str(patchSource, "binaryReplacement", `${label}.patchEndpoint`);
     // Enforced at load time: an in-place ELF edit must not shift bytes.
     assertSameLength(from, binaryReplacement, `${label}.patchEndpoint`);
+    const targetList =
+      targets === "all"
+        ? "all"
+        : strArray(patchSource, "targets", `${label}.patchEndpoint`).map((entry) =>
+            relativePath(entry, `${label}.patchEndpoint.targets`),
+          );
+    if (targetList !== "all" && targetList.length === 0) {
+      fail(`${label}.patchEndpoint.targets must not be empty`);
+    }
     updater.patchEndpoint = {
       from,
       textReplacement: str(patchSource, "textReplacement", `${label}.patchEndpoint`),
       binaryReplacement,
-      targets:
-        targets === "all"
-          ? "all"
-          : strArray(patchSource, "targets", `${label}.patchEndpoint`).map((entry) =>
-              relativePath(entry, `${label}.patchEndpoint.targets`),
-            ),
+      targets: targetList,
     };
   }
 
@@ -552,9 +556,12 @@ export function validateDescriptor(raw: unknown, expectedId: string): AppDescrip
   for (const [field, value] of [
     ["cask", descriptor.cask],
     ["assetPrefix", descriptor.assetPrefix],
-    ["tagPrefix", descriptor.tagPrefix],
   ] as const) {
     if (!SAFE_IDENTIFIER.test(value)) fail(`${label}.${field} is not a safe name: ${value}`);
+  }
+  // Release tags and upstream package names may carry "+".
+  if (!SAFE_REFERENCE.test(descriptor.tagPrefix)) {
+    fail(`${label}.tagPrefix is not a safe tag prefix: ${descriptor.tagPrefix}`);
   }
   if (!descriptor.sourceRepo.includes("/")) {
     fail(`${label}.sourceRepo must be "owner/repo"`);

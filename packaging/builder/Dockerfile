@@ -1,6 +1,6 @@
 # Builder image for the AppImage pipeline: the Arch toolchain every build job
 # used to install on each run, baked once. Built by .github/workflows/builder.yml
-# and pinned by tag+digest in build-appimage.yml.
+# and pinned by tag+digest in packaging/builder/pins.json.
 #
 # Variants (--build-arg VARIANT=):
 #   base   - the shared toolchain

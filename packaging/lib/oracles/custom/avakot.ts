@@ -8,6 +8,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { ChecksumMismatchError } from "../../core/errors.ts";
 import {
   assertHostAllowed,
   assertHttpsUrl,
@@ -61,13 +62,12 @@ export function selectAvakotAsset(
   if (!isRecord(artifacts)) fail("Avakot manifest has no artifacts map");
   const entry = artifacts[assetName];
   if (!isRecord(entry)) fail(`Avakot manifest has no entry for ${assetName}`);
-  // The download URL is static, so the per-entry version field (when present)
-  // is the version binding: it must equal the top-level version.
+  // The download URL is static, so the per-entry version is the version
+  // binding and is required: without it the manifest's version claim is not
+  // bound to the payload at all.
   const entryVersion = entry["version"];
-  if (entryVersion !== undefined) {
-    if (typeof entryVersion !== "string" || entryVersion !== version) {
-      fail(`Avakot manifest ${assetName} version ${String(entryVersion)} does not match ${version}`);
-    }
+  if (typeof entryVersion !== "string" || entryVersion !== version) {
+    fail(`Avakot manifest ${assetName} version ${String(entryVersion)} does not match ${version}`);
   }
   const rawUrl = entry["url"];
   if (typeof rawUrl !== "string" || rawUrl === "") {
@@ -123,12 +123,14 @@ export async function resolveWithAvakot(
   });
   const digest = sha256Digest(bytes);
   if (!digestMatchesHex(selected.asset.sha256, digest)) {
-    throw new Error(`${label} SHA256 mismatch: expected ${selected.asset.sha256}, got ${digest.toString("hex")}`);
+    throw new ChecksumMismatchError(
+      `${label} SHA256 mismatch: expected ${selected.asset.sha256}, got ${digest.toString("hex")}`,
+    );
   }
   const size = bytes.length;
   assertPositiveSize(size, MAX_PAYLOAD_BYTES, `${label} size`);
   if (selected.asset.size !== undefined && selected.asset.size !== size) {
-    throw new Error(
+    throw new ChecksumMismatchError(
       `${label} size ${size} does not match manifest size ${selected.asset.size}`,
     );
   }
@@ -138,7 +140,9 @@ export async function resolveWithAvakot(
     writeFileAtomic(packagePath, bytes);
     const onDisk = sha256Digest(fs.readFileSync(packagePath));
     if (!digestMatchesHex(selected.asset.sha256, onDisk)) {
-      throw new Error(`Downloaded .deb SHA256 mismatch after write: got ${onDisk.toString("hex")}`);
+      throw new ChecksumMismatchError(
+        `Downloaded .deb SHA256 mismatch after write: got ${onDisk.toString("hex")}`,
+      );
     }
   }
   const metadata = makeMetadata({

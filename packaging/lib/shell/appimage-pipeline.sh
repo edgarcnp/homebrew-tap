@@ -189,11 +189,14 @@ pipeline_stage() {
     appimage-tree)
       # Entry by entry, renaming the scoped executable and dropping the upstream
       # AppDir furniture this pipeline replaces.
-      local entry name target
-      while IFS= read -r entry
+      local entry name target move_usr
+      move_usr="$(descriptor_field '.payload.moveUsrToRoot // false')"
+      while IFS= read -r -d '' entry
       do
         name="$(basename -- "${entry}")"
         is_excluded_payload_entry "${name}" && continue
+        # usr/ is copied to the AppDir root below, not into bin/.
+        [[ "${name}" = "usr" && "${move_usr}" = "true" ]] && continue
         target="$(jq -r --arg name "${name}" \
           '(.payload.rename // {})[$name] // empty' <<<"${APP_JSON}")"
         if [[ -n "${target}" ]]
@@ -202,8 +205,8 @@ pipeline_stage() {
         else
           cp -a -- "${entry}" "${APPDIR}/bin/"
         fi
-      done < <(find "${PAYLOAD_ROOT}" -mindepth 1 -maxdepth 1)
-      if [[ "$(descriptor_field '.payload.moveUsrToRoot // false')" = "true" ]]
+      done < <(find "${PAYLOAD_ROOT}" -mindepth 1 -maxdepth 1 -print0)
+      if [[ "${move_usr}" = "true" ]]
       then
         cp -a -- "${PAYLOAD_ROOT}/usr" "${APPDIR}/usr"
       fi
@@ -409,7 +412,12 @@ pipeline_collect_targets() {
   else
     # Electron payloads: quick-sharun auto-detects the electron binary from the
     # staged tree and deploys its support libraries.
-    TARGETS=("${APPDIR}/bin/"*)
+    local -a staged=("${APPDIR}/bin/"*)
+    if [[ ${#staged[@]} -eq 0 || ! -e ${staged[0]} ]]
+    then
+      error "No staged binaries in ${APPDIR}/bin"
+    fi
+    TARGETS=("${staged[@]}")
   fi
 
   local library

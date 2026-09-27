@@ -74,6 +74,7 @@ export function assertMetadata(value: unknown, label = "metadata"): Metadata {
   const architecture = record["architecture"];
   if (!isArchitecture(architecture)) fail(`Invalid ${label}.architecture: ${String(architecture)}`);
   const repositoryPath = string("repositoryPath");
+  if (repositoryPath === "") fail(`${label}.repositoryPath must not be empty`);
   if (repositoryPath.startsWith("/") || repositoryPath.includes("..")) {
     fail(`Unsafe ${label}.repositoryPath: ${repositoryPath}`);
   }

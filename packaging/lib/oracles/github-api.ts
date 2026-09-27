@@ -8,7 +8,10 @@ import { GITHUB_API_REPOSITORY } from "../core/patterns.ts";
 
 export const GITHUB_API_PREFIX = "https://api.github.com/repos/";
 export const GITHUB_DOWNLOAD_PREFIX = "https://github.com/";
-const RELEASES_PER_PAGE = 30;
+const RELEASES_PER_PAGE = 100;
+// A repo with more than 300 releases is far beyond any app this tap builds;
+// the cap keeps a pathological list bounded.
+const MAX_RELEASE_PAGES = 3;
 
 export interface RepositoryCoordinates {
   owner: string;
@@ -42,6 +45,22 @@ export function githubDownloadBase(repository: string): string {
 
 export function releasesApiUrl(repository: string): string {
   return `${assertRepositoryUrl(repository)}/releases?per_page=${RELEASES_PER_PAGE}`;
+}
+
+// The release scans must see past the first page: with only the newest page, a
+// repo that publishes many releases without the asset (or many prereleases)
+// would look like it has no release at all.
+export async function fetchReleaseList(
+  repository: string,
+  token: string,
+): Promise<Record<string, unknown>[]> {
+  const releases: Record<string, unknown>[] = [];
+  for (let page = 1; page <= MAX_RELEASE_PAGES; page += 1) {
+    const batch = asReleaseList(await githubApiFetch(`${releasesApiUrl(repository)}&page=${page}`, token));
+    releases.push(...batch);
+    if (batch.length < RELEASES_PER_PAGE) break;
+  }
+  return releases;
 }
 
 export function releaseByTagApiUrl(repository: string, tag: string): string {

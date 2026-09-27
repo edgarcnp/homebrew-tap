@@ -127,6 +127,16 @@ describe("checkCask", () => {
     }
   });
 
+  it("ignores a commented-out checksum and rejects an arch mapping on a single-arch cask", () => {
+    const single = loadDescriptor("cline-desktop");
+    const singleSource = fs.readFileSync(caskPath(single.cask), "utf8");
+    const commented = `${singleSource}\n  # arm64_linux: "${HASH_A}"\n`;
+    assert.deepEqual(checkCask(single, commented), []);
+
+    const mapped = `${singleSource}\n  arch intel: "x86_64"\n`;
+    assert.match(checkCask(single, mapped).join("; "), /must not define an arch mapping/);
+  });
+
   it("reports descriptor drift", () => {
     const descriptor = loadDescriptor("vscode");
     const source = fs.readFileSync(caskPath(descriptor.cask), "utf8");

@@ -77,7 +77,7 @@ jobs:
           # output. A malformed file is a config error, not a retry.
           variant=base
           if [[ "${NEEDS_WEBKIT}" == "true" ]]; then variant=webkit; fi
-          image="$(jq -r --arg variant "${variant}" '.[$variant]' tap/packaging/builder/pins.json)"
+          image="$(jq -r --arg variant "${variant}" '.[$variant]' tap/packaging/builder/pins.json 2>/dev/null || true)"
           if [[ ! "${image}" =~ ^ghcr\.io/edgarcnp/fbr-builder-(base|webkit):[0-9]{4}\.[0-9]{2}\.[0-9]{2}\.[0-9]+@sha256:[0-9a-f]{64}$ ]]
           then
             echo "::error::pins.json has no usable ${variant} image ref" >&2
@@ -191,8 +191,16 @@ jobs:
             esac
           done < <(jq -r '.[]' <<<"${APP_ARCHITECTURES}")
           [ -n "${version}" ] || { echo "no architectures resolved" >&2; exit 1; }
-          [[ "${version}" =~ ^[0-9A-Za-z._-]+$ ]] || { echo "invalid upstream version: ${version}" >&2; exit 1; }
-          version="${version//[^0-9A-Za-z._-]/_}"
+          # Tags and asset names are single path segments. '+' is legal in a
+          # git ref and the toolchain allows it; '~' is not representable in a
+          # ref, and whitespace/separators are never valid. A version this
+          # guard rejects is permanent, not retryable.
+          if [[ ! "${version}" =~ ^[0-9A-Za-z.+-]+$ ]]
+          then
+            echo "::error::upstream version is not tag-safe: ${version}" >&2
+            printf '{"code":"GUARD_VIOLATION","message":"upstream version is not tag-safe"}\n' > "${GITHUB_WORKSPACE}/report-code.json"
+            exit 1
+          fi
 
           feed_version=""
           feed_rc=0
@@ -542,7 +550,8 @@ jobs:
   pin-cask:
     needs: [detect, publish]
     if: >-
-      always() && needs.detect.outputs.skipped == 'false' &&
+      always() && github.ref == 'refs/heads/main' &&
+      needs.detect.outputs.skipped == 'false' &&
       (needs.detect.outputs.repair_cask == 'true' || needs.publish.result == 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 15

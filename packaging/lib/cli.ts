@@ -119,7 +119,21 @@ function parseUpstreamSpec(spec: string): [Architecture, UpstreamRecord] {
   if (!isArchitecture(architecture)) {
     throw new UsageError(`--upstream arch must be amd64 or arm64, got "${architecture}"`);
   }
-  return [architecture, { sha256: spec.slice(first + 1, second), url: spec.slice(second + 1) }];
+  const sha256 = spec.slice(first + 1, second);
+  if (!/^[0-9a-f]{64}$/i.test(sha256)) {
+    throw new UsageError(`--upstream sha256 must be 64 hex characters, got "${sha256}"`);
+  }
+  const url = spec.slice(second + 1);
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(url);
+  } catch {
+    throw new UsageError(`--upstream url is not a URL: "${url}"`);
+  }
+  if (parsedUrl.protocol !== "https:") {
+    throw new UsageError(`--upstream url must be https: "${url}"`);
+  }
+  return [architecture, { sha256: sha256.toLowerCase(), url }];
 }
 
 interface Command {
@@ -509,6 +523,9 @@ const COMMANDS: Command[] = [
       const upstreams: Partial<Record<Architecture, UpstreamRecord>> = {};
       for (const spec of flags.strList("upstream")) {
         const [architecture, record] = parseUpstreamSpec(spec);
+        if (upstreams[architecture] !== undefined) {
+          throw new UsageError(`--upstream given more than once for ${architecture}`);
+        }
         upstreams[architecture] = record;
       }
       const notes = renderReleaseNotes(descriptor, upstreams, flags.str("asset-dir"));
@@ -537,7 +554,8 @@ const COMMANDS: Command[] = [
     options: { app: APP, appdir: { type: "string" }, "failure-out": { type: "string" } },
     run: (flags) => {
       const appdir = flags.str("appdir");
-      const report = neutralizeUpdater(descriptorFor(flags), appdir);
+      const descriptor = descriptorFor(flags);
+      const report = neutralizeUpdater(descriptor, appdir);
       for (const file of report.patchedFiles) process.stderr.write(`[INFO] patched ${file}\n`);
       for (const file of report.removedFeedFiles) {
         process.stderr.write(`[INFO] removed update feed ${file}\n`);
@@ -546,7 +564,9 @@ const COMMANDS: Command[] = [
         process.stderr.write(`[INFO] removed ${report.removedJsonKeys.join(", ")}\n`);
       }
       for (const warning of report.warnings) process.stderr.write(`[WARN] ${warning}\n`);
-      process.stderr.write(`[INFO] verified no residual updater endpoints in ${appdir}\n`);
+      if (descriptor.updater.residualScan !== undefined && report.survivors.length === 0) {
+        process.stderr.write(`[INFO] verified no residual updater endpoints in ${appdir}\n`);
+      }
       return 0;
     },
   },

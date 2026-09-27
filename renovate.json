@@ -50,10 +50,9 @@
       "extractVersionTemplate": "^v(?<version>.*)$"
     },
     {
-      "description": "pkgforge appimagetool release pinned by hand in the AppImage build workflow and the builder Dockerfile",
+      "description": "pkgforge appimagetool release pinned in the builder Dockerfile",
       "customType": "regex",
       "managerFilePatterns": [
-        "/^\\.github/workflows/build-appimage\\.yml$/",
         "/^packaging\\/builder\\/Dockerfile$/"
       ],
       "matchStrings": [

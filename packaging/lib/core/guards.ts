@@ -63,10 +63,11 @@ export function assertHttpsUrl(raw: string, label: string): URL {
 
 // The host allow-list is a security guard, not a validation nicety: a hit means
 // the request resolved somewhere the descriptor never declared, which no re-run
-// would fix. Classified so the run record can say exactly that.
+// would fix. Classified so the run record can say exactly that. `url.host` (not
+// `hostname`) keeps a non-default port from slipping through.
 export function assertHostAllowed(url: URL, allowed: readonly string[], label: string): void {
-  if (!allowed.includes(url.hostname)) {
-    throw new GuardViolationError(`Unexpected ${label} host (${url.hostname})`);
+  if (!allowed.includes(url.host)) {
+    throw new GuardViolationError(`Unexpected ${label} host (${url.host})`);
   }
 }
 

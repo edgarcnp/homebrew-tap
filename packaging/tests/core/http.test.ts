@@ -121,6 +121,19 @@ describe("httpFailure", () => {
     assert.deepEqual(unavailable.evidence, { http_status: "503" });
   });
 
+  it("classifies a 403 retry hint as transient even without a zeroed count", () => {
+    const secondary = httpFailure(
+      new Response("", {
+        status: 403,
+        headers: { "x-ratelimit-remaining": "12", "retry-after": "20" },
+      }),
+      "boom (403)",
+    );
+    assert.ok(secondary instanceof UpstreamUnavailableError);
+    assert.equal(secondary.evidence["rate_limited"], "true");
+    assert.equal(secondary.evidence["retry_after_seconds"], "20");
+  });
+
   it("classifies a rate-limited GitHub 403 as transient", () => {
     const reset = Math.floor(Date.now() / 1000) + 60;
     const limited = httpFailure(
@@ -191,6 +204,19 @@ describe("writeFileAtomic", () => {
       writeFileAtomic(target, "{}");
       writeFileAtomic(target, '{"a":1}');
       assert.equal(fs.readFileSync(target, "utf8"), '{"a":1}');
+      assert.deepEqual(fs.readdirSync(dir), ["out.json"]);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("removes the temporary when the rename fails", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "fbr-atomic-"));
+    try {
+      // The target is a directory, so renameSync fails after the temp write.
+      const target = path.join(dir, "out.json");
+      fs.mkdirSync(target);
+      assert.throws(() => writeFileAtomic(target, "{}"));
       assert.deepEqual(fs.readdirSync(dir), ["out.json"]);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });

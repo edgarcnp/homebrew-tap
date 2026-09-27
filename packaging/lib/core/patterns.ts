@@ -9,8 +9,10 @@ export const SAFE_IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 export const SAFE_REFERENCE = /^[A-Za-z0-9][A-Za-z0-9._+-]*$/;
 
 // Debian upstream/release versions: a leading digit, then the dpkg version
-// charset. Used for tag-derived versions and manifest versions.
-export const DEB_VERSION = /^[0-9][0-9A-Za-z.+~_-]*$/;
+// charset. No "_": dpkg's own parser rejects it, so accepting it here would
+// only defer the failure to sort/prune time. Used for tag-derived versions and
+// manifest versions.
+export const DEB_VERSION = /^[0-9][0-9A-Za-z.+~-]*$/;
 
 // The one GitHub API repository URL shape the GitHub-backed oracles accept.
 export const GITHUB_API_REPOSITORY =

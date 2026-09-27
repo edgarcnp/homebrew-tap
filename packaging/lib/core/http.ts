@@ -52,12 +52,15 @@ export async function fetchOnce(
 // status stays a plain error, which the run record reports as UNCLASSIFIED.
 export function httpFailure(response: Response, message: string): Error {
   const { status } = response;
+  const retryAfter = retryAfterSeconds(response.headers);
+  // A secondary-rate-limit 403 carries Retry-After without zeroing the
+  // remaining count, so either signal marks it transient.
   const rateLimited =
-    status === 403 && response.headers.get("x-ratelimit-remaining") === "0";
+    status === 403 &&
+    (response.headers.get("x-ratelimit-remaining") === "0" || retryAfter !== null);
   if (status !== 429 && !rateLimited && status < 500) return new Error(message);
   const evidence: Record<string, string> = { http_status: String(status) };
   if (rateLimited) evidence["rate_limited"] = "true";
-  const retryAfter = retryAfterSeconds(response.headers);
   if (retryAfter !== null) evidence["retry_after_seconds"] = String(retryAfter);
   return new UpstreamUnavailableError(message, evidence);
 }
@@ -117,8 +120,8 @@ export async function readPayload(
 
 export function writeFileAtomic(filePath: string, data: string | Buffer): void {
   const tmp = `${filePath}.tmp.${crypto.randomBytes(8).toString("hex")}`;
-  fs.writeFileSync(tmp, data, { mode: 0o600, flag: "wx" });
   try {
+    fs.writeFileSync(tmp, data, { mode: 0o600, flag: "wx" });
     fs.renameSync(tmp, filePath);
   } catch (error) {
     try {
@@ -142,9 +145,20 @@ export function sha512Base64(data: Buffer): string {
   return crypto.createHash("sha512").update(data).digest("base64");
 }
 
+export function sha512Digest(data: Buffer): Buffer {
+  return crypto.createHash("sha512").update(data).digest();
+}
+
 // Constant-time comparison against a lowercase hex digest.
 export function digestMatchesHex(expectedHex: string, actual: Buffer): boolean {
   const expected = Buffer.from(expectedHex, "hex");
+  if (expected.length !== actual.length) return false;
+  return crypto.timingSafeEqual(actual, expected);
+}
+
+// Constant-time comparison against a base64 digest.
+export function digestMatchesBase64(expectedBase64: string, actual: Buffer): boolean {
+  const expected = Buffer.from(expectedBase64, "base64");
   if (expected.length !== actual.length) return false;
   return crypto.timingSafeEqual(actual, expected);
 }

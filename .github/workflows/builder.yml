@@ -118,6 +118,8 @@ jobs:
   # .github/workflows/ so that PAT needs no `workflow` scope.
   pin:
     needs: build
+    # A dispatch from a feature branch must not pin its images onto main.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -144,6 +146,7 @@ jobs:
         env:
           GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
         run: |
+          set +x
           echo "${GPG_PRIVATE_KEY}" | gpg --batch --import
           uid="$(gpg --list-secret-keys --keyid-format=long | awk '/^uid/ {print; exit}')"
           key_id="$(gpg --list-secret-keys --keyid-format=long | awk '/^sec/ {print $2; exit}' | cut -d/ -f2)"

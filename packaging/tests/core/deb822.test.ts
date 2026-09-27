@@ -138,4 +138,14 @@ describe("assertReleaseFreshness", () => {
       /Invalid Date/,
     );
   });
+
+  it("rejects a Date in the future beyond a small skew", () => {
+    assert.throws(
+      () => assertReleaseFreshness("Date: Sun, 13 Sep 2026 00:00:00 UTC\n", { now, warn }),
+      /in the future/,
+    );
+    assert.doesNotThrow(() =>
+      assertReleaseFreshness("Date: Sat, 12 Sep 2026 00:10:00 UTC\n", { now, warn }),
+    );
+  });
 });

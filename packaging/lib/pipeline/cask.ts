@@ -8,8 +8,8 @@ import { writeFileAtomic } from "../core/http.ts";
 import type { AppDescriptor, Architecture, CaskState } from "../core/types.ts";
 
 const VERSION_STANZA = /^[ \t]*version "([^"]*)"/gm;
-const ARM64_SHA256 = /arm64_linux:[ \t]*"([0-9a-f]{64})"/g;
-const X86_64_SHA256 = /x86_64_linux:[ \t]*"([0-9a-f]{64})"/g;
+const ARM64_SHA256 = /^[ \t]*(?:sha256[ \t]+)?arm64_linux:[ \t]*"([0-9a-f]{64})"/gm;
+const X86_64_SHA256 = /^[ \t]*(?:sha256[ \t]+)?x86_64_linux:[ \t]*"([0-9a-f]{64})"/gm;
 const SINGLE_SHA256 = /^[ \t]*sha256 "([0-9a-f]{64})"/gm;
 const DEPENDS_ARCH = /depends_on arch: :(x86_64|arm64)/g;
 
@@ -199,7 +199,10 @@ export function checkCask(descriptor: AppDescriptor, source: string): string[] {
     require(x86_64.length === 0, `single-arch cask must not carry x86_64_linux sha256 (found ${x86_64.length})`);
     require(single.length === 1, `expected one single sha256, found ${single.length}`);
     require(source.includes(`depends_on arch: :${brewArch}`), `missing depends_on arch: :${brewArch}`);
-    require(!source.includes('arch arm: "aarch64"'), "single-arch cask must not define an arch mapping");
+    require(
+      !source.includes('arch arm: "aarch64"') && !source.includes('arch intel: "x86_64"'),
+      "single-arch cask must not define an arch mapping",
+    );
   }
 
   const expectedUrl = expectedCaskUrl(descriptor);

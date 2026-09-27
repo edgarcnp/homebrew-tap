@@ -100,7 +100,10 @@ function removeJsonKeys(
   report: NeutralizeReport,
 ): void {
   const full = path.join(appDirPath, file);
-  if (!fs.existsSync(full)) return;
+  if (!fs.existsSync(full)) {
+    report.warnings.push(`${file} not found; no JSON updater keys removed`);
+    return;
+  }
   const parsed = JSON.parse(fs.readFileSync(full, "utf8")) as Record<string, unknown>;
   let changed = false;
   for (const key of keys) {

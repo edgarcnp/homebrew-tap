@@ -23,4 +23,12 @@ describe("substitutePlaceholders", () => {
       "app-$1{arch}.deb",
     );
   });
+
+  it("does not rescan a substituted value", () => {
+    assert.equal(substitutePlaceholders("{version}", { version: "{arch}", arch: "amd64" }), "{arch}");
+    assert.equal(
+      substitutePlaceholders("{version}", { arch: "amd64", version: "{arch}" }),
+      "{arch}",
+    );
+  });
 });

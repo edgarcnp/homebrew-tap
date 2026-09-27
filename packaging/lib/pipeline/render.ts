@@ -22,10 +22,9 @@ export function renderDesktopEntry(descriptor: AppDescriptor, version: string): 
   };
   if (!/^[0-9A-Za-z._+-]+$/.test(version)) fail(`Unsafe desktop entry version: ${version}`);
 
-  let rendered = template;
-  for (const [token, value] of Object.entries(substitutions)) {
-    rendered = rendered.split(token).join(value);
-  }
+  // One pass over the template: a substituted value is never rescanned, so a
+  // display name containing a token cannot inject another substitution.
+  let rendered = template.replace(/__[A-Z_]+__/g, (token) => substitutions[token] ?? token);
   const leftover = /__[A-Z_]+__/.exec(rendered);
   if (leftover !== null) fail(`Desktop template has an unsubstituted token: ${leftover[0]}`);
   if (!rendered.endsWith("\n")) rendered += "\n";

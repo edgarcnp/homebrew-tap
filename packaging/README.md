@@ -256,7 +256,7 @@ non-FHS and old distros.
 `get-debloated-pkgs` from a URL addressed by a commit digest of
 pkgforge-dev/Anylinux-AppImages, so one Renovate pin fixes the exact bytes of
 both — including what `quick-sharun` downloads for itself at build time. Only
-`appimagetool` is overridden, by the workflow's own pinned build.
+`appimagetool` is overridden, by the builder image's pinned build.
 
 ## Local run
 
@@ -283,7 +283,7 @@ Renovate opens one reviewed PR per dependency (automerge off):
 | Builder images (`fbr-builder-base`, `fbr-builder-webkit`) | `packaging/builder/pins.json` | pinned by the builder workflow's `pin` job, not Renovate |
 | Runner labels | `runs-on:`, and the labels the build matrix bakes in | github-runners (regex for the matrix) |
 | Bun version | `bun-version:`, the builder Dockerfile | uses-with, regex custom manager |
-| actionlint, pkgforge `appimagetool` | workflows, the builder Dockerfile | regex custom managers |
+| actionlint, pkgforge `appimagetool` | workflow (actionlint), builder Dockerfile (appimagetool) | regex custom managers |
 | `quick-sharun`, `get-debloated-pkgs` | `install-anylinux-tools.sh` | git-refs custom manager |
 
 Casks are not Renovate's: versions and checksums are produced by this pipeline

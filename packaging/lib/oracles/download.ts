@@ -5,12 +5,13 @@ import { assertHostAllowed } from "../core/guards.ts";
 import { ChecksumMismatchError, GuardViolationError } from "../core/errors.ts";
 import {
   MAX_PAYLOAD_BYTES,
+  digestMatchesBase64,
   digestMatchesHex,
   fetchOnce,
   httpFailure,
   readPayload,
   sha256Digest,
-  sha512Base64,
+  sha512Digest,
   writeFileAtomic,
 } from "../core/http.ts";
 
@@ -42,7 +43,9 @@ export interface FetchedPayload {
 }
 
 // Fetches and validates the transport-level invariants: a 2xx response, HTTPS
-// after any redirect, an allow-listed host, and a body under the size cap.
+// after any redirect, an allow-listed host, and a body under the size cap. Only
+// the final URL is pinned: the runtime follows the redirect chain, so
+// intermediate hops cannot be inspected here.
 export async function fetchVerified(
   url: string,
   options: FetchVerifiedOptions,
@@ -89,7 +92,7 @@ export function verifyPayload(bytes: Buffer, expected: PayloadExpectation, label
       `${label} SHA256 mismatch: expected ${expected.sha256}, got ${sha256Digest(bytes).toString("hex")}`,
     );
   }
-  if (expected.sha512 !== undefined && sha512Base64(bytes) !== expected.sha512) {
+  if (expected.sha512 !== undefined && !digestMatchesBase64(expected.sha512, sha512Digest(bytes))) {
     throw new ChecksumMismatchError(`${label} SHA512 mismatch against the upstream update feed`);
   }
 }

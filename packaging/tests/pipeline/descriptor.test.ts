@@ -456,7 +456,7 @@ describe("descriptor validation", () => {
     );
     assert.throws(
       () => validateDescriptor(mutated("vscode", (copy) => { copy["tagPrefix"] = "bad prefix"; }), "vscode"),
-      /not a safe name/,
+      /not a safe tag prefix/,
     );
   });
 
@@ -553,6 +553,27 @@ describe("descriptor validation", () => {
           "cline-desktop",
         ),
       /repository-relative/,
+    );
+  });
+
+  it("accepts a release tag prefix with + and rejects empty patch targets", () => {
+    assert.doesNotThrow(() =>
+      validateDescriptor(
+        mutated("vscode", (copy) => {
+          copy["tagPrefix"] = "v+";
+        }),
+        "vscode",
+      ),
+    );
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("cline-desktop", (copy) => {
+            nested(nested(copy, "updater"), "patchEndpoint")["targets"] = [];
+          }),
+          "cline-desktop",
+        ),
+      /targets must not be empty/,
     );
   });
 

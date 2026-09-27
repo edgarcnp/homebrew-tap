@@ -5,6 +5,9 @@ import { MAX_PAYLOAD_BYTES } from "./http.ts";
 
 const MAX_RELEASE_AGE_DAYS = 14;
 const WARN_RELEASE_AGE_DAYS = 7;
+// A signed index stamped slightly ahead of the runner's clock is normal; more
+// than an hour ahead is treated as "not valid yet", like apt.
+const MAX_FUTURE_SKEW_MS = 60 * 60 * 1000;
 const MAX_INRELEASE_LINES = 100000;
 const MAX_INRELEASE_HEADER_LINES = 50;
 
@@ -117,13 +120,16 @@ export function assertReleaseFreshness(
   };
 
   const validUntil = toTimestamp(fields["Valid-Until"], "Valid-Until");
+  const dateMs = toTimestamp(fields["Date"], "Date");
+  if (dateMs !== null && dateMs - now > MAX_FUTURE_SKEW_MS) {
+    throw new Error(`InRelease Date is in the future: ${fields["Date"]}`);
+  }
   if (validUntil !== null) {
     if (now > validUntil) {
       throw new Error(`InRelease expired: Valid-Until ${fields["Valid-Until"]} is in the past`);
     }
     return;
   }
-  const dateMs = toTimestamp(fields["Date"], "Date");
   if (dateMs === null) throw new Error("InRelease missing Date field; cannot verify freshness");
   const ageDays = (now - dateMs) / (24 * 60 * 60 * 1000);
   if (ageDays > MAX_RELEASE_AGE_DAYS) {

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { compareDebVersions, sortDebVersions, normalizeUpstreamVersion, parseDebVersion } from "../../lib/core/version.ts";
+import { DEB_VERSION } from "../../lib/core/patterns.ts";
 
 describe("compareDebVersions", () => {
   // Expectations follow dpkg's verrevcmp()/order() (libdpkg/version.c): the
@@ -92,5 +93,16 @@ describe("normalizeUpstreamVersion", () => {
   it("strips a Debian epoch, which a cask version cannot carry", () => {
     assert.equal(normalizeUpstreamVersion("1:1.133.0-1786487972"), "1.133.0");
     assert.equal(normalizeUpstreamVersion("2:0.22.3"), "0.22.3");
+  });
+});
+
+describe("DEB_VERSION", () => {
+  it("matches the dpkg charset parseDebVersion enforces", () => {
+    for (const version of ["1.0.0", "1.0.0-1", "1.0.0~rc1", "1.0.0+1"]) {
+      assert.ok(DEB_VERSION.test(version), version);
+      assert.doesNotThrow(() => parseDebVersion(version));
+    }
+    assert.equal(DEB_VERSION.test("1.0_x"), false);
+    assert.throws(() => parseDebVersion("1.0_x"));
   });
 });

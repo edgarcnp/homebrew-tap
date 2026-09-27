@@ -116,7 +116,9 @@ class Validator {
       throw new Error(`Unsupported $ref "${reference}" at ${path} (only local $defs)`);
     }
     const definitions = this.root["$defs"];
-    const target = isRecord(definitions) ? definitions[reference.slice(prefix.length)] : undefined;
+    const name = reference.slice(prefix.length);
+    const target =
+      isRecord(definitions) && Object.hasOwn(definitions, name) ? definitions[name] : undefined;
     if (!isRecord(target)) {
       throw new Error(`$ref "${reference}" at ${path} does not resolve`);
     }
@@ -171,43 +173,45 @@ class Validator {
       }
     }
 
-    const minLength = schema["minLength"];
+    const minLength = countBound(schema["minLength"], "minLength", path);
     if (minLength !== undefined) {
-      if (typeof minLength !== "number") throw new Error(`minLength must be a number at ${path}`);
       if (typeof value === "string" && value.length < minLength) {
         this.issue(path, `must be at least ${minLength} characters`);
       }
     }
 
-    const minimum = schema["minimum"];
+    const minimum = boundedNumber(schema["minimum"], "minimum", path);
     if (minimum !== undefined) {
-      if (typeof minimum !== "number") throw new Error(`minimum must be a number at ${path}`);
       if (typeof value === "number" && value < minimum) {
         this.issue(path, `must be at least ${minimum}`);
       }
     }
 
-    const maximum = schema["maximum"];
+    const maximum = boundedNumber(schema["maximum"], "maximum", path);
     if (maximum !== undefined) {
-      if (typeof maximum !== "number") throw new Error(`maximum must be a number at ${path}`);
       if (typeof value === "number" && value > maximum) {
         this.issue(path, `must be at most ${maximum}`);
       }
     }
 
-    const minItems = schema["minItems"];
+    const minItems = countBound(schema["minItems"], "minItems", path);
     if (minItems !== undefined) {
-      if (typeof minItems !== "number") throw new Error(`minItems must be a number at ${path}`);
       if (Array.isArray(value) && value.length < minItems) {
         this.issue(path, `must have at least ${minItems} items`);
       }
     }
 
-    if (schema["uniqueItems"] === true && Array.isArray(value)) {
-      for (let index = 0; index < value.length; index += 1) {
-        for (let other = index + 1; other < value.length; other += 1) {
-          if (deepEqual(value[index], value[other])) {
-            this.issue(path, `must not contain duplicate items (${JSON.stringify(value[index])})`);
+    const uniqueItems = schema["uniqueItems"];
+    if (uniqueItems !== undefined) {
+      if (typeof uniqueItems !== "boolean") {
+        throw new Error(`uniqueItems must be a boolean at ${path}`);
+      }
+      if (uniqueItems && Array.isArray(value)) {
+        for (let index = 0; index < value.length; index += 1) {
+          for (let other = index + 1; other < value.length; other += 1) {
+            if (deepEqual(value[index], value[other])) {
+              this.issue(path, `must not contain duplicate items (${JSON.stringify(value[index])})`);
+            }
           }
         }
       }
@@ -296,6 +300,22 @@ class Validator {
 function asSchema(value: unknown, label: string): Record<string, unknown> {
   if (!isRecord(value)) throw new Error(`Schema at ${label} must be an object`);
   return value;
+}
+
+function boundedNumber(value: unknown, keyword: string, path: string): number | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error(`${keyword} must be a finite number at ${path}`);
+  }
+  return value;
+}
+
+function countBound(value: unknown, keyword: string, path: string): number | undefined {
+  const bound = boundedNumber(value, keyword, path);
+  if (bound !== undefined && (!Number.isInteger(bound) || bound < 0)) {
+    throw new Error(`${keyword} must be a non-negative integer at ${path}`);
+  }
+  return bound;
 }
 
 export function validateAgainstSchema(schema: unknown, value: unknown): SchemaIssue[] {

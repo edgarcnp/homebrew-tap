@@ -47,6 +47,16 @@ export function parseFinalUrl(finalUrl: string, redirectHosts: readonly string[]
   }
   assertHostAllowed(url, redirectHosts, "redirect");
   const segments = url.pathname.split("/").filter(Boolean);
+  // Pins the one layout this oracle knows:
+  // releases/release/<version>/linux/<arch>/<file>.deb
+  if (
+    segments.length !== 6 ||
+    segments[0] !== "releases" ||
+    segments[1] !== "release" ||
+    segments[3] !== "linux"
+  ) {
+    throw new Error(`Unrecognized release path: ${url.pathname}`);
+  }
   const fileName = segments[segments.length - 1] ?? "";
   const archPath = segments[segments.length - 2] ?? "";
   const release = segments[segments.length - 4] ?? "";
@@ -94,6 +104,7 @@ export async function resolveWithCdnRedirect(
     fail(`Repository must not contain a query or fragment: ${oracle.repository}`);
   }
   const repository = repositoryUrl.origin + repositoryUrl.pathname.replace(/\/+$/, "");
+  const debName = assertSafeName(oracle.debName, "deb name");
   const { outputDir, metadataPath } = prepareOutput(request);
 
   const { bytes, finalUrl } = await fetchVerified(`${repository}/${mapping.path}/deb`, {
@@ -117,7 +128,7 @@ export async function resolveWithCdnRedirect(
   const size = bytes.length;
   let packagePath: string | null = null;
   if (!request.metadataOnly) {
-    packagePath = path.join(outputDir, `${oracle.debName}_${version}_${mapping.debArch}.deb`);
+    packagePath = path.join(outputDir, `${debName}_${version}_${mapping.debArch}.deb`);
     writeFileAtomic(packagePath, bytes);
     const onDisk = sha256Digest(fs.readFileSync(packagePath));
     if (!digestMatchesHex(sha256, onDisk)) {

@@ -18,13 +18,11 @@ import { downloadVerified, fetchVerified } from "./download.ts";
 import { parseUpdateYml } from "./electron-feed.ts";
 import {
   assertRepositoryUrl,
-  asReleaseList,
-  githubApiFetch,
+  fetchReleaseList,
   githubDownloadBase,
   isPublishedRelease,
   releaseAssetMap,
   releaseTag,
-  releasesApiUrl,
   type ReleaseAssetRecord,
 } from "./github-api.ts";
 import { isSha256Digest, normalizeTagVersion, parseSha256Digest } from "./release-common.ts";
@@ -88,7 +86,7 @@ export async function selectRelease(
   assetPrefix: string,
   token: string,
 ): Promise<ReleaseSelection> {
-  const releases = asReleaseList(await githubApiFetch(releasesApiUrl(repository), token));
+  const releases = await fetchReleaseList(repository, token);
   for (const release of releases) {
     if (!isPublishedRelease(release)) continue;
     const byName = releaseAssetMap(release);
@@ -131,7 +129,7 @@ export async function selectTemplatedRelease(
 ): Promise<TemplatedSelection> {
   const prefix = assertMatches(tagPrefix, SAFE_REFERENCE, "tag prefix");
   if (!assetNameTemplate.includes("{version}")) fail("assetNameTemplate must contain {version}");
-  const releases = asReleaseList(await githubApiFetch(releasesApiUrl(repository), token));
+  const releases = await fetchReleaseList(repository, token);
   for (const release of releases) {
     if (!isPublishedRelease(release)) continue;
     const tag = releaseTag(release);

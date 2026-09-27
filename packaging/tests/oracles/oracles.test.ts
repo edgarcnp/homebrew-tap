@@ -14,7 +14,7 @@ import {
   validateFeedRepository,
 } from "../../lib/oracles/electron-feed.ts";
 import { selectRelease, isAppImageAsset, updateYmlName } from "../../lib/oracles/github-release.ts";
-import { assertRepositoryUrl } from "../../lib/oracles/github-api.ts";
+import { assertRepositoryUrl, fetchReleaseList } from "../../lib/oracles/github-api.ts";
 import { normalizeTagVersion, parseSha256Digest } from "../../lib/oracles/release-common.ts";
 import {
   fetchManifest,
@@ -257,6 +257,10 @@ describe("electron-feed oracle", () => {
       /is a draft/,
     );
     assert.throws(
+      () => selectAsset({ ...release, prerelease: true }, "freebuff-desktop-v0.0.109", "Freebuff-0.0.109-linux-x86_64.AppImage", 100),
+      /is a prerelease/,
+    );
+    assert.throws(
       () => selectAsset(release, "freebuff-desktop-v0.0.109", "absent.AppImage", 100),
       /has no asset/,
     );
@@ -342,6 +346,10 @@ describe("cdn-redirect oracle", () => {
     assert.throws(
       () => parseFinalUrl(target.replace("/0.22.3-3215/", "/v0.22.3/"), GITBUTLER_HOSTS),
       /Unrecognized release segment/,
+    );
+    assert.throws(
+      () => parseFinalUrl(target.replace("/releases/release/", "/releases/other/"), GITBUTLER_HOSTS),
+      /Unrecognized release path/,
     );
     assert.throws(
       () => parseFinalUrl(target.replace("https://", "http://"), GITBUTLER_HOSTS),
@@ -546,6 +554,35 @@ describe("update-manifest oracle", () => {
     assert.throws(() => validateManifestEndpoint("http://opencode.ai/x"), /must be https/);
     assert.throws(() => validateManifestEndpoint("https://opencode.ai/x?y=1"), /query or fragment/);
     assert.throws(() => validateManifestEndpoint("not a url"), /Invalid update manifest endpoint/);
+  });
+});
+
+describe("fetchReleaseList", () => {
+  it("walks past the first page", async () => {
+    const urls: string[] = [];
+    const originalFetch = globalThis.fetch;
+    const page = (count: number): unknown[] =>
+      Array.from({ length: count }, (_entry, index) => ({
+        tag_name: `t${index}`,
+        draft: false,
+        prerelease: false,
+        assets: [],
+      }));
+    globalThis.fetch = (async (input: string | URL) => {
+      const url = String(input);
+      urls.push(url);
+      return new Response(
+        JSON.stringify(url.includes("page=2") ? page(2) : page(100)),
+        { status: 200 },
+      );
+    }) as unknown as typeof fetch;
+    try {
+      const releases = await fetchReleaseList("https://api.github.com/repos/o/r", "");
+      assert.equal(releases.length, 102);
+      assert.match(urls[1] ?? "", /page=2/);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 });
 

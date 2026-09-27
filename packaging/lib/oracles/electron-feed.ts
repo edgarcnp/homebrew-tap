@@ -7,6 +7,7 @@ import {
   GITHUB_ASSET_HOSTS,
   assertMatches,
   assertPositiveSize,
+  assertSafeName,
   fail,
 } from "../core/guards.ts";
 import { MAX_PAYLOAD_BYTES, fetchOnce, httpFailure } from "../core/http.ts";
@@ -203,11 +204,17 @@ export function selectAsset(
   assetName: string,
   ymlSize: number,
 ): SelectedAsset {
-  const typed = release as { tag_name?: unknown; draft?: unknown; assets?: unknown };
+  const typed = release as {
+    tag_name?: unknown;
+    draft?: unknown;
+    prerelease?: unknown;
+    assets?: unknown;
+  };
   if (typed.tag_name !== tag) {
     throw new Error(`Release tag ${String(typed.tag_name)} does not match requested ${tag}`);
   }
   if (typed.draft === true) throw new Error(`Release ${tag} is a draft`);
+  if (typed.prerelease === true) throw new Error(`Release ${tag} is a prerelease`);
   if (!Array.isArray(typed.assets)) throw new Error(`Release ${tag} has no asset list`);
   const found = typed.assets.find((candidate) => {
     const asset = candidate as { name?: unknown };
@@ -237,6 +244,7 @@ export async function resolveWithElectronFeed(
   const repository = validateFeedRepository(oracle.repository);
   const githubRepository = assertRepositoryUrl(oracle.githubRepository);
   const tagPrefix = assertMatches(oracle.tagPrefix, SAFE_REFERENCE, "tag prefix");
+  const packageName = assertSafeName(oracle.packageName, "package name");
   const { outputDir, metadataPath } = prepareOutput(request);
 
   // Redirect only: the Location header carries the exact release tag.
@@ -275,9 +283,9 @@ export async function resolveWithElectronFeed(
   const downloadBase = githubDownloadBase(githubRepository);
   const packagePath = request.metadataOnly
     ? null
-    : path.join(outputDir, `${oracle.packageName}_${parsed.version}_${request.architecture}.AppImage`);
+    : path.join(outputDir, `${packageName}_${parsed.version}_${request.architecture}.AppImage`);
   const metadata = makeMetadata({
-    package: oracle.packageName,
+    package: packageName,
     version: parsed.version,
     architecture: request.architecture,
     repositoryPath: `${parsed.tag}/${asset.name}`,
