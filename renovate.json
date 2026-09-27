@@ -163,7 +163,7 @@
       "groupName": "bun runtime"
     },
     {
-      "description": "Builder images are pinned by tag+digest; date.run tags need loose ordering",
+      "description": "The builder images are pinned by the builder workflow's pin job, not Renovate",
       "matchDatasources": [
         "docker"
       ],
@@ -171,7 +171,7 @@
         "ghcr.io/edgarcnp/fbr-builder-base",
         "ghcr.io/edgarcnp/fbr-builder-webkit"
       ],
-      "versioning": "loose"
+      "enabled": false
     },
     {
       "description": "Hand-pinned upstream tools whose version is addressed by a URL Renovate rewrites",

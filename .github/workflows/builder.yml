@@ -94,10 +94,92 @@ jobs:
         run: |
           docker push "${IMAGE_REF}"
           digest="$(docker inspect --format '{{index .RepoDigests 0}}' "${IMAGE_REF}" 2>/dev/null || true)"
+          sha="sha256:${digest##*sha256:}"
+          [[ "${sha}" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::no digest for ${IMAGE_REF}"; exit 1; }
+          echo "${IMAGE_REF}@${sha}" > image-ref.txt
           {
             echo "### Builder image pushed"
             echo ""
-            echo "\`${digest:-${IMAGE_REF}}\`"
-            echo ""
-            echo "Pin this tag+digest in \`.github/workflows/build-appimage.yml\`."
+            echo "\`$(cat image-ref.txt)\`"
           } >> "${GITHUB_STEP_SUMMARY}"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: image-ref-${{ matrix.variant }}
+          path: image-ref.txt
+          if-no-files-found: error
+          retention-days: 7
+
+  # After both variants are pushed, commit the new tag+digest into
+  # build-appimage.yml so dispatches always run the images this workflow
+  # produced. Signed and pushed with the same PAT the cask pins use, because
+  # main requires changes through a PR.
+  pin:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    concurrency:
+      group: pin-builder-image
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: image-ref-*
+          path: image-refs
+      - name: Pin the builder images
+        run: |
+          bash packaging/scripts/pin-builder-image.sh \
+            .github/workflows/build-appimage.yml \
+            "$(cat image-refs/image-ref-base/image-ref.txt)" \
+            "$(cat image-refs/image-ref-webkit/image-ref.txt)"
+      - name: Import GPG signing key
+        id: import-gpg
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        run: |
+          echo "${GPG_PRIVATE_KEY}" | gpg --batch --import
+          uid="$(gpg --list-secret-keys --keyid-format=long | awk '/^uid/ {print; exit}')"
+          key_id="$(gpg --list-secret-keys --keyid-format=long | awk '/^sec/ {print $2; exit}' | cut -d/ -f2)"
+          name="$(sed -E 's/^uid\s+\[[^]]*\]\s+//; s/\s*<[^>]+>\s*$//' <<<"${uid}")"
+          email="$(sed -E 's/.*<([^>]+)>.*/\1/' <<<"${uid}")"
+          {
+            echo "gpg_key_id=${key_id}"
+            echo "gpg_name=${name}"
+            echo "gpg_email=${email}"
+          } >> "$GITHUB_OUTPUT"
+      - name: Commit and push the pin
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_PAT }}
+          GPG_KEY_ID: ${{ steps.import-gpg.outputs.gpg_key_id }}
+          GPG_NAME: ${{ steps.import-gpg.outputs.gpg_name }}
+          GPG_EMAIL: ${{ steps.import-gpg.outputs.gpg_email }}
+        run: |
+          tag="$(sed -E 's/^.*:([^:@]+)@.*$/\1/' image-refs/image-ref-base/image-ref.txt)"
+          if git diff --quiet; then
+            echo "already pinned to ${tag}; nothing to commit"
+            exit 0
+          fi
+          gh auth setup-git
+          git config gpg.format openpgp
+          git config user.name "${GPG_NAME}"
+          git config user.email "${GPG_EMAIL}"
+          git config user.signingkey "${GPG_KEY_ID}"
+          git config commit.gpgsign true
+          git add .github/workflows/build-appimage.yml
+          git commit -S -m "chore(ci): pin the builder images to ${tag}"
+          for _ in 1 2 3 4 5; do
+            if git push origin HEAD:main; then
+              echo "pinned the builder images to ${tag}"
+              exit 0
+            fi
+            # A concurrent cask pin may advance main; rebase and retry.
+            sleep 10
+            git fetch origin main
+            git rebase FETCH_HEAD
+          done
+          echo "could not push the builder image pin after 5 attempts" >&2
+          exit 1

@@ -211,8 +211,11 @@ directory.
 
 ## Build model
 
-Builds run in `ghcr.io/pkgforge-dev/archlinux` (tag and digest pinned in
-`build-appimage.yml`; Renovate bumps both). `linuxdeploy` was retired:
+Builds run in the pinned builder images (`packaging/builder/Dockerfile`):
+`ghcr.io/edgarcnp/fbr-builder-base` for most apps, `fbr-builder-webkit` for the
+two webkit apps. The builder workflow rebuilds them and its `pin` job commits
+the new tag+digest into `build-appimage.yml`, so the reference cannot drift
+from the image. `linuxdeploy` was retired:
 `quick-sharun` bundles the app's dynamic-linker closure **including glibc and
 ld-linux**, so the AppImages have no host-libc dependency and run on musl,
 non-FHS and old distros.
@@ -241,10 +244,11 @@ non-FHS and old distros.
 - Three things stay in this pipeline rather than delegating to `quick-sharun`:
   updater neutralization, the smoke gate (run against the packed AppImage), and
   the `appimagetool` invocation (so no zsync updater feed is embedded).
-- The workflow installs webkit2gtk/GTK (+ X11 libs, mirroring upstream
-  `webkit2gtk4-demo-appimage.sh`) only for apps with `needsWebkit`
-  (little-genius, cline-desktop); the other build deps are installed for every
-  app. Both debloat with `--add-common --prefer-nano webkit2gtk-4.1-mini`.
+- The `webkit` image variant carries the webkit2gtk/GTK closure (+ X11 libs,
+  mirroring upstream `webkit2gtk4-demo-appimage.sh`) for the apps with
+  `needsWebkit` (little-genius, cline-desktop); the `base` variant serves the
+  rest. Both debloat per app with `--add-common --prefer-nano
+  webkit2gtk-4.1-mini`.
 
 `scripts/install-anylinux-tools.sh` fetches `quick-sharun` and
 `get-debloated-pkgs` from a URL addressed by a commit digest of
@@ -260,9 +264,10 @@ TARGET_ARCH=amd64 PACKAGE_VERSION=1.137.0 packaging/apps/vscode/build.sh
 
 `PACKAGE_VERSION` is optional: unset, it comes from the resolved metadata; set,
 the build fails if the resolved version differs (CI always sets it). Requires an
-Arch Linux system (or the pkgforge container), `bun` ≥ 1.4, `jq`, the app's own
-tooling (`dpkg-deb`, `gpg`/`gpgv`), `quick-sharun` in `PATH` and `APPIMAGETOOL`
-pointing at the uruntime `appimagetool`. Output lands in `<tap>/dist/`.
+Arch Linux system — the builder image (`packaging/builder/Dockerfile`) is the
+supported one — plus `bun` ≥ 1.4, `jq`, the app's own tooling (`dpkg-deb`,
+`gpg`/`gpgv`), `quick-sharun` in `PATH` and `APPIMAGETOOL` pointing at the
+uruntime `appimagetool`. Output lands in `<tap>/dist/`.
 
 ## Dependency pinning
 
@@ -273,6 +278,7 @@ Renovate opens one reviewed PR per dependency (automerge off):
 | `typescript`, `@types/bun` | `package.json` | npm + bun (exact pins, no `^`) |
 | GitHub Actions | workflow `uses:` | github-actions (SHA re-pinned) |
 | Container images | workflow `container:`, including the nested matrix image, and the builder Dockerfile's `FROM` | docker (regex for the matrix) |
+| Builder images (`fbr-builder-base`, `fbr-builder-webkit`) | `build-appimage.yml` `container:` | pinned by the builder workflow's `pin` job, not Renovate |
 | Runner labels | `runs-on:`, and the labels the build matrix bakes in | github-runners (regex for the matrix) |
 | Bun version | `bun-version:`, the builder Dockerfile | uses-with, regex custom manager |
 | actionlint, pkgforge `appimagetool` | workflows, the builder Dockerfile | regex custom managers |

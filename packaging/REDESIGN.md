@@ -193,8 +193,10 @@ published by a workflow on changes and on a weekly schedule.
   pinned `install-anylinux-tools.sh`), `appimagetool`, Bun.
 - Not baked: the orchestrator itself — it always comes from the checkout, so it
   can never lag the commit under test.
-- Pinned by tag+digest in the workflow; Renovate bumps both images like the
-  pkgforge one. Arch freshness is a scheduled rebuild, not a per-run `-Syu`.
+- Pinned by tag+digest in `build-appimage.yml`; the builder workflow's `pin`
+  job commits the new reference after every rebuild, so Renovate does not
+  manage these two images. Arch freshness is a scheduled rebuild, not a
+  per-run `-Syu`.
 - Result: for the current apps, no pacman, no tool downloads and no
   `get-debloated-pkgs` in a build job; a failed image pull is one classified
   toolchain failure instead of four network steps. An app that needs an extra
