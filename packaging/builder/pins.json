@@ -1,4 +1,4 @@
 {
-  "base": "ghcr.io/edgarcnp/fbr-builder-base:2026.09.27.4@sha256:10d247d8fd72f25fa9224bfec6259afc750bd03baa5d63b72534089d94f14404",
-  "webkit": "ghcr.io/edgarcnp/fbr-builder-webkit:2026.09.27.4@sha256:1b376a36a2237ec03f0b844f6bc4912881041f8fec85e750d8574351b0cc6937"
+  "base": "ghcr.io/edgarcnp/fbr-builder-base:2026.09.27.5@sha256:cbd3af682ba10406f0609bb4c73d2ca479551213f25c34034489d508dd9e8fd3",
+  "webkit": "ghcr.io/edgarcnp/fbr-builder-webkit:2026.09.27.5@sha256:82f5e981150ee2217a2c773cc69e6bab53734ef6ce36fe838f17ec85894ce768"
 }
