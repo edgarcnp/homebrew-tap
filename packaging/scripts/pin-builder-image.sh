@@ -1,11 +1,13 @@
 #!/bin/bash
 set -Eeuo pipefail
 
-# Pins the two builder image references in the AppImage build workflow. Run by
+# Pins the two builder image references in packaging/builder/pins.json, the file
+# the AppImage build workflow's detect job reads for the build container. Run by
 # the builder workflow's pin job after it pushes new images; see
-# packaging/README.md ("Build model").
+# packaging/README.md ("Build model"). The file lives outside .github/workflows/
+# on purpose: a PAT without the `workflow` scope can commit it.
 #
-# Usage: pin-builder-image.sh <workflow-file> <base-ref> <webkit-ref>
+# Usage: pin-builder-image.sh <pins-file> <base-ref> <webkit-ref>
 # Each ref is ghcr.io/edgarcnp/fbr-builder-<variant>:<tag>@sha256:<64 hex>.
 # Validates both the refs and the file's reference counts before writing, so a
 # failure leaves the file untouched.
@@ -16,10 +18,9 @@ error() {
   exit 1
 }
 
-# Every non-quote character after the tag colon, so a match stops at the
-# closing quote of the expression's string literal.
+# The JSON string value after "<variant>":, up to the closing quote.
 ref_pattern() {
-  printf '%s' "ghcr\\.io/edgarcnp/fbr-builder-$1:[^'\"]+"
+  printf '%s' "\"$1\": \"[^\"]+\""
 }
 
 count_refs() {
@@ -27,16 +28,19 @@ count_refs() {
 }
 
 replace_ref() {
-  sed -i -E "s|$(ref_pattern "$2")|$3|" "$1"
+  local file="$1" variant="$2" ref="$3" pattern replacement
+  pattern="$(ref_pattern "${variant}")"
+  replacement="\"${variant}\": \"${ref}\""
+  sed -i -E "s|${pattern}|${replacement}|" "${file}"
 }
 
 main() {
   local file="${1:-}" base_ref="${2:-}" webkit_ref="${3:-}"
   if [[ -z "${file}" ]] || [[ -z "${base_ref}" ]] || [[ -z "${webkit_ref}" ]]
   then
-    error "usage: pin-builder-image.sh <workflow-file> <base-ref> <webkit-ref>"
+    error "usage: pin-builder-image.sh <pins-file> <base-ref> <webkit-ref>"
   fi
-  [[ -f "${file}" ]] || error "no such workflow file: ${file}"
+  [[ -f "${file}" ]] || error "no such pins file: ${file}"
 
   local suffix='[0-9]{4}\.[0-9]{2}\.[0-9]{2}\.[0-9]+@sha256:[0-9a-f]{64}'
   [[ "${base_ref}" =~ ^ghcr\.io/edgarcnp/fbr-builder-base:${suffix}$ ]] ||

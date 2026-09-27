@@ -20,6 +20,7 @@ packaging/
   apps/<app>/assets/       pinned signing key material
   bin/fbr.ts               the CLI
   builder/Dockerfile       the pinned Arch builder image (base + webkit variants)
+  builder/pins.json        the image refs the build workflow reads
   lib/cli.ts               CLI composition root
   lib/core/                primitives: paths, types, guards, patterns, version,
                            architecture, template, http, deb822, metadata
@@ -214,8 +215,9 @@ directory.
 Builds run in the pinned builder images (`packaging/builder/Dockerfile`):
 `ghcr.io/edgarcnp/fbr-builder-base` for most apps, `fbr-builder-webkit` for the
 two webkit apps. The builder workflow rebuilds them and its `pin` job commits
-the new tag+digest into `build-appimage.yml`, so the reference cannot drift
-from the image. `linuxdeploy` was retired:
+the new tag+digest into `packaging/builder/pins.json`, which the build job
+reads for its container, so the reference cannot drift from the image.
+`linuxdeploy` was retired:
 `quick-sharun` bundles the app's dynamic-linker closure **including glibc and
 ld-linux**, so the AppImages have no host-libc dependency and run on musl,
 non-FHS and old distros.
@@ -278,7 +280,7 @@ Renovate opens one reviewed PR per dependency (automerge off):
 | `typescript`, `@types/bun` | `package.json` | npm + bun (exact pins, no `^`) |
 | GitHub Actions | workflow `uses:` | github-actions (SHA re-pinned) |
 | Container images | workflow `container:`, including the nested matrix image, and the builder Dockerfile's `FROM` | docker (regex for the matrix) |
-| Builder images (`fbr-builder-base`, `fbr-builder-webkit`) | `build-appimage.yml` `container:` | pinned by the builder workflow's `pin` job, not Renovate |
+| Builder images (`fbr-builder-base`, `fbr-builder-webkit`) | `packaging/builder/pins.json` | pinned by the builder workflow's `pin` job, not Renovate |
 | Runner labels | `runs-on:`, and the labels the build matrix bakes in | github-runners (regex for the matrix) |
 | Bun version | `bun-version:`, the builder Dockerfile | uses-with, regex custom manager |
 | actionlint, pkgforge `appimagetool` | workflows, the builder Dockerfile | regex custom managers |

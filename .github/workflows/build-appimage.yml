@@ -38,6 +38,7 @@ jobs:
       asset_prefix: ${{ steps.app.outputs.asset_prefix }}
       tag_prefix: ${{ steps.app.outputs.tag_prefix }}
       needs_webkit: ${{ steps.app.outputs.needs_webkit }}
+      builder_image: ${{ steps.builder.outputs.builder_image }}
       architectures: ${{ steps.app.outputs.architectures }}
       build_matrix: ${{ steps.matrix.outputs.matrix }}
       version: ${{ steps.resolve.outputs.version }}
@@ -68,6 +69,22 @@ jobs:
           # $GITHUB_ENV, lowercase to $GITHUB_OUTPUT (which cannot read env).
           bun tap/packaging/bin/fbr.ts descriptor-env --app "${APP}" >> "${GITHUB_ENV}"
           bun tap/packaging/bin/fbr.ts descriptor-env --app "${APP}" --format output >> "${GITHUB_OUTPUT}"
+      - name: Select the builder image
+        id: builder
+        run: |
+          # The pins live in packaging/builder/pins.json, kept in step by the
+          # builder workflow's pin job; the build job's container reads this
+          # output. A malformed file is a config error, not a retry.
+          variant=base
+          if [[ "${NEEDS_WEBKIT}" == "true" ]]; then variant=webkit; fi
+          image="$(jq -r --arg variant "${variant}" '.[$variant]' tap/packaging/builder/pins.json)"
+          if [[ ! "${image}" =~ ^ghcr\.io/edgarcnp/fbr-builder-(base|webkit):[0-9]{4}\.[0-9]{2}\.[0-9]{2}\.[0-9]+@sha256:[0-9a-f]{64}$ ]]
+          then
+            echo "::error::pins.json has no usable ${variant} image ref" >&2
+            printf '{"code":"DESCRIPTOR_INVALID","message":"builder image pins are missing or malformed"}\n' > "${GITHUB_WORKSPACE}/report-code.json"
+            exit 1
+          fi
+          echo "builder_image=${image}" >> "${GITHUB_OUTPUT}"
       - name: Plan the build matrix
         id: matrix
         run: |
@@ -263,11 +280,11 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: read
-    # The pinned builder images (packaging/builder/Dockerfile), chosen by the
-    # app's needsWebkit flag. The builder workflow rebuilds them and commits the
-    # new tag+digest here (its pin job); do not hand-edit these references.
+    # packaging/builder/pins.json holds the pinned builder image refs; the
+    # detect job picks one per app and the builder workflow's pin job keeps it
+    # in step with the images it publishes.
     container:
-      image: ${{ needs.detect.outputs.needs_webkit == 'true' && 'ghcr.io/edgarcnp/fbr-builder-webkit:2026.09.27.1@sha256:a5b5a942f0e84970e77a721a18fe70a9820e18ddd1b46a1f3c3c770572948afe' || 'ghcr.io/edgarcnp/fbr-builder-base:2026.09.27.1@sha256:2aae36913ca9d6df3b88a8c745bed4813748f99e1f68571e1e93a8578b5b9fc1' }}
+      image: ${{ needs.detect.outputs.builder_image }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

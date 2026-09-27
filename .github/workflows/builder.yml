@@ -5,17 +5,18 @@ name: Builder image
 # instead of reinstalled per run. Two images: fbr-builder-base and
 # fbr-builder-webkit (the webkit2gtk/GTK closure).
 #
-# Renovate owns the pins inside the image (packaging/builder/Dockerfile) and
-# the tag+digest build-appimage.yml pins; this workflow only builds, smoke
-# tests, and pushes. After a push, copy the printed tag+digest into the
-# container: of .github/workflows/build-appimage.yml.
+# Renovate owns the pins inside the image (packaging/builder/Dockerfile); the
+# pin job below commits the pushed tag+digest into packaging/builder/pins.json,
+# which the AppImage build workflow reads for its container image.
 
 on:
   push:
     branches:
       - main
     paths:
-      - packaging/builder/**
+      # Only the Dockerfile changes the image; pins.json is written back by the
+      # pin job below and must not retrigger this workflow.
+      - packaging/builder/Dockerfile
       - packaging/scripts/install-anylinux-tools.sh
       - .github/workflows/builder.yml
   schedule:
@@ -110,9 +111,10 @@ jobs:
           retention-days: 7
 
   # After both variants are pushed, commit the new tag+digest into
-  # build-appimage.yml so dispatches always run the images this workflow
-  # produced. Signed and pushed with the same PAT the cask pins use, because
-  # main requires changes through a PR.
+  # packaging/builder/pins.json so dispatches always run the images this
+  # workflow produced. Signed and pushed with the same PAT the cask pins use,
+  # because main requires changes through a PR; the pins live outside
+  # .github/workflows/ so that PAT needs no `workflow` scope.
   pin:
     needs: build
     runs-on: ubuntu-latest
@@ -133,7 +135,7 @@ jobs:
       - name: Pin the builder images
         run: |
           bash packaging/scripts/pin-builder-image.sh \
-            .github/workflows/build-appimage.yml \
+            packaging/builder/pins.json \
             "$(cat image-refs/image-ref-base/image-ref.txt)" \
             "$(cat image-refs/image-ref-webkit/image-ref.txt)"
       - name: Import GPG signing key
@@ -169,7 +171,7 @@ jobs:
           git config user.email "${GPG_EMAIL}"
           git config user.signingkey "${GPG_KEY_ID}"
           git config commit.gpgsign true
-          git add .github/workflows/build-appimage.yml
+          git add packaging/builder/pins.json
           git commit -S -m "chore(ci): pin the builder images to ${tag}"
           for _ in 1 2 3 4 5; do
             if git push origin HEAD:main; then

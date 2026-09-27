@@ -1,0 +1,4 @@
+{
+  "base": "ghcr.io/edgarcnp/fbr-builder-base:2026.09.27.3@sha256:e3473ffa1ad4b5c609a608ded0257443816a932cb40e23397f6bdc3640b41a50",
+  "webkit": "ghcr.io/edgarcnp/fbr-builder-webkit:2026.09.27.3@sha256:fd749aef9c80b97f9337a75f7222d0e70b660a59b115e1a795c688d81f20f440"
+}
