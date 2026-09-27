@@ -7,6 +7,9 @@ script.
 The TypeScript runs directly on Bun — no build step, no runtime dependencies.
 `typescript` and `@types/bun` are dev-only (for `tsc --noEmit` and editors).
 
+The proposed redesign of this toolchain — not yet implemented — is
+[`REDESIGN.md`](REDESIGN.md); this file keeps describing what runs today.
+
 ## Layout
 
 ```
@@ -16,6 +19,7 @@ packaging/
   apps/<app>/templates/    desktop entry (+ runtime hook)
   apps/<app>/assets/       pinned signing key material
   bin/fbr.ts               the CLI
+  builder/Dockerfile       the pinned Arch builder image (base + webkit variants)
   lib/cli.ts               CLI composition root
   lib/core/                primitives: paths, types, guards, patterns, version,
                            architecture, template, http, deb822, metadata
@@ -23,7 +27,9 @@ packaging/
                            release, neutralize, render, report
   lib/oracles/             one module per upstream source kind; custom/ holds
                            provider-specific oracles (e.g. avakot)
+  lib/schema/              JSON Schema subset validator (descriptor v2, manifest)
   lib/shell/               the bash pipeline
+  schema/                  descriptor v2 and manifest JSON Schemas, with examples
   tests/                   unit suite, mirrors lib/  (bun test)
   scripts/                 repo tooling (tool installer, local style gate)
 ```
@@ -31,7 +37,8 @@ packaging/
 `lib/` is a library: no import-time side effects, and the CLI is the only entry
 point. The folders group by role, not file kind — `core/` knows nothing about a
 cask, `pipeline/` implements the descriptor-driven steps, `oracles/` resolves
-upstream sources. Tests live in `tests/`, mirroring those groups.
+upstream sources, `schema/` validates documents. Tests live in `tests/`,
+mirroring those groups.
 
 The oracles share one download path (`oracles/download.ts`) and one GitHub API
 client (`oracles/github-api.ts`), so a resolver only supplies its URL, expected
@@ -265,10 +272,10 @@ Renovate opens one reviewed PR per dependency (automerge off):
 | --- | --- | --- |
 | `typescript`, `@types/bun` | `package.json` | npm + bun (exact pins, no `^`) |
 | GitHub Actions | workflow `uses:` | github-actions (SHA re-pinned) |
-| Container images | workflow `container:`, including the nested matrix image | docker (regex for the matrix) |
+| Container images | workflow `container:`, including the nested matrix image, and the builder Dockerfile's `FROM` | docker (regex for the matrix) |
 | Runner labels | `runs-on:`, and the labels the build matrix bakes in | github-runners (regex for the matrix) |
-| Bun version | `bun-version:` | uses-with |
-| actionlint, pkgforge `appimagetool` | workflows | regex custom managers |
+| Bun version | `bun-version:`, the builder Dockerfile | uses-with, regex custom manager |
+| actionlint, pkgforge `appimagetool` | workflows, the builder Dockerfile | regex custom managers |
 | `quick-sharun`, `get-debloated-pkgs` | `install-anylinux-tools.sh` | git-refs custom manager |
 
 Casks are not Renovate's: versions and checksums are produced by this pipeline
@@ -287,7 +294,8 @@ on 6.x and `@types/bun` on the CI's Bun minor, both via `renovate.json` rules.
 dependencies): dpkg ordering, deb822/InRelease parsing and freshness, HTTP
 timeout/cap/atomic write, guards and metadata validation, descriptor validation,
 cask read/update/consistency, the gate table, updater neutralization, desktop
-rendering, run records, and the oracle parsers.
+rendering, run records, the oracle parsers, and the descriptor v2/manifest
+schema contracts.
 
 `bun run typecheck` runs `tsc --noEmit` (strict). `bun run style` runs
 `brew style edgarcnp/tap` on its own — RuboCop plus shellcheck, shfmt and

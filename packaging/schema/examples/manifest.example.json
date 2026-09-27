@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "app": "vscode",
+  "version": "1.139.1",
+  "architecture": "amd64",
+  "descriptor": {
+    "path": "packaging/apps/vscode/app.json",
+    "sha256": "2f9b0f6f0f0f6a5d9e4c2d1b0a99887766554433221100ffeeddccbbaa998877"
+  },
+  "upstream": {
+    "oracle": "apt",
+    "url": "https://packages.microsoft.com/repos/code/pool/main/c/code/code_1.139.1-1750000000_amd64.deb",
+    "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    "size": 123456789
+  },
+  "artifact": {
+    "name": "vscode-1.139.1-x86_64.AppImage",
+    "sha256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+    "size": 234567890
+  },
+  "toolchain": {
+    "image": "ghcr.io/edgarcnp/fbr-builder-base:2026.09.27.1@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "quick_sharun": "390452f000000000000000000000000000000000",
+    "appimagetool": "0.5.2",
+    "bun": "1.4.2"
+  },
+  "build": {
+    "commit": "a0931aa3badca74cd92d568179a302c0034e4eb7",
+    "started_at": "2026-09-27T12:00:00Z",
+    "finished_at": "2026-09-27T12:09:30Z",
+    "smoke": "passed"
+  }
+}

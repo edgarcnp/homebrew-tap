@@ -1,0 +1,751 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://edgarcnp.dev/schemas/app.schema.json",
+  "title": "App descriptor (v2)",
+  "description": "The single per-app document under packaging/apps/<app>/app.json, as proposed in packaging/REDESIGN.md. v2 is v1 minus the source block, plus a `homebrew` block for data only the cask needs. The current loader still validates v1; this schema becomes normative in migration phase 2. Cross-field rules the schema cannot express (id === cask === assetPrefix, patchEndpoint binaryReplacement length) stay with the loader.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "appName",
+    "displayName",
+    "comment",
+    "cask",
+    "assetPrefix",
+    "tagPrefix",
+    "releaseRepo",
+    "debloatArgs",
+    "needsWebkit",
+    "binaryTargets",
+    "oracle",
+    "payload",
+    "icon",
+    "desktopTemplate",
+    "homebrew"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Editor hint pointing at this schema; not the descriptor version."
+    },
+    "schemaVersion": {
+      "const": 2
+    },
+    "id": {
+      "$ref": "#/$defs/safeIdentifier",
+      "description": "App id; must equal cask and assetPrefix, and match the directory name."
+    },
+    "appName": {
+      "$ref": "#/$defs/singleLine"
+    },
+    "displayName": {
+      "$ref": "#/$defs/singleLine"
+    },
+    "comment": {
+      "$ref": "#/$defs/singleLine"
+    },
+    "cask": {
+      "$ref": "#/$defs/safeIdentifier"
+    },
+    "watch": {
+      "description": "Optional release-watch block polled by the API's watcher.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/watchAtom"
+        },
+        {
+          "$ref": "#/$defs/watchJson"
+        }
+      ]
+    },
+    "assetPrefix": {
+      "$ref": "#/$defs/safeIdentifier"
+    },
+    "tagPrefix": {
+      "$ref": "#/$defs/safeReference"
+    },
+    "releaseRepo": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
+      "description": "The repository whose releases the cask URL points at (was sourceRepo)."
+    },
+    "debloatArgs": {
+      "type": "string",
+      "minLength": 1
+    },
+    "needsWebkit": {
+      "type": "boolean"
+    },
+    "buildPackages": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "Escape hatch: packages installed into the build container beyond the builder image."
+    },
+    "architectures": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "amd64",
+          "arm64"
+        ]
+      }
+    },
+    "binaryTargets": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/safeIdentifier"
+      }
+    },
+    "oracle": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/oracleApt"
+        },
+        {
+          "$ref": "#/$defs/oracleGithubReleaseLegacy"
+        },
+        {
+          "$ref": "#/$defs/oracleGithubReleaseVersioned"
+        },
+        {
+          "$ref": "#/$defs/oracleElectronFeed"
+        },
+        {
+          "$ref": "#/$defs/oracleCdnRedirect"
+        },
+        {
+          "$ref": "#/$defs/oracleUpdateManifest"
+        },
+        {
+          "$ref": "#/$defs/oracleAvakot"
+        }
+      ]
+    },
+    "payload": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/payloadDebTree"
+        },
+        {
+          "$ref": "#/$defs/payloadDebFiles"
+        },
+        {
+          "$ref": "#/$defs/payloadAppimageTree"
+        }
+      ]
+    },
+    "icon": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "size"
+      ],
+      "properties": {
+        "source": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "size": {
+          "type": "string",
+          "pattern": "^[0-9]+x[0-9]+$"
+        }
+      }
+    },
+    "desktopTemplate": {
+      "$ref": "#/$defs/relativePath",
+      "description": "Desktop entry template for the AppImage, relative to the app directory."
+    },
+    "updater": {
+      "$ref": "#/$defs/updater"
+    },
+    "quickSharun": {
+      "$ref": "#/$defs/quickSharun"
+    },
+    "hostHelpers": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^bin/(?!.*\\.\\.).+$"
+      }
+    },
+    "homebrew": {
+      "$ref": "#/$defs/homebrew"
+    }
+  },
+  "$defs": {
+    "safeIdentifier": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "safeReference": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]*$"
+    },
+    "debVersion": {
+      "type": "string",
+      "pattern": "^[0-9][0-9A-Za-z.+~_-]*$"
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*\\.\\.).+$"
+    },
+    "singleLine": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[^\\r\\n]+$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "envObject": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[A-Z][A-Z0-9_]*$"
+      },
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^[^\\r\\n]*$"
+      }
+    },
+    "githubApiRepository": {
+      "type": "string",
+      "pattern": "^https://api\\.github\\.com/repos/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+    },
+    "downloadHosts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "watchAtom": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "feedUrl",
+        "format",
+        "versionPattern"
+      ],
+      "properties": {
+        "feedUrl": {
+          "type": "string",
+          "minLength": 1
+        },
+        "format": {
+          "const": "atom"
+        },
+        "versionPattern": {
+          "type": "string",
+          "minLength": 1
+        },
+        "skipPattern": {
+          "type": "string",
+          "minLength": 1
+        },
+        "repo": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "watchJson": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "feedUrl",
+        "format",
+        "versionPattern",
+        "versionField"
+      ],
+      "properties": {
+        "feedUrl": {
+          "type": "string",
+          "minLength": 1
+        },
+        "format": {
+          "const": "json"
+        },
+        "versionPattern": {
+          "type": "string",
+          "minLength": 1
+        },
+        "versionField": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]+(\\.[A-Za-z0-9_-]+)*$"
+        },
+        "skipPattern": {
+          "type": "string",
+          "minLength": 1
+        },
+        "repo": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "oracleApt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "repository",
+        "packageName",
+        "fingerprint",
+        "keyBase64Path"
+      ],
+      "properties": {
+        "kind": {
+          "const": "apt"
+        },
+        "repository": {
+          "type": "string",
+          "minLength": 1
+        },
+        "packageName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fingerprint": {
+          "type": "string",
+          "pattern": "^[0-9A-Fa-f]{40}$"
+        },
+        "keyBase64Path": {
+          "$ref": "#/$defs/relativePath"
+        }
+      }
+    },
+    "oracleGithubReleaseLegacy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "repository",
+        "assetPrefix"
+      ],
+      "properties": {
+        "kind": {
+          "const": "github-release"
+        },
+        "repository": {
+          "$ref": "#/$defs/githubApiRepository"
+        },
+        "assetPrefix": {
+          "$ref": "#/$defs/safeIdentifier"
+        }
+      }
+    },
+    "oracleGithubReleaseVersioned": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "repository",
+        "assetNameTemplate",
+        "tagPrefix",
+        "packageName"
+      ],
+      "properties": {
+        "kind": {
+          "const": "github-release"
+        },
+        "repository": {
+          "$ref": "#/$defs/githubApiRepository"
+        },
+        "assetNameTemplate": {
+          "type": "string",
+          "pattern": "\\{version\\}"
+        },
+        "tagPrefix": {
+          "$ref": "#/$defs/safeReference"
+        },
+        "packageName": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "oracleElectronFeed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "repository",
+        "githubRepository",
+        "tagPrefix",
+        "packageName",
+        "assetNameTemplate"
+      ],
+      "properties": {
+        "kind": {
+          "const": "electron-feed"
+        },
+        "repository": {
+          "type": "string",
+          "minLength": 1
+        },
+        "githubRepository": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tagPrefix": {
+          "$ref": "#/$defs/safeReference"
+        },
+        "packageName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "assetNameTemplate": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "oracleCdnRedirect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "repository",
+        "redirectHosts",
+        "packageName",
+        "debName"
+      ],
+      "properties": {
+        "kind": {
+          "const": "cdn-redirect"
+        },
+        "repository": {
+          "type": "string",
+          "minLength": 1
+        },
+        "redirectHosts": {
+          "$ref": "#/$defs/downloadHosts"
+        },
+        "packageName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "debName": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "oracleUpdateManifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "repository",
+        "packageName",
+        "assetTemplate",
+        "downloadHosts"
+      ],
+      "properties": {
+        "kind": {
+          "const": "update-manifest"
+        },
+        "repository": {
+          "type": "string",
+          "minLength": 1
+        },
+        "packageName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "assetTemplate": {
+          "type": "string",
+          "pattern": "\\{arch\\}"
+        },
+        "downloadHosts": {
+          "$ref": "#/$defs/downloadHosts"
+        }
+      }
+    },
+    "oracleAvakot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "repository",
+        "packageName",
+        "assetTemplate",
+        "downloadHosts"
+      ],
+      "properties": {
+        "kind": {
+          "const": "avakot"
+        },
+        "repository": {
+          "type": "string",
+          "minLength": 1
+        },
+        "packageName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "assetTemplate": {
+          "type": "string",
+          "minLength": 1
+        },
+        "downloadHosts": {
+          "$ref": "#/$defs/downloadHosts"
+        }
+      }
+    },
+    "payloadDebTree": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "tree"
+      ],
+      "properties": {
+        "kind": {
+          "const": "deb-tree"
+        },
+        "tree": {
+          "$ref": "#/$defs/relativePath"
+        }
+      }
+    },
+    "payloadDebFiles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "files"
+      ],
+      "properties": {
+        "kind": {
+          "const": "deb-files"
+        },
+        "files": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/relativePath"
+          }
+        }
+      }
+    },
+    "payloadAppimageTree": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "const": "appimage-tree"
+        },
+        "rename": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "exclude": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "moveUsrToRoot": {
+          "type": "boolean"
+        }
+      }
+    },
+    "updater": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "removeJsonKeys": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "file",
+            "keys"
+          ],
+          "properties": {
+            "file": {
+              "$ref": "#/$defs/relativePath"
+            },
+            "keys": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "patchEndpoint": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "from",
+            "textReplacement",
+            "binaryReplacement",
+            "targets"
+          ],
+          "properties": {
+            "from": {
+              "type": "string",
+              "minLength": 1
+            },
+            "textReplacement": {
+              "type": "string"
+            },
+            "binaryReplacement": {
+              "type": "string",
+              "minLength": 1
+            },
+            "targets": {
+              "oneOf": [
+                {
+                  "const": "all"
+                },
+                {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "removeFeed": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "paths",
+            "required"
+          ],
+          "properties": {
+            "paths": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/relativePath"
+              }
+            },
+            "required": {
+              "type": "boolean"
+            }
+          }
+        },
+        "env": {
+          "$ref": "#/$defs/envObject"
+        },
+        "hook": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "residualScan": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "patterns",
+            "severity"
+          ],
+          "properties": {
+            "patterns": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "severity": {
+              "enum": [
+                "error",
+                "warning"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "quickSharun": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "hooks": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+          }
+        },
+        "libraries": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^/"
+          }
+        },
+        "env": {
+          "$ref": "#/$defs/envObject"
+        }
+      }
+    },
+    "homebrew": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "homepage",
+        "desktopTemplate"
+      ],
+      "properties": {
+        "homepage": {
+          "type": "string",
+          "pattern": "^https://"
+        },
+        "desc": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\r\\n]+$"
+        },
+        "desktopTemplate": {
+          "$ref": "#/$defs/relativePath",
+          "description": "Desktop entry template for the entry the cask installs (points at the brew launcher, not the AppImage)."
+        },
+        "zap": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "conflicts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/safeIdentifier"
+          }
+        },
+        "caveats": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}
