@@ -24,6 +24,10 @@ on:
         description: Informational; the repo requesting the build
         required: false
         type: string
+      request_id:
+        description: The API's correlation id for the dispatch requesting this run
+        required: false
+        type: string
 
 permissions: {}
 
@@ -37,3 +41,4 @@ jobs:
     secrets: inherit
     with:
       app: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.app || github.event.client_payload.app }}
+      request_id: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.request_id || github.event.client_payload.request_id }}

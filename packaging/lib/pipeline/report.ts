@@ -1,14 +1,17 @@
 // The run record: the tap's machine-readable signal to the API that dispatches
-// builds. One JSON document per app per run, uploaded as a failure-report
-// artifact. Retry policy lives in the API; this module only classifies, so a
-// failure site cannot emit prose without a code the API can act on.
+// builds. One JSON document per app per run, delivered twice from one shape:
+// the workflow uploads the same bytes as the `run-report-<app>` artifact (that
+// copy stays for humans) and POSTs them to the API's
+// `/v1/homebrew/tap/events` endpoint. Retry policy lives in the API; this
+// module only classifies, so a failure site cannot emit prose without a code
+// the API can act on.
 //
 // A failure site writes a *fragment* first (writeFailureFragment), which the
 // workflow uploads and the report job merges into the record: code, message,
 // and — where the site knows better than the job — the stage it failed in and
 // transport-level evidence.
 
-import { assertSafeName, assertSingleLine, fail } from "../core/guards.ts";
+import { assertMatches, assertSafeName, assertSingleLine, fail } from "../core/guards.ts";
 import { writeFileAtomic } from "../core/http.ts";
 
 export const REPORT_SCHEMA = 1;
@@ -66,6 +69,13 @@ export interface ReportInput {
   // `| undefined` so callers may pass an absent flag straight through.
   code?: FailureCode | undefined;
   message: string;
+  // The API's correlation id for the dispatch that caused this run. Absent or
+  // null for a manual run, which the record stores as null.
+  requestId?: string | null;
+  // Advisory event id; derived as `${runId}:${app}` when absent. The workflow
+  // passes the fuller `${run_id}:${run_attempt}:${app}`. Explicitly
+  // `| undefined` so callers may pass an absent flag straight through.
+  eventId?: string | undefined;
   resolvedVersion?: string | null;
   // The cask pin the gate compared against. Without it the API cannot tell a
   // skip that raced a publish (worth re-dispatching) from one whose cask is
@@ -81,6 +91,12 @@ export interface ReportInput {
 // needs this repository's table.
 export interface RunReport {
   schema: number;
+  // The dispatch's event id: `${run_id}:${run_attempt}:${app}` when the
+  // workflow supplies it, `${run_id}:${app}` when the CLI has no attempt.
+  event_id: string;
+  // The API's correlation id for the dispatch that caused the run; null for
+  // manual runs and any run the API did not start.
+  request_id: string | null;
   app: string;
   run_id: number;
   status: ReportStatus;
@@ -95,6 +111,21 @@ export interface RunReport {
   feed_version: string | null;
   evidence?: Record<string, string>;
   finished_at: string;
+}
+
+// Correlation ids (request_id, event_id) travel into the API's logs and
+// storage, so they are deliberately narrower than free text: one line, at most
+// 128 characters, and a conservative charset. A bad id is a caller bug, not a
+// record to ship.
+const CORRELATION_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
+const CORRELATION_ID_MAX_LENGTH = 128;
+
+function assertCorrelationId(value: string, label: string): string {
+  assertSingleLine(value, label);
+  if (value.length > CORRELATION_ID_MAX_LENGTH) {
+    fail(`${label} is longer than ${CORRELATION_ID_MAX_LENGTH} characters`);
+  }
+  return assertMatches(value, CORRELATION_ID_PATTERN, label);
 }
 
 export function buildReport(input: ReportInput): RunReport {
@@ -112,9 +143,19 @@ export function buildReport(input: ReportInput): RunReport {
   if (input.status !== "failed" && input.code !== undefined) {
     fail(`A ${input.status} report carries no failure code`);
   }
+  const requestId =
+    input.requestId === undefined || input.requestId === null
+      ? null
+      : assertCorrelationId(input.requestId, "report request id");
+  const eventId = assertCorrelationId(
+    input.eventId ?? `${input.runId}:${app}`,
+    "report event id",
+  );
 
   const report: RunReport = {
     schema: REPORT_SCHEMA,
+    event_id: eventId,
+    request_id: requestId,
     app,
     run_id: input.runId,
     status: input.status,

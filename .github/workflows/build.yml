@@ -13,11 +13,19 @@ on:
         required: false
         default: all
         type: string
+      request_id:
+        description: The API's correlation id for the dispatch requesting this run
+        required: false
+        type: string
   workflow_call:
     inputs:
       app:
         description: App id to build, or "all"
         required: true
+        type: string
+      request_id:
+        description: The API's correlation id for the dispatch requesting this run
+        required: false
         type: string
 
 defaults:
@@ -36,6 +44,8 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
+      # The plan-failure record is delivered to the API over OIDC.
+      id-token: write
     outputs:
       apps: ${{ steps.plan.outputs.apps }}
     steps:
@@ -85,6 +95,7 @@ jobs:
         continue-on-error: true
         env:
           REQUESTED: ${{ inputs.app }}
+          REQUEST_ID: ${{ inputs.request_id }}
           RUN_ID: ${{ github.run_id }}
         run: |
           code="$(jq -r '.code // empty' report-code.json 2>/dev/null || true)"
@@ -96,6 +107,8 @@ jobs:
             --code "${code:-UNCLASSIFIED}" \
             --message "${message:-the build plan failed; see the run log}" \
             --run-id "${RUN_ID}" \
+            --request-id "${REQUEST_ID}" \
+            --event-id "${RUN_ID}:${GITHUB_RUN_ATTEMPT}:${REQUESTED}" \
             --output "${RUNNER_TEMP}/run-report.json"; then
             echo "wrote=true" >> "${GITHUB_OUTPUT}"
           fi
@@ -107,6 +120,50 @@ jobs:
           path: ${{ runner.temp }}/run-report.json
           if-no-files-found: error
           retention-days: 7
+      # The API consumes the record as an event; the artifact above stays for
+      # humans. Auth is GitHub OIDC: a fresh ~5-minute JWT per delivery, bound to
+      # this run; there is no shared secret. Best-effort by design — a delivery
+      # failure must never fail the run, and the API reconciles a lost report
+      # from the run id it dispatched with. 4xx is permanent (bad/expired token,
+      # unknown cask, invalid body) and is reported once; 000/5xx are retried.
+      # The workflow's default -x would trace the JWT into the log, so this
+      # step turns xtrace off before touching it.
+      - name: Deliver the run record to the API
+        if: always() && steps.plan_report.outputs.wrote == 'true'
+        continue-on-error: true
+        env:
+          RECORD: ${{ runner.temp }}/run-report.json
+        run: |
+          set +x
+          if [[ ! -f "${RECORD}" ]]; then
+            echo "::warning::no run record to deliver"
+            exit 0
+          fi
+          id_token="$(
+            curl --fail --silent --show-error --max-time 10 \
+              -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+              "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=api.edgarcnp.dev" \
+              | jq -r '.value'
+          )" || id_token=""
+          if [[ -z "${id_token}" || "${id_token}" == "null" ]]; then
+            echo "::warning::could not obtain an OIDC token; skipping delivery"
+            exit 0
+          fi
+          endpoint="https://api.edgarcnp.dev/v1/homebrew/tap/events"
+          for attempt in 1 2 3; do
+            status="$(curl --silent --show-error --max-time 10 --output /dev/null \
+              --write-out '%{http_code}' \
+              -X POST "${endpoint}" \
+              -H "Authorization: Bearer ${id_token}" \
+              -H "Content-Type: application/json" \
+              --data-binary "@${RECORD}" || true)"
+            case "${status}" in
+              2??) echo "run record delivered (HTTP ${status})"; exit 0 ;;
+              4??) echo "::warning::API rejected the run record (HTTP ${status})"; exit 0 ;;
+            esac
+            sleep $((attempt * 5))
+          done
+          echo "::warning::run record delivery failed; the API will reconcile the run"
 
   build:
     needs: plan
@@ -122,3 +179,4 @@ jobs:
     secrets: inherit
     with:
       app: ${{ matrix.app }}
+      request_id: ${{ inputs.request_id }}

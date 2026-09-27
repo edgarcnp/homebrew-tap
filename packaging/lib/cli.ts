@@ -373,12 +373,14 @@ const COMMANDS: Command[] = [
   {
     name: "report",
     summary:
-      "Write the machine-readable run record (--app, --stage, --status, --message, --run-id, --output, [--code], [--resolved-version], [--cask-version], [--feed-version], [--evidence k=v]...)",
+      "Write the machine-readable run record (--app, --stage, --status, --message, --run-id, --output, [--code], [--request-id ID], [--event-id ID], [--resolved-version], [--cask-version], [--feed-version], [--evidence k=v]...)",
     options: {
       app: APP,
       stage: { type: "string" },
       status: { type: "string" },
       code: { type: "string" },
+      "request-id": { type: "string" },
+      "event-id": { type: "string" },
       message: { type: "string" },
       "run-id": { type: "string" },
       "resolved-version": { type: "string" },
@@ -413,10 +415,13 @@ const COMMANDS: Command[] = [
       if (!Number.isSafeInteger(runId) || runId <= 0) {
         throw new UsageError(`--run-id must be a positive run number, got "${rawRunId}"`);
       }
-      // An empty value means "unknown", which the record stores as null (an
-      // app with no watch feed, or a feed that could not be read).
-      const version = (value: string | undefined): string | null =>
-        value === undefined || value === "" ? null : value;
+      // An empty value means "not supplied": a version the caller could not
+      // read stores as null, and an absent event id is derived from the run.
+      // The workflow passes --request-id "${REQUEST_ID}" even for a manual run
+      // with no dispatch id, so an empty request id is a normal input.
+      const optional = (value: string | undefined): string | undefined =>
+        value === undefined || value === "" ? undefined : value;
+      const version = (value: string | undefined): string | null => optional(value) ?? null;
 
       const evidence: Record<string, string> = {};
       for (const spec of flags.strList("evidence")) {
@@ -442,6 +447,8 @@ const COMMANDS: Command[] = [
         stage: stage as ReportStage,
         code: code as FailureCode | undefined,
         message: flags.str("message"),
+        requestId: version(flags.optStr("request-id")),
+        eventId: optional(flags.optStr("event-id")),
         resolvedVersion: version(flags.optStr("resolved-version")),
         caskVersion: version(flags.optStr("cask-version")),
         feedVersion: version(flags.optStr("feed-version")),

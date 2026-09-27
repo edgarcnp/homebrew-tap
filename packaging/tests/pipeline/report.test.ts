@@ -68,6 +68,102 @@ describe("run records", () => {
     assert.equal(report.feed_version, null);
   });
 
+  it("derives the event id and leaves request_id null when the caller supplied none", () => {
+    const report = buildReport({
+      app: "vscode",
+      runId: 42,
+      status: "skipped",
+      stage: "detect",
+      message: "already up to date",
+    });
+    assert.equal(report.request_id, null);
+    assert.equal(report.event_id, "42:vscode");
+  });
+
+  it("copies the dispatch correlation id and event id through verbatim", () => {
+    const report = buildReport({
+      app: "vscode",
+      runId: 42,
+      status: "failed",
+      stage: "build",
+      code: "BUILD_FAILED",
+      message: "boom",
+      requestId: "req-01J0Z6B8Y4",
+      eventId: "42:2:vscode",
+    });
+    assert.equal(report.request_id, "req-01J0Z6B8Y4");
+    assert.equal(report.event_id, "42:2:vscode");
+  });
+
+  it("rejects correlation ids that are not one safe token", () => {
+    const base = {
+      app: "vscode",
+      runId: 42,
+      status: "success",
+      stage: "publish",
+      message: "done",
+    } as const;
+    assert.throws(() => buildReport({ ...base, requestId: "two\nlines" }), /newlines or NUL/);
+    assert.throws(
+      () => buildReport({ ...base, requestId: `x${"y".repeat(128)}` }),
+      /longer than 128/,
+    );
+    assert.throws(() => buildReport({ ...base, requestId: "req id" }), /Invalid report request id/);
+    assert.throws(() => buildReport({ ...base, eventId: "42:vscode!" }), /Invalid report event id/);
+    assert.throws(() => buildReport({ ...base, eventId: "" }), /Invalid report event id/);
+    // null is the explicit "no dispatch" value, not an invalid id.
+    assert.equal(buildReport({ ...base, requestId: null }).request_id, null);
+  });
+
+  it("pins the record's documented top-level keys", () => {
+    // The record is the API's contract: a new field must land in the
+    // documented set (and the API's parser) with it, not drift in silently.
+    const documented = [
+      "schema",
+      "event_id",
+      "request_id",
+      "app",
+      "run_id",
+      "status",
+      "stage",
+      "code",
+      "class",
+      "retryable",
+      "retry_after_seconds",
+      "message",
+      "resolved_version",
+      "cask_version",
+      "feed_version",
+      "evidence",
+      "finished_at",
+    ];
+    const failed = buildReport({
+      app: "vscode",
+      runId: 42,
+      status: "failed",
+      stage: "build",
+      code: "BUILD_FAILED",
+      message: "boom",
+      requestId: "req-01J0Z6B8Y4",
+      eventId: "42:2:vscode",
+      evidence: { http_status: "503" },
+    });
+    assert.deepEqual(Object.keys(failed).sort(), [...documented].sort());
+
+    const skipped = buildReport({
+      app: "vscode",
+      runId: 42,
+      status: "skipped",
+      stage: "detect",
+      message: "already up to date",
+    });
+    const optionalKeys = new Set(["code", "class", "retryable", "evidence"]);
+    assert.deepEqual(
+      Object.keys(skipped).sort(),
+      documented.filter((key) => !optionalKeys.has(key)).sort(),
+    );
+  });
+
   it("rejects a failure with no code and a success with one", () => {
     assert.throws(() =>
       buildReport({ app: "vscode", runId: 1, status: "failed", stage: "build", message: "boom" }),
@@ -200,6 +296,62 @@ describe("fbr report command", () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
+  it("copies --request-id and --event-id into the record", () => {
+    const dir = tempDir();
+    const output = path.join(dir, "report.json");
+    const result = fbr([
+      "report",
+      "--app",
+      "vscode",
+      "--stage",
+      "publish",
+      "--status",
+      "success",
+      "--message",
+      "run completed",
+      "--run-id",
+      "123456",
+      "--request-id",
+      "req-01J0Z6B8Y4",
+      "--event-id",
+      "123456:2:vscode",
+      "--output",
+      output,
+    ]);
+    assert.equal(result.status, 0, result.stderr);
+    const record = JSON.parse(fs.readFileSync(output, "utf8")) as Record<string, unknown>;
+    assert.equal(record["request_id"], "req-01J0Z6B8Y4");
+    assert.equal(record["event_id"], "123456:2:vscode");
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("treats an empty --request-id as absent and derives the event id", () => {
+    const dir = tempDir();
+    const output = path.join(dir, "report.json");
+    const result = fbr([
+      "report",
+      "--app",
+      "vscode",
+      "--stage",
+      "detect",
+      "--status",
+      "skipped",
+      "--message",
+      "already at upstream",
+      "--run-id",
+      "1",
+      "--request-id",
+      "",
+      "--output",
+      output,
+    ]);
+    assert.equal(result.status, 0, result.stderr);
+    const record = JSON.parse(fs.readFileSync(output, "utf8")) as Record<string, unknown>;
+    assert.equal(record["request_id"], null);
+    assert.equal(record["event_id"], "1:vscode");
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
   it("refuses records the API could not act on", () => {
     const output = path.join(tempDir(), "report.json");
     const base = ["report", "--app", "vscode", "--message", "boom", "--output", output];
@@ -247,6 +399,20 @@ describe("fbr report command", () => {
     ]);
     assert.equal(duplicateEvidence.status, 2);
     assert.match(duplicateEvidence.stderr, /Duplicate --evidence key/);
+
+    const badRequestId = fbr([
+      ...base,
+      "--stage",
+      "detect",
+      "--status",
+      "skipped",
+      "--run-id",
+      "1",
+      "--request-id",
+      "req id",
+    ]);
+    assert.equal(badRequestId.status, 1);
+    assert.match(badRequestId.stderr, /Invalid report request id/);
 
     fs.rmSync(path.dirname(output), { recursive: true, force: true });
   });

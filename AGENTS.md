@@ -123,6 +123,12 @@ memory or habit.
   `appimagetool` versions, and the digests in `install-anylinux-tools.sh` are
   Renovate's. Do not re-pin or tidy them.
 - **`bun.lock`** — changes only alongside a deliberate dependency change.
+- **Run-record delivery over OIDC** — the `plan` job in `build.yml` and the
+  `report` job in `build-appimage.yml` grant `id-token: write` and POST the run
+  record to `api.edgarcnp.dev` with a short-lived GitHub OIDC token (audience
+  `api.edgarcnp.dev`). There is no shared secret to set or rotate. The delivery
+  step is best-effort (`continue-on-error`) on purpose: it must never fail a
+  run. Do not remove the grants or the step.
 
 ## CI map
 
