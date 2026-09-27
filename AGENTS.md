@@ -1,13 +1,17 @@
 # AGENTS.md — edgarcnp/homebrew-tap
 
-A guide for LLM agents working in this repository. LLM assistance in this repo
-is not going away, so this file exists to steer it: toward small, reviewable
-changes a human can check afterwards, and away from volume for its own sake.
-Read it before touching anything, and prefer what the repository says over what
-you assume.
+A starting point for anyone who lands in this repository and has not been here
+before, whether they are reading it by hand or through an automated assistant.
+It covers what the repo is, how it is organized, how to verify a change, and
+what belongs to automation rather than to you.
 
-Global agent policy lives in `~/.config/opencode/AGENTS.md` and takes
-precedence over this file except where a rule here is more specific.
+This file is a map, not the terrain: where it and the code disagree, the code
+wins and this file is stale — say so instead of following it.
+
+The deep reference is [`packaging/README.md`](packaging/README.md): the layout,
+every descriptor field, the oracle kinds, the `fbr` CLI, the run record, the
+verification and build models, and the steps for adding an app. Read the
+section you are about to change rather than guessing at it.
 
 ## What this repo is
 
@@ -15,20 +19,16 @@ A Homebrew tap of **Linux-only** casks, each shipping an AppImage built by the
 toolchain in `packaging/`. One pipeline serves every app — what differs per app
 is **data** (`packaging/apps/<app>/app.json`), never a forked script.
 
-[`packaging/README.md`](packaging/README.md) is the reference: layout, every
-descriptor field, the oracle kinds, the `fbr` CLI, the run record, the
-verification and build models, and the steps to add an app. Read the section you
-are about to change instead of guessing at it.
-
-Facts worth holding onto:
-
 - The app id is one string end to end: directory name, `id`, `cask`,
   `assetPrefix`, and `Casks/<app>.rb`.
+- Every cask is amd64-only: one `x86_64` AppImage each, and
+  `depends_on arch: :x86_64` refuses the install on arm64 up front.
 - TypeScript runs directly on Bun — no build step, no runtime dependencies.
-  `typescript` and `@types/bun` are dev-only. A new dependency needs asking first.
-- `packaging/lib/` is a library: no import-time side effects. `bin/fbr.ts` is the
-  only entry point, `lib/cli.ts` composes it.
-- Casks are not Renovate's: versions and checksums come from this pipeline.
+  `typescript` and `@types/bun` are dev-only; adding a dependency is a decision,
+  not a convenience.
+- `packaging/lib/` is a library with no import-time side effects;
+  `packaging/bin/fbr.ts` is the only entry point and `lib/cli.ts` composes it.
+- Cask versions and checksums are produced by this pipeline, never by hand.
 
 ## Layout
 
@@ -43,7 +43,17 @@ Facts worth holding onto:
 | `.github/workflows/`, `.github/actions/` | build, publish, dispatch, tests, cask pinning |
 | `dist/` | build output, gitignored |
 
-## Gates
+## Prerequisites
+
+- `bun` 1.4 (the version CI pins), `shellcheck`, and a Homebrew install for
+  `brew style` and `brew audit`.
+- JS dev dependencies: `bun install --frozen-lockfile --ignore-scripts`.
+- A *local AppImage build* additionally needs an Arch Linux system or the
+  pkgforge container, plus `jq`, `dpkg-deb`, `gpg`/`gpgv`, `quick-sharun` on
+  `PATH` and `APPIMAGETOOL` pointing at the uruntime `appimagetool`. See "Local
+  run" in `packaging/README.md`. Most changes do not need a full build.
+
+## Checks
 
 Run these before committing. CI runs the same set on every PR
 (`.github/workflows/tests.yml`), so skipping them locally only moves the
@@ -58,7 +68,15 @@ bun run style                                    # brew style: rubocop, shellche
 packaging/scripts/check-style.sh                 # everything above plus brew audit per cask
 ```
 
-Take commands from this file, `package.json`, or CI — never from memory.
+`packaging/scripts/check-style.sh` is the whole gate in one command, and can be
+installed as a pre-push hook:
+
+```sh
+ln -sf ../../packaging/scripts/check-style.sh .git/hooks/pre-push
+```
+
+Take commands from this file, `package.json`, or the workflows — not from
+memory or habit.
 
 ### Shell specifics
 
@@ -66,28 +84,37 @@ Take commands from this file, `package.json`, or CI — never from memory.
   re-wraps `then`/`do` onto their own line, so write `if ...` newline `then`.
   Running `shfmt -w` directly collapses them and fights the same check.
 - shfmt wants no space after a redirect: `>"${file}"`, not `> "${file}"`.
-- `shellcheck` is run with `-x -P packaging` so the sourced libraries resolve.
+- `shellcheck` runs with `-x -P packaging` so the sourced libraries resolve.
 - 2-space indent, LF, final newline, no trailing whitespace (`.editorconfig`;
   markdown is exempt from trailing-whitespace trimming).
 
-## Changing pipeline code
+### TypeScript and tests
+
+- Strict `tsc --noEmit`; the CLI rejects unknown or duplicate flags with exit 2
+  rather than ignoring them.
+- Tests use Bun's built-in runner, live in `packaging/tests/` beside the group
+  they cover, and must stay deterministic: the HTTP suites bind a local
+  `127.0.0.1` server and every other URL in the tests is a string fixture. Do
+  not add a test that reaches the real network.
+- Cover the failure path, not only the happy path. Classified failures exit 3
+  (upstream unavailable), 4 (guard), 5 (checksum), 6 (updater residue) and
+  write a `--failure-out` fragment; everything else exits 1 / UNCLASSIFIED. A
+  new code needs a site, a record entry and coverage — the contract tests scan
+  the emission shapes.
+
+## Making changes
 
 - Smallest diff that does the job: no drive-by refactors, reformatting, renames
   or dependency bumps inside a change that does not need them.
-- The failure path is part of the change. Classified failures exit 3 (upstream
-  unavailable), 4 (guard), 5 (checksum), 6 (updater residue) and write a
-  `--failure-out` fragment; everything else is exit 1 / UNCLASSIFIED. A new code
-  needs a site, a record entry and coverage — the contract tests scan the
-  emission shapes.
-- Tests live next to the group they cover. They must stay deterministic: the
-  HTTP suites bind a local `127.0.0.1` server, and every other URL in the tests
-  is a string fixture. Do not add a test that reaches the real network, and
-  cover the failure path, not only the happy path.
+- Adding an app needs three things — descriptor, desktop template plus a
+  four-line `build.sh`, and a cask with placeholder checksums. The build matrix
+  and dispatch route read the descriptor directory, so no workflow edit.
 - Keep the docs true when behavior changes: descriptor fields, oracle kinds,
   CLI flags and gates belong in `packaging/README.md`; the root README's cask
   table stays complete and sorted by cask name.
+- Report findings outside the requested scope instead of fixing them.
 
-## Hands off
+## Automation you should not fight
 
 - **Cask versions and checksums** — written by the pipeline
   (`.github/actions/update-cask` → `fbr cask --action set-version`), never
@@ -96,21 +123,22 @@ Take commands from this file, `package.json`, or CI — never from memory.
   `appimagetool` versions, and the digests in `install-anylinux-tools.sh` are
   Renovate's. Do not re-pin or tidy them.
 - **`bun.lock`** — changes only alongside a deliberate dependency change.
-- Anything outside the requested scope: report the finding, do not fix it.
 
-## Commits
+## CI map
 
-Conventional Commits, matching the existing history:
+| Workflow | What it does |
+| --- | --- |
+| `tests.yml` (`brew test-bot`) | PR gate: typecheck, tests, cask check, shellcheck, actionlint, `brew style`/`audit`, tap syntax |
+| `build.yml` | build one app or all of them; the app list comes from the descriptors |
+| `build-appimage.yml` | the reusable per-app build (container, toolchain, pack, smoke test) |
+| `dispatch.yml` | entry point for programmatic builds (`repository_dispatch` type `trigger-build`, or a manual run) |
+| `cask-smoke.yml` | installs and smoke-tests the casks on push to `main` and weekly |
+| `publish.yml` (`brew pr-pull`) | pulls and publishes a named PR |
+| `autobump.yml` (`brew bump`) | Homebrew's autobump, triggered only when the workflow file itself changes |
 
-- `feat(packaging): ...` — new apps, descriptors, pipeline changes
-- `chore(cask): update <app> to <version>` — automated cask bumps
-- `fix(cask): ...` / `fix(packaging): ...` / `fix(ci): ...`
-- `docs: ...` — documentation only
+## Where to read more
 
-Commit only when the user asks, and push only when asked.
-
-**Never add a `Co-Authored-By` trailer to commits in this repository.** That
-includes `Co-Authored-By: OpenCode <noreply@opencode.ai>` and any other
-agent-attribution trailer. Attribution trailers here belong to the bots that
-open their own commits (renovate, dependabot, copilot); hand-authored commits
-carry none. Ask before adding any trailer at all.
+- [`README.md`](README.md) — installing, uninstalling, requirements, the cask
+  table.
+- [`packaging/README.md`](packaging/README.md) — the pipeline itself.
+- `packaging/apps/<app>/README.md` — per-app build notes where an app has any.
