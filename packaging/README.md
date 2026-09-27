@@ -7,8 +7,10 @@ script.
 The TypeScript runs directly on Bun — no build step, no runtime dependencies.
 `typescript` and `@types/bun` are dev-only (for `tsc --noEmit` and editors).
 
-The proposed redesign of this toolchain — not yet implemented — is
-[`REDESIGN.md`](REDESIGN.md); this file keeps describing what runs today.
+The redesign of this toolchain is [`REDESIGN.md`](REDESIGN.md): phases 0–1
+(the v2 and manifest schemas, the pinned builder images) are live, while the
+descriptor v2 migration and the `plan`/`build`/`publish`/`cask render` commands
+are not. This file describes what runs today.
 
 ## Layout
 
@@ -110,12 +112,13 @@ fbr resolve-app --name X                     app name -> app id
 fbr descriptor --app X [--field a.b]         validated descriptor (or one field)
 fbr descriptor-env --app X [--format env|output]
                                              KEY=VALUE lines for $GITHUB_ENV/$GITHUB_OUTPUT
-fbr resolve --app X --arch A ... [--failure-out F]
-                                             resolve upstream metadata; a classified
+fbr resolve --app X --arch A --output-dir D --metadata F
+     [--metadata-only] [--failure-out F]     resolve upstream metadata; a classified
                                              failure writes its verdict to F
 fbr metadata --file F --field version|sha256|url|path
 fbr gate --app X --upstream-version V [--release-exists]
-     [--release-matches-cask true|false]     cask gate decision; omit the match flag when
+     [--release-matches-cask true|false] [--tap T]
+                                             cask gate decision; omit the match flag when
                                              the asset comparison could not run
 fbr feed-version --app X [--tap T]           newest version the release feed advertises,
                                              as feed_version= (advisory: the API compares
@@ -127,6 +130,9 @@ fbr report --app X --stage S --status ST --message M --run-id N
                                              write the machine-readable run record the API
                                              reads from the run-report artifact
 fbr cask --action read|set-version|check     read, re-pin or check casks
+     [--app X] [--tap T] [--version V]       set-version takes --version plus the
+     [--sha256-x86-64 H] [--sha256-arm-64 H] checksum of each architecture the
+                                             descriptor ships
 fbr release-check --app X --asset-dir D      release assets vs the cask pin (true|false,
      [--tap T]                               or nothing when it could not compare)
 fbr release-prune --prefix P --keep N TAGS   stale release versions to prune, oldest first
@@ -180,9 +186,10 @@ infrastructure, not a verdict.
 
 Each check lives in one place:
 
-- **Hosts** — every download validates protocol, host allow-list and redirect
-  target. GitHub asset hosts come from one shared list, so an oracle cannot
-  forget an edge host.
+- **Hosts** — every download validates the final URL's protocol and host
+  against a pinned allow-list (intermediate redirect hops are not inspected; the
+  runtime follows the chain). GitHub asset hosts come from one shared list, so
+  an oracle cannot forget an edge host.
 - **Content** — size caps, SHA-256 for apt/GitHub/CDN payloads, a SHA-512
   cross-check for the electron feed, constant-time digest comparison, atomic
   writes.
@@ -190,8 +197,9 @@ Each check lives in one place:
   passed or its `Date` is over 14 days old.
 - **Paths** — metadata and key paths stay inside their output directory (or, for
   keys, inside the repo); descriptor paths are repo-relative.
-- **Updaters** — descriptor-declared, then verified: the build fails when a
-  declared endpoint survives in the AppDir.
+- **Updaters** — descriptor-declared, then verified: a survivor declared
+  `severity: error` fails the build, while a `warning` scan records it instead
+  (opencode-desktop and wfhelper intentionally leave inert copies behind).
 - **Casks** — one parser reads `Casks/*.rb`; `fbr cask --action check` asserts
   the cask agrees with its descriptor (URL, asset name, binaries, icon size,
   desktop entry, zap paths).
@@ -273,7 +281,8 @@ uruntime `appimagetool`. Output lands in `<tap>/dist/`.
 
 ## Dependency pinning
 
-Renovate opens one reviewed PR per dependency (automerge off):
+Renovate opens one reviewed PR per dependency (automerge off), with the
+grouped rules in `renovate.json` for routine bumps:
 
 | Dependency | Declared in | Manager |
 | --- | --- | --- |

@@ -16,13 +16,12 @@ is filled on the first publish, pinning the final AppImage at install.
 
 ## App-specific
 
-- **Version source** — `apt`: the index carries `0.2.5-1` for both
-  architectures, and `normalizeUpstreamVersion` drops the numeric `-1`
-  revision, so the cask version and the feed title agree on `0.2.5`. The repo is
-  republished minutes after each GitHub release (v0.2.5: release 12:33:33Z,
-  `InRelease` `Date` 12:38:38Z), which also keeps `InRelease` inside the
-  oracle's 14-day freshness window. `InRelease` publishes no `Valid-Until`, so
-  freshness falls back to `Date`.
+- **Version source** — `apt`: the index carries `<version>-<revision>` for both
+  architectures, and `normalizeUpstreamVersion` drops the numeric revision, so
+  the cask version and the feed title agree on the upstream version. The repo is
+  republished minutes after each GitHub release, which also keeps `InRelease`
+  inside the oracle's 14-day freshness window. `InRelease` publishes no
+  `Valid-Until`, so freshness falls back to `Date`.
 - **Payload** — `deb-files`: `usr/bin/gitcomet` is staged into `AppDir/bin`, and
   the 512×512 icon comes from
   `usr/share/icons/hicolor/512x512/apps/gitcomet.png`.
@@ -38,7 +37,12 @@ is filled on the first publish, pinning the final AppImage at install.
   AppDir `.env` by `fbr finalize` — disables it, so there is no endpoint to
   patch and no residual scan to assert one.
 - **Release watch** — the pattern matches the release *title* (`GitComet
-  v0.2.5`), not the tag, so capture group 1 is `0.2.5`. `skipPattern` drops
-  `-rc` entries: upstream's release workflow accepts `-rc.N` versions, and an rc
-  that the apt index never carries would advertise a version `resolve` cannot
-  reach, holding every run until it gave up.
+  v<version>`), not the tag, so capture group 1 is the version. `skipPattern`
+  drops `-rc` entries: upstream's release workflow accepts `-rc.N` versions, and
+  an rc that the apt index never carries would advertise a version `resolve`
+  cannot reach, holding every run until it gave up. The cask's livecheck reads
+  this tap's own release tags (the versions the pipeline published), so it never
+  sees an upstream rc.
+- **Local data** — the app keeps everything under XDG data and state only
+  (`~/.local/share/gitcomet`, `~/.local/state/gitcomet`; upstream defines no
+  config directory), which is exactly what the cask's zap removes.

@@ -40,9 +40,15 @@ extract step).
 - **Runtime helper downloads** — at runtime the app fetches its
   `warframe-api-helper` companion from GitHub releases (setup flow) and reads
   game data; that is core functionality, not self-update, and is left alone.
+- **Local data** — stock Electron paths under the packaged `productName`
+  `WFHelper`: userData, logs and caches live under `~/.config/WFHelper`, which
+  the cask's zap removes.
 
 ## Local run
 
+`PACKAGE_VERSION` is optional; set, it must match the resolved version
+(CI always sets it).
+
 ```sh
-TARGET_ARCH=amd64 PACKAGE_VERSION=2.1.0 ./build.sh
+TARGET_ARCH=amd64 ./build.sh
 ```

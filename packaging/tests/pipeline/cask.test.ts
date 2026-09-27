@@ -157,8 +157,11 @@ describe("checkCask", () => {
     const broken = source.replace("depends_on :linux", "depends_on :macos");
     assert.match(checkCask(descriptor, broken).join("; "), /missing depends_on :linux/);
 
-    const nameDrift = checkCask({ ...descriptor, displayName: "Other Name" }, source);
-    assert.match(nameDrift.join("; "), /desktop entry Name does not match/);
+    const nameDrift = checkCask({ ...descriptor, appName: "Other Name" }, source);
+    assert.match(nameDrift.join("; "), /cask name does not match appName/);
+
+    const displayNameDrift = checkCask({ ...descriptor, displayName: "Other Name" }, source);
+    assert.match(displayNameDrift.join("; "), /desktop entry Name does not match/);
 
     const commentDrift = checkCask({ ...descriptor, comment: "Other comment" }, source);
     assert.match(commentDrift.join("; "), /desktop entry Comment does not match/);

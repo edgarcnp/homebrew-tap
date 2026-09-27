@@ -116,12 +116,21 @@ describe("descriptor v2 schema", () => {
     );
   });
 
-  it("requires the cask fields the renderer needs", () => {
-    for (const field of ["homepage", "desktopTemplate"]) {
-      const mutated = structuredClone(asRecord(appExample));
-      delete asRecord(mutated["homebrew"])[field];
-      assert.ok(problems(appSchema, mutated).includes(`$.homebrew.${field}: is required`));
-    }
+  it("requires the cask fields the renderer needs and no second template", () => {
+    const mutated = structuredClone(asRecord(appExample));
+    delete asRecord(mutated["homebrew"])["homepage"];
+    assert.ok(problems(appSchema, mutated).includes("$.homebrew.homepage: is required"));
+
+    const properties = asRecord(
+      asRecord(asRecord(asRecord(appSchema)["$defs"])["homebrew"])["properties"],
+    );
+    assert.equal(properties["desktopTemplate"], undefined);
+  });
+
+  it("requires the shipped architectures", () => {
+    const mutated = structuredClone(asRecord(appExample));
+    delete mutated["architectures"];
+    assert.ok(problems(appSchema, mutated).includes("$.architectures: is required"));
   });
 });
 

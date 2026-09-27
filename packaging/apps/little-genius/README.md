@@ -28,15 +28,15 @@ the same pinned JSON manifest (`https://api.avakot.org/lg/manifest.json`).
   also where the app looks for its helper ("not found next to the app" is its
   own fallback path). Both binaries are cask `binaryTargets`.
 - **webkit2gtk** — `needsWebkit: true`: the main binary links
-  `libwebkit2gtk-4.1` and GTK 3, so the build installs the webkit2gtk/GTK
-  closure (plus X11 libs) and debloats with `webkit2gtk-4.1-mini`, following
-  the workflow's webkit2gtk build-dependency step.
+  `libwebkit2gtk-4.1` and GTK 3, so the `webkit` builder image carries the
+  webkit2gtk/GTK closure plus X11 libs, and the build debloats with
+  `webkit2gtk-4.1-mini`.
 - **Tray indicator** — `libappindicator-sys` `dlopen`s
   `libayatana-appindicator3.so.1` at startup and panics without it, and a
   `dlopen`ed library is absent from the ELF `NEEDED` entries, so an `ldd` scan
   never bundles it: the smoke test fails on
-  `cannot open shared object file`. `buildPackages` installs
-  `libayatana-appindicator` into the build container and
+  `cannot open shared object file`. The `webkit` builder image carries
+  `libayatana-appindicator` (the descriptor declares no `buildPackages`), and
   `quickSharun.libraries` hands `/usr/lib/libayatana-appindicator3.so.1` to
   quick-sharun as a deploy target, which bundles it together with its `ldd`
   closure (`libayatana-indicator`, `libdbusmenu-{glib,gtk3}`).
@@ -50,14 +50,18 @@ the same pinned JSON manifest (`https://api.avakot.org/lg/manifest.json`).
   cannot carry file capabilities, so that step is skipped here; the app detects
   the missing capability at runtime and falls back to its authorization-prompt
   path instead of failing.
+- **Local data** — the app stores its encrypted progress under Tauri's
+  `app_data_dir` for the bundle identifier `org.avakot.littlegenius`
+  (`~/.local/share/org.avakot.littlegenius`), which the cask's zap removes.
 
 ## Local run
 
-The build container in CI installs `buildPackages`; locally the same package
-must already be present or `pipeline_collect_targets` stops with
-`Missing quick-sharun library`.
+Locally, `libayatana-appindicator` must already be present or
+`pipeline_collect_targets` stops with `Missing quick-sharun library`.
+`PACKAGE_VERSION` is optional; set, it must match the resolved version
+(CI always sets it).
 
 ```sh
 sudo pacman -S libayatana-appindicator
-TARGET_ARCH=amd64 PACKAGE_VERSION=0.6.7 ./build.sh
+TARGET_ARCH=amd64 ./build.sh
 ```

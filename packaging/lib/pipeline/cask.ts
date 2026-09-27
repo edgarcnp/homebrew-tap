@@ -229,6 +229,10 @@ export function checkCask(descriptor: AppDescriptor, source: string): string[] {
   // The cask repeats descriptor-derived strings a standalone file cannot
   // import; assert them so a displayName/comment change cannot drift out.
   require(
+    source.includes(`name "${descriptor.appName}"`),
+    `cask name does not match appName "${descriptor.appName}"`,
+  );
+  require(
     source.includes(`Name=${descriptor.displayName}`),
     `desktop entry Name does not match displayName "${descriptor.displayName}"`,
   );

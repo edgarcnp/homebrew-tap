@@ -39,6 +39,9 @@ binary:
 
 ## Local run
 
+`PACKAGE_VERSION` is optional; set, it must match the resolved version
+(CI always sets it).
+
 ```sh
-TARGET_ARCH=amd64 PACKAGE_VERSION=1.133.0 ./build.sh
+TARGET_ARCH=amd64 ./build.sh
 ```

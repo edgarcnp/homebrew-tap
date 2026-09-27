@@ -42,7 +42,7 @@ cask "wfhelper" do
   end
 
   zap trash: [
-    "~/.config/wfhelper",
+    "~/.config/WFHelper",
     "~/.local/share/applications/wfhelper.desktop",
     "~/.local/share/icons/hicolor/512x512/apps/wfhelper.png",
   ]

@@ -46,6 +46,7 @@ cask "little-genius" do
   zap trash: [
     "~/.local/share/applications/little-genius.desktop",
     "~/.local/share/icons/hicolor/512x512/apps/little-genius.png",
+    "~/.local/share/org.avakot.littlegenius",
   ]
 
   caveats <<~EOS

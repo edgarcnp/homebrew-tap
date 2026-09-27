@@ -17,6 +17,7 @@
     "releaseRepo",
     "debloatArgs",
     "needsWebkit",
+    "architectures",
     "binaryTargets",
     "oracle",
     "payload",
@@ -95,7 +96,8 @@
           "amd64",
           "arm64"
         ]
-      }
+      },
+      "description": "Required: the architectures this app ships; the pipeline builds, publishes and checks only these."
     },
     "binaryTargets": {
       "type": "array",
@@ -707,10 +709,10 @@
     },
     "homebrew": {
       "type": "object",
+      "description": "Cask-only data. The generated cask's name comes from the top-level appName; desc defaults to comment; the installed desktop entry is derived from desktopTemplate with every Exec line rewritten to the brew launcher, so no second template is needed.",
       "additionalProperties": false,
       "required": [
-        "homepage",
-        "desktopTemplate"
+        "homepage"
       ],
       "properties": {
         "homepage": {
@@ -721,10 +723,6 @@
           "type": "string",
           "minLength": 1,
           "pattern": "^[^\\r\\n]+$"
-        },
-        "desktopTemplate": {
-          "$ref": "#/$defs/relativePath",
-          "description": "Desktop entry template for the entry the cask installs (points at the brew launcher, not the AppImage)."
         },
         "zap": {
           "type": "array",

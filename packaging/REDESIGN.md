@@ -1,9 +1,11 @@
 # Redesigning the packaging toolchain
 
-Status: **proposed**. This document describes a target, not the code on `main`.
-Current behavior lives in [`README.md`](README.md); where the two disagree, the
-README and the code are the truth. Nothing here changes the Homebrew surface —
-the casks, their install behavior and the API event contract stay as they are.
+Status: **phases 0–1 landed; the rest proposed**. Phase 0 (the v2 and manifest
+schemas) and phase 1 (the pinned builder images) are live on `main`; phases 2–5
+are targets, not code. Current behavior lives in [`README.md`](README.md);
+where this document and the code disagree, the README and the code are the
+truth. Nothing here changes the Homebrew surface — the casks, their install
+behavior and the API event contract stay as they are.
 
 ## Goals and constraints
 
@@ -21,7 +23,7 @@ the casks, their install behavior and the API event contract stay as they are.
 ## Where the current design strains
 
 1. **Orchestration is spread across three languages.**
-   `.github/workflows/build-appimage.yml` (778 lines) makes the decisions (gate
+   `.github/workflows/build-appimage.yml` makes the decisions (gate
    inputs, matrix, record assembly), `packaging/lib/shell/appimage-pipeline.sh`
    executes the stages, and `packaging/lib/**` supplies primitives. Several
    `fbr` commands (`descriptor-env` and friends) exist only to move descriptor
@@ -32,9 +34,9 @@ the casks, their install behavior and the API event contract stay as they are.
    the cask holds data the descriptor has no field for at all: `desc` (several
    casks override it, e.g. vscode's "Repackage of Visual Studio Code as an
    AppImage"), `homepage`, zap paths and vscode's `conflicts_with`.
-   `fbr cask --action check` exists to catch the duplication drifting. The
-   descriptor loader reads known keys and silently ignores unknown ones, so a
-   typo in `app.json` is dropped instead of rejected.
+   `fbr cask --action check` exists to catch the duplication drifting. The v1
+   loader now rejects unknown keys; the remaining strain is the duplication
+   with the cask, which `fbr cask render` removes.
 3. **The build is CI-shaped, not program-shaped.** No single command runs the
    real flow (plan → build → publish → pin → record); `apps/<app>/build.sh`
    stops at the packed AppImage, and the decisions around it live only in YAML.
@@ -45,11 +47,12 @@ the casks, their install behavior and the API event contract stay as they are.
    real job — but `sourceRepo` is not dead: `expectedCaskUrl` uses it as the
    cask's release URL (`packaging/lib/pipeline/cask.ts:157`), so v2 must keep
    that role under a clearer name.
-5. **The toolchain is installed per run.** Every build job runs
-   `pacman-key --init`, `pacman -Syy`, `pacman -Syu`, 13 shared packages (11
-   more for the two webkit apps), then downloads `appimagetool`,
-   `quick-sharun`, `get-debloated-pkgs` and the debloated packages — minutes of
-   network on every build.
+5. **The toolchain was installed per run.** Every build job used to run
+   `pacman-key --init`, `pacman -Syy`, `pacman -Syu`, the shared packages, then
+   download `appimagetool`, `quick-sharun`, `get-debloated-pkgs` and the
+   debloated packages — minutes of network on every build. Phase 1 moved the
+   base into the builder image; the per-app debloated packages are still
+   fetched per build.
 6. **The record is assembled in YAML.** The report job re-derives stage,
    status, code and evidence from job results and `report-code.json` fragments
    with `jq`; the pure builder in `packaging/lib/pipeline/report.ts` is the only
@@ -113,7 +116,8 @@ validation.
 
 | Change | Detail |
 | --- | --- |
-| Added | A `homebrew` block for data only the cask needs: `homepage`, `desc` (defaults to `comment`; several casks override it today), `zap`, `conflicts` (vscode), `caveats` extras and `desktopTemplate` for the entry the cask installs — it points at the brew launcher, so it is not the AppImage's entry. The block is not called `cask` because `cask` is already the token. |
+| Added | A `homebrew` block for data only the cask needs: `homepage`, `desc` (defaults to `comment`; several casks override it today), `zap`, `conflicts` (vscode) and `caveats` extras. The generated cask's `name` comes from `appName`, and its installed desktop entry is derived from the existing `desktopTemplate` with every `Exec` rewritten to the brew launcher — no second template file. The block is not called `cask` because `cask` is already the token. |
+| Required | `architectures` must be declared: no silent amd64+arm64 default. |
 | Renamed | `sourceRepo` → `releaseRepo`: the one source-block field with a live consumer, the repo whose releases the cask URL points at (`packaging/lib/pipeline/cask.ts:157`). |
 | Removed | `sourceOwner`, `sourceDir`, `buildCommand` and the second checkout — nothing builds from an upstream repo. |
 | Demoted | `buildPackages` becomes an escape hatch: it forces a build-time package install; the current webkit apps move into the image instead. |
@@ -166,14 +170,15 @@ stays in `packaging/lib/pipeline/report.ts`.
 - version and per-arch `sha256` from the **released** assets (hashed after
   download, as today), behind the existing trust check (final release, author
   `github-actions[bot]`);
-- `name`/`homebrew.desc`/`homebrew.homepage` from the descriptor, `url` and
-  `livecheck` from `releaseRepo`/`tagPrefix`/`assetPrefix`;
+- `name` (from `appName`), `homebrew.desc`, `homebrew.homepage` from the
+  descriptor, `url` and `livecheck` from `releaseRepo`/`tagPrefix`/`assetPrefix`;
 - `app_image` and `binary` artifacts from `binaryTargets`;
-- the installed desktop entry from `homebrew.desktopTemplate` — a dedicated
-  file because it points at the brew launcher, not the AppImage's `Exec` — plus
-  the icon (AppDir `<cask>.png` to the descriptor's hicolor size), zap paths
-  from `homebrew.zap` plus the two generated defaults, and
-  `homebrew.conflicts`;
+- the installed desktop entry derived from `desktopTemplate`: every `Exec=`
+  line (including Desktop Actions) is rewritten to the brew launcher and
+  AppImage-only keys such as `X-AppImage-Version` are dropped, so no second
+  template file exists; plus the icon (AppDir `<cask>.png` to the descriptor's
+  hicolor size), zap paths from `homebrew.zap` plus the two generated defaults,
+  and `homebrew.conflicts`;
 - a "generated by fbr cask render" header.
 
 `fbr cask check` becomes `fbr cask render --check` (regenerate and diff).
@@ -197,11 +202,11 @@ published by a workflow on changes and on a weekly schedule.
   reads for its container; the builder workflow's `pin` job commits the new
   reference after every rebuild, so Renovate does not manage these two images.
   Arch freshness is a scheduled rebuild, not a per-run `-Syu`.
-- Result: for the current apps, no pacman, no tool downloads and no
-  `get-debloated-pkgs` in a build job; a failed image pull is one classified
-  toolchain failure instead of four network steps. An app that needs an extra
-  package extends the image (preferred) or exercises the `buildPackages` escape
-  hatch and pays the install cost deliberately.
+- Result: for the current apps, no pacman and no tool downloads in a build job
+  (the per-app `get-debloated-pkgs` fetch remains); a failed image pull is one
+  classified toolchain failure instead of four network steps. An app that needs
+  an extra package extends the image (preferred) or exercises the
+  `buildPackages` escape hatch and pays the install cost deliberately.
 
 ### Workflows
 
@@ -247,7 +252,9 @@ outside CI). No `build.sh` shim, no workflow edit, no source checkout.
 ## Migration
 
 Each phase lands on its own with `main` green; the old pipeline is the
-reference oracle until its last consumer is gone.
+reference oracle until its last consumer is gone. **Status:** phases 0 and 1
+are landed; the run record is still assembled in the workflows and the shell
+pipeline is still the only build path, so phases 2–5 are not started.
 
 | Phase | Lands | Exit check |
 | --- | --- | --- |
@@ -261,10 +268,12 @@ reference oracle until its last consumer is gone.
 ## Open questions
 
 - Keep the dormant `publish.yml` (`brew pr-pull`) and `autobump.yml`, or drop
-  them with the rest of the template files?
+  them with the rest of the template files? **Answered:** keep both;
+  `autobump.yml` stays as the tap-new template (inert on a cask-only tap).
 - README cask table: generate it in `fbr check`, or leave the table manual?
 - Webkit closure: image variant (as proposed) or installed per build; and the
-  scheduled rebuild cadence for the builder images.
+  scheduled rebuild cadence for the builder images. **Answered by phase 1:**
+  the `webkit` image variant, rebuilt weekly (`builder.yml`).
 - Does the API ever want the manifest (artifact facts) in the record, or is it
   happy with versions and codes? If it does, that is an additive schema-1 field
   proposed from the API side, not invented here.

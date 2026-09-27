@@ -57,7 +57,6 @@
   "homebrew": {
     "homepage": "https://code.visualstudio.com/",
     "desc": "Repackage of Visual Studio Code as an AppImage",
-    "desktopTemplate": "templates/vscode.cask.desktop",
     "zap": [
       "~/.cache/Code",
       "~/.config/Code",

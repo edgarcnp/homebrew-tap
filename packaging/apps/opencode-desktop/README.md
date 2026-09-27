@@ -35,10 +35,13 @@ version and each asset's SHA-256 and size.
   drops quick-sharun's auto-created `bin/opencode-cli` wrapper plus its
   `shared/bin` duplicate.
 
-Upstream versions are used verbatim (e.g. `2.0.8`).
+Upstream versions are used verbatim.
 
 ## Local run
 
+`PACKAGE_VERSION` is optional; set, it must match the resolved version
+(CI always sets it).
+
 ```sh
-TARGET_ARCH=amd64 PACKAGE_VERSION=2.0.8 ./build.sh
+TARGET_ARCH=amd64 ./build.sh
 ```

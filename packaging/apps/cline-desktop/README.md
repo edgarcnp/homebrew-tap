@@ -41,12 +41,15 @@ from the [cline/cline](https://github.com/cline/cline) releases.
   than shipping a live updater.
 - **Runtime libraries** — `needsWebkit` pulls in the webkit2gtk 4.1/GTK closure
   the GUI links (`libwebkit2gtk-4.1.so.0`), while the tray indicator is only
-  `dlopen`ed: `libayatana-appindicator` is installed into the build container
-  and `libayatana-appindicator3.so.1` named as a quick-sharun deploy target so
+  `dlopen`ed: the `webkit` builder image carries `libayatana-appindicator`, and
+  `libayatana-appindicator3.so.1` is named as a quick-sharun deploy target so
   it is bundled.
 
 ## Local run
 
+`PACKAGE_VERSION` is optional: unset, the build takes the version the oracle
+resolves; set, it must match that version (CI always sets it).
+
 ```sh
-TARGET_ARCH=amd64 PACKAGE_VERSION=0.0.35 ./build.sh
+TARGET_ARCH=amd64 ./build.sh
 ```
