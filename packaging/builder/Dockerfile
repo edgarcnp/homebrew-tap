@@ -78,8 +78,12 @@ RUN curl -fL -o /usr/local/bin/appimagetool \
       "https://github.com/pkgforge-dev/appimagetool/releases/download/0.5.2/appimagetool-x86_64-linux" \
  && chmod 0755 /usr/local/bin/appimagetool
 
-# Bun, the orchestrator runtime, pinned to the same version CI sets up.
-RUN curl -fsSL -o /tmp/bun-install.sh https://bun.sh/install \
- && BUN_INSTALL=/usr/local bash /tmp/bun-install.sh "bun-v${BUN_VERSION}" \
- && rm /tmp/bun-install.sh \
+# Bun, the orchestrator runtime, pinned to the same version CI sets up. The
+# versioned release archive is used instead of bun.sh/install, whose body
+# changes in place; x64 is the builder image's platform.
+RUN curl -fsSL -o /tmp/bun.zip \
+      "https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}/bun-linux-x64.zip" \
+ && unzip -q /tmp/bun.zip -d /tmp/bun \
+ && install -m 0755 /tmp/bun/bun-linux-x64/bun /usr/local/bin/bun \
+ && rm -rf /tmp/bun /tmp/bun.zip \
  && /usr/local/bin/bun --version

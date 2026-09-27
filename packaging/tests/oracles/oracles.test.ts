@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import { describe, it } from "node:test";
 import { selectLatestPackage, verifyIndexedFile } from "../../lib/oracles/apt.ts";
 import { GuardViolationError } from "../../lib/core/errors.ts";
-import { parseFinalUrl } from "../../lib/oracles/cdn-redirect.ts";
+import { parseFinalUrl, resolveWithCdnRedirect } from "../../lib/oracles/cdn-redirect.ts";
 import {
   parseFeedRedirect,
   parseUpdateYml,
@@ -154,6 +157,15 @@ describe("electron-feed oracle", () => {
         parseFeedRedirect("https://github.com/a/b/releases/download/tag1/file.txt", "tag"),
       /not an update yml/,
     );
+    assert.throws(
+      () =>
+        parseFeedRedirect(
+          "https://github.com/a/b/releases/download/v1.0.0/latest-linux-arm64.yml",
+          "v",
+          "latest-linux.yml",
+        ),
+      /not the requested/,
+    );
   });
 
   it("rejects a feed host that is not the configured one", () => {
@@ -274,6 +286,44 @@ describe("cdn-redirect oracle", () => {
     assert.equal(parsed.fileVersion, "0.22.3");
     assert.equal(parsed.releaseVersion, "0.22.3-3215");
     assert.equal(parsed.archPath, "x86_64");
+    assert.equal(parsed.fileArch, "amd64");
+  });
+
+  it("rejects a .deb whose filename arch does not match the request", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "fbr-cdn-"));
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      const response = new Response("deb-bytes", { status: 200 });
+      Object.defineProperty(response, "url", {
+        value:
+          "https://releases.gitbutler.com/releases/release/0.22.3-3215/linux/x86_64/GitButler_0.22.3_arm64.deb",
+      });
+      return response;
+    }) as unknown as typeof fetch;
+    try {
+      await assert.rejects(
+        resolveWithCdnRedirect(
+          {
+            kind: "cdn-redirect",
+            repository: "https://releases.gitbutler.com/download",
+            redirectHosts: GITBUTLER_HOSTS,
+            packageName: "gitbutler",
+            debName: "gitbutler",
+          },
+          {
+            architecture: "amd64",
+            outputDir: dir,
+            metadataPath: path.join(dir, "metadata.json"),
+            metadataOnly: true,
+            token: "",
+          },
+        ),
+        /does not match requested/,
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("rejects off-host redirects and unrecognized layouts", () => {

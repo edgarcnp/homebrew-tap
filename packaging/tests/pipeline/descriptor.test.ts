@@ -556,6 +556,34 @@ describe("descriptor validation", () => {
     );
   });
 
+  it("rejects unknown keys instead of dropping a typo", () => {
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("vscode", (copy) => {
+            copy["totallyUnknown"] = true;
+          }),
+          "vscode",
+        ),
+      /totallyUnknown is not a known field/,
+    );
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("vscode", (copy) => {
+            nested(copy, "updater")["patchEndpoit"] = {
+              from: "a",
+              textReplacement: "b",
+              binaryReplacement: "c",
+              targets: "all",
+            };
+          }),
+          "vscode",
+        ),
+      /patchEndpoit is not a known field/,
+    );
+  });
+
   it("rejects unsafe updater configuration", () => {
     assert.throws(
       () =>

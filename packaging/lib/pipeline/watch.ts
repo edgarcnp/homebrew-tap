@@ -91,7 +91,10 @@ export function selectFeedVersion(watch: WatchConfig, body: string): string | nu
   let newest: string | null = null;
   for (const candidate of raw) {
     if (skip?.test(candidate) === true) continue;
-    const hit = comparableVersion(version.exec(candidate)?.[1]);
+    // Group 1 when the pattern has one, else the whole match: a pattern
+    // without a capture group must not leave the app silently unwatched.
+    const match = version.exec(candidate);
+    const hit = comparableVersion(match?.[1] ?? match?.[0]);
     if (hit === null) continue;
     if (newest === null || compareDebVersions(hit, newest) > 0) newest = hit;
   }

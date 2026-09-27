@@ -47,11 +47,18 @@ pipeline_init() {
   DEB_ARCH="${arch_line% *}"
   APPIMAGE_ARCH="${arch_line#* }"
 
+  if [[ -n "${WORK_DIR_OVERRIDE:-}" ]]
+  then
+    WORK_DIR_OVERRIDE="$(validate_absolute_override "${WORK_DIR_OVERRIDE}" "WORK_DIR_OVERRIDE")"
+  fi
   setup_work_dir "${APP_ID}-build"
-  DIST_DIR="${DIST_DIR_OVERRIDE:-${REPO_DIR}/dist}"
-  [[ -z "${DIST_DIR_OVERRIDE:-}" ]] || validate_absolute_override "${DIST_DIR_OVERRIDE}" "DIST_DIR_OVERRIDE"
+  if [[ -n "${DIST_DIR_OVERRIDE:-}" ]]
+  then
+    DIST_DIR="$(validate_absolute_override "${DIST_DIR_OVERRIDE}" "DIST_DIR_OVERRIDE")"
+  else
+    DIST_DIR="${REPO_DIR}/dist"
+  fi
   APPDIR="$(resolve_appdir_override "${REPO_DIR}" "${DIST_DIR}")"
-  [[ -z "${WORK_DIR_OVERRIDE:-}" ]] || validate_absolute_override "${WORK_DIR_OVERRIDE}" "WORK_DIR_OVERRIDE"
   [[ -z "${PACKAGE_VERSION:-}" ]] || validate_package_version "${PACKAGE_VERSION}"
 
   info "Building ${APP_ID} for ${DEB_ARCH} (descriptor from packaging/apps/${APP_ID}/app.json)"
@@ -129,6 +136,32 @@ is_excluded_payload_entry() {
   return 1
 }
 
+# An AppImage payload carries no arch metadata in its name, so verify the
+# bytes: every ELF in AppDir/bin must carry the requested e_machine. Non-ELF
+# entries (launcher scripts) are skipped. e_machine is the little-endian u16 at
+# offset 18; its low byte identifies x86-64 (62) and aarch64 (183).
+assert_bin_elf_arch() {
+  local expected
+  case "${APPIMAGE_ARCH}" in
+    x86_64) expected=62 ;;
+    aarch64) expected=183 ;;
+    *) error "No ELF machine mapping for AppImage arch ${APPIMAGE_ARCH}" ;;
+  esac
+  local entry magic machine
+  for entry in "${APPDIR}/bin/"*
+  do
+    [[ -f "${entry}" ]] || continue
+    magic="$(head -c 4 -- "${entry}" | od -An -tx1 | tr -d ' \n')"
+    [[ "${magic}" = "7f454c46" ]] || continue
+    machine="$(od -An -tu1 -j 18 -N 1 -- "${entry}" | tr -d ' ')"
+    if [[ "${machine}" != "${expected}" ]]
+    then
+      classify_failure GUARD_VIOLATION "payload binary ${entry} is not ${APPIMAGE_ARCH}"
+      error "Payload binary ${entry} is not ${APPIMAGE_ARCH} (ELF machine ${machine})"
+    fi
+  done
+}
+
 # Stages the payload into AppDir/bin (and AppDir/usr when the descriptor moves
 # the vendored usr/ to the AppDir root).
 pipeline_stage() {
@@ -174,6 +207,7 @@ pipeline_stage() {
       then
         cp -a -- "${PAYLOAD_ROOT}/usr" "${APPDIR}/usr"
       fi
+      assert_bin_elf_arch
       ;;
     *)
       error "Unknown payload kind in descriptor: ${kind}"

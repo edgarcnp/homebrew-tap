@@ -20,6 +20,34 @@ import type {
 
 const SAFE_ENV_KEY = /^[A-Z][A-Z0-9_]*$/;
 
+// The v1 descriptor's fields, exactly as validateDescriptor consumes them.
+const TOP_LEVEL_KEYS = [
+  "id",
+  "appName",
+  "displayName",
+  "comment",
+  "cask",
+  "assetPrefix",
+  "tagPrefix",
+  "sourceRepo",
+  "sourceOwner",
+  "sourceDir",
+  "buildCommand",
+  "debloatArgs",
+  "needsWebkit",
+  "buildPackages",
+  "architectures",
+  "binaryTargets",
+  "oracle",
+  "payload",
+  "icon",
+  "desktopTemplate",
+  "updater",
+  "quickSharun",
+  "watch",
+  "hostHelpers",
+] as const;
+
 type Json = Record<string, unknown>;
 
 function asObject(value: unknown, label: string): Json {
@@ -27,6 +55,15 @@ function asObject(value: unknown, label: string): Json {
     fail(`${label} must be an object`);
   }
   return value as Json;
+}
+
+// Rejects fields the loader does not consume. Ignoring them let a typo in a
+// security-relevant block (residualScans, patchEndpoit) disable it silently;
+// the v2 schema is strict too.
+function rejectUnknownKeys(source: Json, allowed: readonly string[], label: string): void {
+  for (const key of Object.keys(source)) {
+    if (!allowed.includes(key)) fail(`${label}.${key} is not a known field`);
+  }
 }
 
 function str(source: Json, key: string, label: string): string {
@@ -72,6 +109,11 @@ function validateOracle(raw: unknown, label: string): Oracle {
   const kind = str(source, "kind", label);
   switch (kind) {
     case "apt":
+      rejectUnknownKeys(
+        source,
+        ["kind", "repository", "packageName", "fingerprint", "keyBase64Path"],
+        label,
+      );
       return {
         kind,
         repository: str(source, "repository", label),
@@ -80,6 +122,11 @@ function validateOracle(raw: unknown, label: string): Oracle {
         keyBase64Path: relativePath(str(source, "keyBase64Path", label), `${label}.keyBase64Path`),
       };
     case "github-release": {
+      rejectUnknownKeys(
+        source,
+        ["kind", "repository", "assetPrefix", "assetNameTemplate", "tagPrefix", "packageName"],
+        label,
+      );
       const repository = str(source, "repository", label);
       if (!GITHUB_API_REPOSITORY.test(repository)) {
         fail(`${label}.repository must be a GitHub API repository URL: ${repository}`);
@@ -112,6 +159,11 @@ function validateOracle(raw: unknown, label: string): Oracle {
       return { kind, repository, assetPrefix: str(source, "assetPrefix", label) };
     }
     case "electron-feed":
+      rejectUnknownKeys(
+        source,
+        ["kind", "repository", "githubRepository", "tagPrefix", "packageName", "assetNameTemplate"],
+        label,
+      );
       return {
         kind,
         repository: str(source, "repository", label),
@@ -121,6 +173,11 @@ function validateOracle(raw: unknown, label: string): Oracle {
         assetNameTemplate: str(source, "assetNameTemplate", label),
       };
     case "cdn-redirect": {
+      rejectUnknownKeys(
+        source,
+        ["kind", "repository", "redirectHosts", "packageName", "debName"],
+        label,
+      );
       const redirectHosts = strArray(source, "redirectHosts", label);
       if (redirectHosts.length === 0) fail(`${label}.redirectHosts must not be empty`);
       return {
@@ -132,6 +189,11 @@ function validateOracle(raw: unknown, label: string): Oracle {
       };
     }
     case "update-manifest": {
+      rejectUnknownKeys(
+        source,
+        ["kind", "repository", "downloadHosts", "packageName", "assetTemplate"],
+        label,
+      );
       const downloadHosts = strArray(source, "downloadHosts", label);
       if (downloadHosts.length === 0) fail(`${label}.downloadHosts must not be empty`);
       const assetTemplate = str(source, "assetTemplate", label);
@@ -149,6 +211,11 @@ function validateOracle(raw: unknown, label: string): Oracle {
     case "avakot": {
       // Provider-specific manifest (see oracles/custom/): a fixed artifacts
       // key names the payload, so no {arch} placeholder is required.
+      rejectUnknownKeys(
+        source,
+        ["kind", "repository", "downloadHosts", "packageName", "assetTemplate"],
+        label,
+      );
       const downloadHosts = strArray(source, "downloadHosts", label);
       if (downloadHosts.length === 0) fail(`${label}.downloadHosts must not be empty`);
       return {
@@ -168,12 +235,14 @@ function validatePayload(raw: unknown, label: string): Payload {
   const source = asObject(raw, label);
   const kind = str(source, "kind", label);
   if (kind === "deb-tree") {
+    rejectUnknownKeys(source, ["kind", "tree"], label);
     return {
       kind,
       tree: relativePath(str(source, "tree", label).replace(/^\/+/, ""), `${label}.tree`),
     };
   }
   if (kind === "deb-files") {
+    rejectUnknownKeys(source, ["kind", "files"], label);
     const files = strArray(source, "files", label).map((entry) =>
       relativePath(entry.replace(/^\/+/, ""), `${label}.files`),
     );
@@ -181,6 +250,7 @@ function validatePayload(raw: unknown, label: string): Payload {
     return { kind, files };
   }
   if (kind === "appimage-tree") {
+    rejectUnknownKeys(source, ["kind", "rename", "exclude", "moveUsrToRoot"], label);
     const renameRaw = source["rename"];
     const rename: Record<string, string> = {};
     if (renameRaw !== undefined) {
@@ -206,6 +276,7 @@ function validatePayload(raw: unknown, label: string): Payload {
 
 function validateResidualScan(raw: unknown, label: string): ResidualScan {
   const source = asObject(raw, label);
+  rejectUnknownKeys(source, ["patterns", "severity"], label);
   const patterns = strArray(source, "patterns", label);
   if (patterns.length === 0) fail(`${label}.patterns must not be empty`);
   const severity = str(source, "severity", label);
@@ -218,11 +289,17 @@ function validateResidualScan(raw: unknown, label: string): ResidualScan {
 function validateUpdater(raw: unknown, label: string): UpdaterConfig {
   if (raw === undefined) return {};
   const source = asObject(raw, label);
+  rejectUnknownKeys(
+    source,
+    ["removeJsonKeys", "patchEndpoint", "removeFeed", "env", "hook", "residualScan"],
+    label,
+  );
   const updater: UpdaterConfig = {};
 
   const removeJsonKeys = source["removeJsonKeys"];
   if (removeJsonKeys !== undefined) {
     const keysSource = asObject(removeJsonKeys, `${label}.removeJsonKeys`);
+    rejectUnknownKeys(keysSource, ["file", "keys"], `${label}.removeJsonKeys`);
     updater.removeJsonKeys = {
       file: relativePath(
         str(keysSource, "file", `${label}.removeJsonKeys`),
@@ -238,6 +315,11 @@ function validateUpdater(raw: unknown, label: string): UpdaterConfig {
   const patch = source["patchEndpoint"];
   if (patch !== undefined) {
     const patchSource = asObject(patch, `${label}.patchEndpoint`);
+    rejectUnknownKeys(
+      patchSource,
+      ["from", "textReplacement", "binaryReplacement", "targets"],
+      `${label}.patchEndpoint`,
+    );
     const targets = patchSource["targets"];
     const from = str(patchSource, "from", `${label}.patchEndpoint`);
     const binaryReplacement = str(patchSource, "binaryReplacement", `${label}.patchEndpoint`);
@@ -259,6 +341,7 @@ function validateUpdater(raw: unknown, label: string): UpdaterConfig {
   const removeFeed = source["removeFeed"];
   if (removeFeed !== undefined) {
     const feedSource = asObject(removeFeed, `${label}.removeFeed`);
+    rejectUnknownKeys(feedSource, ["paths", "required"], `${label}.removeFeed`);
     const paths = strArray(feedSource, "paths", `${label}.removeFeed`).map((entry) =>
       relativePath(entry, `${label}.removeFeed.paths`),
     );
@@ -294,6 +377,7 @@ function validateUpdater(raw: unknown, label: string): UpdaterConfig {
 function validateQuickSharun(raw: unknown, label: string): QuickSharunConfig {
   if (raw === undefined) return {};
   const source = asObject(raw, label);
+  rejectUnknownKeys(source, ["hooks", "libraries", "env"], label);
   const config: QuickSharunConfig = {};
 
   const hooks = strArray(source, "hooks", label);
@@ -366,6 +450,7 @@ function validateHostHelpers(raw: unknown, label: string): string[] | undefined 
 
 function validateIcon(raw: unknown, label: string): IconConfig {
   const source = asObject(raw, label);
+  rejectUnknownKeys(source, ["source", "size"], label);
   const size = str(source, "size", label);
   if (!/^\d+x\d+$/.test(size)) fail(`${label}.size must look like 512x512`);
   return {
@@ -388,6 +473,11 @@ function compiledPattern(value: string, label: string): string {
 function validateWatch(raw: unknown, label: string): WatchConfig | undefined {
   if (raw === undefined) return undefined;
   const source = asObject(raw, label);
+  rejectUnknownKeys(
+    source,
+    ["feedUrl", "format", "versionPattern", "skipPattern", "repo", "versionField"],
+    label,
+  );
   // Required, not defaulted: every descriptor declares its format, so an
   // omission is a mistake rather than a shorthand. The API's reader stays
   // liberal — a descriptor it did not write (or one written before this rule)
@@ -426,6 +516,7 @@ function validateWatch(raw: unknown, label: string): WatchConfig | undefined {
 export function validateDescriptor(raw: unknown, expectedId: string): AppDescriptor {
   const label = `apps/${expectedId}/app.json`;
   const source = asObject(raw, label);
+  rejectUnknownKeys(source, TOP_LEVEL_KEYS, label);
   const id = str(source, "id", label);
   if (id !== expectedId) fail(`${label}: id ${id} does not match directory ${expectedId}`);
 

@@ -561,3 +561,103 @@ describe("pipeline_resolve", () => {
     assert.equal(result.args.includes("--failure-out"), false);
   });
 });
+
+describe("resolve_appdir_override", () => {
+  const repoDir = "/repo";
+  const distDir = "/repo/dist";
+
+  function resolveAppdir(override: string | undefined): {
+    status: number | null;
+    stdout: string;
+    stderr: string;
+  } {
+    const result = spawnSync(
+      "bash",
+      ["-c", `set -Eeuo pipefail; . "$COMMON"; resolve_appdir_override "$REPO" "$DIST"`],
+      {
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          COMMON: SHELL_COMMON,
+          REPO: repoDir,
+          DIST: distDir,
+          ...(override === undefined ? {} : { APPIMAGE_APPDIR_OVERRIDE: override }),
+        },
+      },
+    );
+    return { status: result.status, stdout: result.stdout.trim(), stderr: result.stderr };
+  }
+
+  it("accepts a normalized override inside DIST_DIR", () => {
+    const result = resolveAppdir(`${distDir}/build/../appdir`);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, `${distDir}/appdir`);
+  });
+
+  it("rejects an override that escapes DIST_DIR through ..", () => {
+    const result = resolveAppdir(`${distDir}/../outside`);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /must be inside DIST_DIR/);
+  });
+
+  it("defaults to DIST_DIR/appimage.AppDir", () => {
+    const result = resolveAppdir(undefined);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, `${distDir}/appimage.AppDir`);
+  });
+});
+
+describe("validate_absolute_override", () => {
+  function validate(value: string): { status: number | null; stdout: string; stderr: string } {
+    const result = spawnSync(
+      "bash",
+      ["-c", `set -Eeuo pipefail; . "$COMMON"; validate_absolute_override "$VALUE" TEST`],
+      { encoding: "utf8", env: { ...process.env, COMMON: SHELL_COMMON, VALUE: value } },
+    );
+    return { status: result.status, stdout: result.stdout.trim(), stderr: result.stderr };
+  }
+
+  it("normalizes a path and refuses the filesystem root", () => {
+    assert.equal(validate("/tmp/../tmp").stdout, "/tmp");
+    const root = validate("/tmp/..");
+    assert.equal(root.status, 1);
+    assert.match(root.stderr, /refusing TEST/);
+  });
+});
+
+describe("assert_bin_elf_arch", () => {
+  function elfFile(relative: string, machine: number): void {
+    const target = pathIn(relative);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    const header = Buffer.alloc(19);
+    header.write("\x7fELF", 0, "binary");
+    header.writeUInt8(machine, 18);
+    fs.writeFileSync(target, header);
+  }
+
+  function check(appimageArch: string): { status: number | null; stderr: string } {
+    const result = spawnSync(
+      "bash",
+      [
+        "-c",
+        `set -Eeuo pipefail; . "$PIPELINE_LIB"; APPDIR="$APP_DIR"; APPIMAGE_ARCH="${appimageArch}"; assert_bin_elf_arch`,
+      ],
+      { encoding: "utf8", env: { ...process.env, PIPELINE_LIB, APP_DIR: appDir } },
+    );
+    return { status: result.status, stderr: result.stderr };
+  }
+
+  it("accepts matching ELF machines and skips non-ELF entries", () => {
+    elfFile("bin/app", 62);
+    fs.writeFileSync(pathIn("bin/wrapper"), "#!/bin/sh\nexit 0\n");
+    assert.equal(check("x86_64").status, 0);
+    assert.equal(check("aarch64").status, 1);
+  });
+
+  it("fails a payload built for another architecture", () => {
+    elfFile("bin/app", 183);
+    const result = check("x86_64");
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /is not x86_64/);
+  });
+});

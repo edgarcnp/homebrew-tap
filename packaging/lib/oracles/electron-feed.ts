@@ -61,8 +61,14 @@ export interface FeedRedirect {
 }
 
 // Pins the exact GitHub release-asset URL shape so an upstream layout change
-// fails loudly instead of resolving a wrong asset.
-export function parseFeedRedirect(locationUrl: string, tagPrefix: string): FeedRedirect {
+// fails loudly instead of resolving a wrong asset. expectedYml, when given,
+// must name the yml the caller asked for: an arch-specific feed
+// (latest-linux.yml vs latest-linux-arm64.yml) must not answer for another.
+export function parseFeedRedirect(
+  locationUrl: string,
+  tagPrefix: string,
+  expectedYml?: string,
+): FeedRedirect {
   let url: URL;
   try {
     url = new URL(String(locationUrl));
@@ -83,6 +89,9 @@ export function parseFeedRedirect(locationUrl: string, tagPrefix: string): FeedR
   }
   if (!/^[A-Za-z0-9._-]+\.yml$/.test(fileName)) {
     fail(`Feed redirect target is not an update yml: ${fileName}`);
+  }
+  if (expectedYml !== undefined && fileName !== expectedYml) {
+    fail(`Feed redirect names ${fileName}, not the requested ${expectedYml}`);
   }
   if (!tag.startsWith(tagPrefix)) {
     fail(`Release tag ${tag} does not start with ${tagPrefix}`);
@@ -248,7 +257,7 @@ export async function resolveWithElectronFeed(
   }
   const location = probe.headers.get("location");
   if (location === null) throw new Error(`Feed redirect has no Location header for ${feedUrl}`);
-  const parsed = parseFeedRedirect(location, tagPrefix);
+  const parsed = parseFeedRedirect(location, tagPrefix, layout.yml);
   requireGithubCoords(parsed, githubRepository);
 
   const expectedAsset = substitutePlaceholders(oracle.assetNameTemplate, {

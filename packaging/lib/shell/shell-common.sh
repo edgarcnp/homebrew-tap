@@ -29,31 +29,39 @@ setup_work_dir() {
   fi
 }
 
-# Validates an absolute, non-root override path (WORK_DIR_OVERRIDE and
-# DIST_DIR_OVERRIDE style).
+# Validates and normalizes an absolute, non-root override path
+# (WORK_DIR_OVERRIDE and DIST_DIR_OVERRIDE style), echoing the normalized path
+# so `..` cannot dodge the guards.
 validate_absolute_override() {
   local value="$1"
   local label="$2"
   [[ "${value}" == /* ]] || error "${label} must be absolute: ${value}"
-  [[ "${value}" != "/" ]] || error "refusing ${label}=/"
+  local normalized
+  normalized="$(realpath -m -- "${value}")" || error "cannot normalize ${label}: ${value}"
+  [[ "${normalized}" != "/" ]] || error "refusing ${label}=/"
+  printf '%s\n' "${normalized}"
 }
 
-# Resolves APPDIR from APPIMAGE_APPDIR_OVERRIDE or the default inside DIST_DIR,
-# refusing repo/dist roots and paths escaping it. Echoes the resolved path.
+# Resolves APPDIR from APPIMAGE_APPDIR_OVERRIDE or the default inside DIST_DIR.
+# Both must be inside DIST_DIR once normalized, so an override cannot point the
+# stage's rm -rf at a path reached through `..`.
 resolve_appdir_override() {
   local repo_dir="$1"
   local dist_dir="$2"
   local override="${APPIMAGE_APPDIR_OVERRIDE:-}"
+  local normalized_dist
+  normalized_dist="$(realpath -m -- "${dist_dir}")" || error "cannot normalize DIST_DIR: ${dist_dir}"
   if [[ -n "${override}" ]]
   then
     [[ "${override}" == /* ]] || error "APPIMAGE_APPDIR_OVERRIDE must be absolute: ${override}"
-    [[ "${override}" != "/" && "${override}" != "${repo_dir}" && "${override}" != "${dist_dir}" ]] || error "refusing to operate on suspicious APPIMAGE_APPDIR_OVERRIDE"
+    override="$(realpath -m -- "${override}")" || error "cannot normalize APPIMAGE_APPDIR_OVERRIDE: ${override}"
+    [[ "${override}" == "${normalized_dist}/"* ]] || error "APPIMAGE_APPDIR_OVERRIDE must be inside DIST_DIR: ${override}"
+    [[ "${override}" != "${normalized_dist}" ]] || error "refusing to operate on suspicious APPIMAGE_APPDIR_OVERRIDE"
     printf '%s\n' "${override}"
     return 0
   fi
-  local default="${dist_dir}/appimage.AppDir"
-  [[ "${default#"${dist_dir}/"}" != "${default}" ]] || error "APPDIR must be inside DIST_DIR: ${default}"
-  [[ "${default}" != "${repo_dir}" && "${default}" != "${dist_dir}" ]] || error "refusing to operate on suspicious APPDIR"
+  local default="${normalized_dist}/appimage.AppDir"
+  [[ "${default}" != "${repo_dir}" && "${default}" != "${normalized_dist}" ]] || error "refusing to operate on suspicious APPDIR"
   printf '%s\n' "${default}"
 }
 

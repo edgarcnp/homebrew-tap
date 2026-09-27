@@ -105,4 +105,13 @@ describe("selectFeedVersion", () => {
     const injected = atom("Release notes", ["v1.0.0\n::error::boom", "v2.0.0"]);
     assert.equal(selectFeedVersion(loose, injected), "2.0.0");
   });
+
+  it("uses the whole match when a pattern has no capture group", () => {
+    const loose: WatchConfig = {
+      feedUrl: "https://example.com/releases.atom",
+      format: "atom",
+      versionPattern: "\\d+\\.\\d+\\.\\d+",
+    };
+    assert.equal(selectFeedVersion(loose, atom("Release notes", ["v2.0.1", "v9.9.9"])), "9.9.9");
+  });
 });

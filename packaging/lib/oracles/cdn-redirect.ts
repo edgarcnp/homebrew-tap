@@ -34,6 +34,7 @@ export interface RedirectTarget {
   repository: string;
   repositoryPath: string;
   archPath: string;
+  fileArch: Architecture;
   fileName: string;
   fileVersion: string;
   releaseVersion: string;
@@ -54,6 +55,10 @@ export function parseFinalUrl(finalUrl: string, redirectHosts: readonly string[]
   }
   const fileNameMatch = /^GitButler_(.+)_(amd64|arm64)\.deb$/.exec(fileName);
   if (fileNameMatch === null) throw new Error(`Unrecognized .deb filename: ${fileName}`);
+  const fileArch = fileNameMatch[2];
+  if (fileArch !== "amd64" && fileArch !== "arm64") {
+    throw new Error(`Unrecognized .deb architecture: ${String(fileArch)}`);
+  }
   const fileVersion = assertMatches(
     fileNameMatch[1] ?? "",
     /^[0-9][0-9A-Za-z.+~]*$/,
@@ -66,6 +71,7 @@ export function parseFinalUrl(finalUrl: string, redirectHosts: readonly string[]
     repository: url.origin,
     repositoryPath: url.pathname.slice(1),
     archPath,
+    fileArch,
     fileName,
     fileVersion,
     releaseVersion: release,
@@ -99,6 +105,11 @@ export async function resolveWithCdnRedirect(
   const parsed = parseFinalUrl(finalUrl.href, oracle.redirectHosts);
   if (parsed.archPath !== mapping.path) {
     throw new Error(`Redirect arch ${parsed.archPath} does not match requested ${mapping.path}`);
+  }
+  if (parsed.fileArch !== mapping.debArch) {
+    throw new Error(
+      `Redirect package arch ${parsed.fileArch} does not match requested ${mapping.debArch}`,
+    );
   }
 
   const version = normalizeUpstreamVersion(parsed.releaseVersion);

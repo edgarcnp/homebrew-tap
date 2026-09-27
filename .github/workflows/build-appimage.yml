@@ -88,6 +88,14 @@ jobs:
       - name: Plan the build matrix
         id: matrix
         run: |
+          # The pinned builder images are amd64-only; an app that declares
+          # arm64 must fail here instead of starting a container that cannot
+          # run, until a multi-arch builder image exists.
+          if jq -e 'index("arm64")' <<<"${APP_ARCHITECTURES}" >/dev/null; then
+            echo "::error::${APP_ID} declares arm64, but the builder images are amd64-only" >&2
+            printf '{"code":"DESCRIPTOR_INVALID","message":"descriptor declares arm64 but the builder images are amd64-only"}\n' > "${GITHUB_WORKSPACE}/report-code.json"
+            exit 1
+          fi
           # Single-arch apps build one AppImage, dual-arch both; the matrix
           # comes from the descriptor, so no workflow edit is needed.
           matrix="$(jq -c '{include: [.[] | select(. == "amd64" or . == "arm64") | if . == "amd64" then {architecture: ., runner: "ubuntu-latest", appimage_arch: "x86_64"} else {architecture: ., runner: "ubuntu-26.04-arm", appimage_arch: "aarch64"} end]}' <<<"${APP_ARCHITECTURES}")"
@@ -286,6 +294,7 @@ jobs:
           path: report-code.json
           if-no-files-found: ignore
           retention-days: 7
+          overwrite: true
 
   build:
     needs: detect
@@ -381,6 +390,7 @@ jobs:
           path: source/dist/${{ needs.detect.outputs.asset_prefix }}-${{ needs.detect.outputs.version }}-${{ matrix.appimage_arch }}.AppImage
           if-no-files-found: error
           retention-days: 7
+          overwrite: true
 
       # Same contract as detect: a classified build failure (toolchain download
       # or the build command itself) is worth retrying on different terms than
@@ -395,6 +405,7 @@ jobs:
           path: report-code.json
           if-no-files-found: ignore
           retention-days: 7
+          overwrite: true
 
   publish:
     needs: [detect, build]
@@ -499,7 +510,7 @@ jobs:
       # that predates this run is not ours to delete. pin-cask runs separately
       # and keeps its tag: a pin failure repairs cheaply.
       - name: Remove the partial release
-        if: failure()
+        if: failure() || cancelled()
         env:
           GH_TOKEN: ${{ github.token }}
           TAG_PREFIX: ${{ needs.detect.outputs.tag_prefix }}
@@ -708,6 +719,7 @@ jobs:
           path: ${{ runner.temp }}/run-report.json
           if-no-files-found: error
           retention-days: 7
+          overwrite: true
       # The API consumes the record as an event; the artifact above stays for
       # humans. Auth is GitHub OIDC: a fresh ~5-minute JWT per delivery, bound to
       # this run; there is no shared secret. Best-effort by design — a delivery

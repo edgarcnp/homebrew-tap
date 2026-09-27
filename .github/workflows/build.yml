@@ -120,6 +120,7 @@ jobs:
           path: ${{ runner.temp }}/run-report.json
           if-no-files-found: error
           retention-days: 7
+          overwrite: true
       # The API consumes the record as an event; the artifact above stays for
       # humans. Auth is GitHub OIDC: a fresh ~5-minute JWT per delivery, bound to
       # this run; there is no shared secret. Best-effort by design — a delivery
