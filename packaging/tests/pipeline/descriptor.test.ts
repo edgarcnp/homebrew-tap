@@ -136,7 +136,8 @@ describe("descriptor contents (regression against the previous per-app scripts)"
     );
     assert.equal(descriptor.icon.size, "256x256");
     assert.equal(descriptor.needsWebkit, true);
-    assert.deepEqual(descriptor.buildPackages, ["libayatana-appindicator"]);
+    // libayatana-appindicator moved from buildPackages into the webkit image.
+    assert.deepEqual(descriptor.buildPackages, []);
     // The endpoint lives once in an ELF, so the replacement must not shift a
     // byte; the scan then requires it gone from the whole AppDir.
     assert.equal(descriptor.updater.patchEndpoint?.from.length, 75);
@@ -157,9 +158,9 @@ describe("descriptor contents (regression against the previous per-app scripts)"
     );
     assert.equal(descriptor.icon.size, "512x512");
     assert.equal(descriptor.needsWebkit, true);
-    // The tray indicator is dlopened at runtime, so it is installed into the
-    // build container and named as a quick-sharun deploy target.
-    assert.deepEqual(descriptor.buildPackages, ["libayatana-appindicator"]);
+    // The tray indicator is dlopened at runtime; the webkit builder image
+    // carries it and the descriptor names it as a quick-sharun deploy target.
+    assert.deepEqual(descriptor.buildPackages, []);
     assert.deepEqual(descriptor.quickSharun.libraries, ["/usr/lib/libayatana-appindicator3.so.1"]);
     assert.equal(descriptor.updater.patchEndpoint?.from, "https://api.avakot.org/lg/manifest.json");
     assert.equal(descriptor.updater.patchEndpoint?.binaryReplacement.length, 39);
@@ -860,13 +861,14 @@ describe("descriptor env and output lines", () => {
     assert.equal(env.get("NEEDS_WEBKIT"), "true");
     assert.equal(env.get("DEBLOAT_ARGS"), "--add-common --prefer-nano webkit2gtk-4.1-mini");
     assert.equal(env.get("APP_ARCHITECTURES"), '["amd64"]');
-    // cline-desktop installs the tray indicator library at pack time.
-    assert.equal(env.get("BUILD_PACKAGES"), "libayatana-appindicator");
+    // No app declares buildPackages any more; the webkit image carries the
+    // tray indicator.
+    assert.equal(env.get("BUILD_PACKAGES"), "");
   });
 
-  it("emits the build packages an app declares", () => {
+  it("emits an empty build package list when no app declares one", () => {
     const lines = descriptorLines(loadDescriptor("little-genius"), "env");
-    assert.ok(lines.includes("BUILD_PACKAGES=libayatana-appindicator"));
+    assert.ok(lines.includes("BUILD_PACKAGES="));
   });
 
   it("emits lowercase keys for job outputs", () => {

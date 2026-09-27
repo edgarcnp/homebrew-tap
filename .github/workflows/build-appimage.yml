@@ -263,11 +263,11 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: read
-    # pkgforge's Arch container: sharun/quick-sharun bundle libc and everything
-    # else from the build system, so the build OS must be Arch. Pinned by digest
-    # (Renovate bumps tag and digest together).
+    # The pinned builder images (packaging/builder/Dockerfile), chosen by the
+    # app's needsWebkit flag. The builder workflow rebuilds them and commits the
+    # new tag+digest here (its pin job); do not hand-edit these references.
     container:
-      image: ghcr.io/pkgforge-dev/archlinux:v2026.09.05@sha256:b2507f1964270cab3cc190aa8df858521f6a7e45e969146a012877891d5dfc9b
+      image: ${{ needs.detect.outputs.needs_webkit == 'true' && 'ghcr.io/edgarcnp/fbr-builder-webkit:2026.09.27.1@sha256:a5b5a942f0e84970e77a721a18fe70a9820e18ddd1b46a1f3c3c770572948afe' || 'ghcr.io/edgarcnp/fbr-builder-base:2026.09.27.1@sha256:2aae36913ca9d6df3b88a8c745bed4813748f99e1f68571e1e93a8578b5b9fc1' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -278,29 +278,6 @@ jobs:
         with:
           path: tap
           persist-credentials: false
-      - name: Prepare Arch container
-        run: |
-          # setup-bun needs unzip (installed here); the rest is the toolchain
-          # the pipeline shells out to.
-          pacman-key --init
-          pacman -Syy --noconfirm archlinux-keyring
-          pacman -Syu --noconfirm \
-            7zip \
-            base-devel \
-            curl \
-            dpkg \
-            git \
-            gnupg \
-            jq \
-            nss \
-            patchelf \
-            unzip \
-            wget \
-            xorg-server-xvfb \
-            zsync
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version: 1.4.2
       - name: Load app descriptor
         env:
           APP: ${{ inputs.app }}
@@ -309,60 +286,12 @@ jobs:
           bun "${GITHUB_WORKSPACE}/tap/packaging/bin/fbr.ts" descriptor-env --app "${APP}" >> "${GITHUB_ENV}"
       - name: Install app build packages
         run: |
-          # Build-time packages are per app (app.json buildPackages): only
-          # libraries that must exist while packaging, e.g. one the app
-          # dlopens and the descriptor names as a quick-sharun target.
+          # Escape hatch: packages an app still declares in buildPackages, for
+          # libraries the builder image does not carry. The webkit apps moved
+          # their libayatana-appindicator into the webkit image.
           if [ -n "${BUILD_PACKAGES}" ]; then
             read -r -a packages <<<"${BUILD_PACKAGES}"
             pacman -S --noconfirm "${packages[@]}"
-          fi
-      - name: Install webkit2gtk build dependencies
-        if: needs.detect.outputs.needs_webkit == 'true'
-        run: |
-          # webkit2gtk closure for the little-genius build; sharun bundles it.
-          # Mirrors upstream webkit2gtk4-demo-appimage.sh: full webkit + gtk
-          # for linking, X11 libs for strace-time dlopen detection.
-          pacman -S --noconfirm \
-            gdk-pixbuf2 \
-            glib-networking \
-            gtk3 \
-            libxcb \
-            libxcursor \
-            libxi \
-            libxkbcommon \
-            libxkbcommon-x11 \
-            libxrandr \
-            libxtst \
-            webkit2gtk-4.1
-      - name: Install appimagetool
-        run: |
-          # Pinned pkgforge appimagetool (plain build). Renovate owns the version
-          # and there is no local SHA-256 to move with it: pkgforge ships only
-          # b3sum sidecars, which come from the same release as the binary, so a
-          # sidecar check would add no trust over the HTTPS download itself.
-          # quick-sharun invokes it via APPIMAGETOOL with no args (it reads the
-          # APPDIR/OUT* env). One attempt: a flaked release download is the
-          # caller's to re-dispatch, not this job's to sleep through.
-          http_status="$(curl -fL -o /tmp/appimagetool-uruntime -w '%{http_code}' \
-            "https://github.com/pkgforge-dev/appimagetool/releases/download/0.5.2/appimagetool-${{ matrix.appimage_arch }}-linux" || true)"
-          if [ ! -s /tmp/appimagetool-uruntime ]; then
-            echo "::error::appimagetool download failed (HTTP ${http_status:-none})" >&2
-            # The status rides along as evidence: a 429/503 tells the API to come
-            # back later, a 404 says the pinned release is gone.
-            printf '{"code":"TOOLCHAIN_DOWNLOAD","message":"appimagetool download failed","stage":"toolchain","evidence":{"http_status":"%s"}}\n' "${http_status:-none}" > "${GITHUB_WORKSPACE}/report-code.json"
-            exit 1
-          fi
-          chmod +x /tmp/appimagetool-uruntime
-          mv /tmp/appimagetool-uruntime /opt/appimagetool-uruntime
-      - name: Install Anylinux build tools
-        run: |
-          # quick-sharun + get-debloated-pkgs, pinned to a commit digest;
-          # Renovate owns the pin (packaging/scripts/install-anylinux-tools.sh).
-          # One attempt; a flaked download is re-dispatched, not slept on.
-          if ! "${GITHUB_WORKSPACE}/tap/packaging/scripts/install-anylinux-tools.sh"; then
-            echo "::error::install-anylinux-tools failed" >&2
-            printf '{"code":"TOOLCHAIN_DOWNLOAD","message":"install-anylinux-tools failed"}\n' > "${GITHUB_WORKSPACE}/report-code.json"
-            exit 1
           fi
       - name: Install debloated packages
         run: |
@@ -371,15 +300,18 @@ jobs:
           read -r -a flags <<<"${DEBLOAT_ARGS}"
           if ! get-debloated-pkgs "${flags[@]}"; then
             echo "::error::get-debloated-pkgs failed" >&2
-            printf '{"code":"TOOLCHAIN_DOWNLOAD","message":"get-debloated-pkgs failed"}\n' > "${GITHUB_WORKSPACE}/report-code.json"
+            # Names the stage itself: with the toolchain baked into the builder
+            # image, this download is the one toolchain step left in the job.
+            printf '{"code":"TOOLCHAIN_DOWNLOAD","message":"get-debloated-pkgs failed","stage":"toolchain"}\n' > "${GITHUB_WORKSPACE}/report-code.json"
             exit 1
           fi
       - name: Build AppImage
         env:
           TARGET_ARCH: ${{ matrix.architecture }}
           PACKAGE_VERSION: ${{ needs.detect.outputs.version }}
-          # quick-sharun drives appimagetool via env vars, not CLI args.
-          APPIMAGETOOL: /opt/appimagetool-uruntime
+          # quick-sharun drives appimagetool via env vars, not CLI args; the
+          # builder image installs it on PATH.
+          APPIMAGETOOL: /usr/local/bin/appimagetool
           # brew owns updates: UPINFO="" keeps an update-info section out of the
           # artifact (quick-sharun would otherwise guess one from the repo).
           UPINFO: ""
