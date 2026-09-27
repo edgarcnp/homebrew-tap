@@ -1,0 +1,102 @@
+name: Builder image
+
+# Builds the pinned Arch images every AppImage build job runs in: the shared
+# toolchain (pacman packages, quick-sharun, appimagetool, Bun) baked once
+# instead of reinstalled per run. Two images: fbr-builder-base and
+# fbr-builder-webkit (the webkit2gtk/GTK closure).
+#
+# Renovate owns the pins inside the image (packaging/builder/Dockerfile) and
+# the tag+digest build-appimage.yml pins; this workflow only builds, smoke
+# tests, and pushes. After a push, copy the printed tag+digest into the
+# container: of .github/workflows/build-appimage.yml.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - packaging/builder/**
+      - packaging/scripts/install-anylinux-tools.sh
+      - .github/workflows/builder.yml
+  schedule:
+    # Weekly Arch refresh; base/tool bumps arrive as Renovate PRs instead.
+    - cron: '0 2 * * 1'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: builder-image-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash -xeuo pipefail {0}
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [base, webkit]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Compose the image reference
+        id: image
+        run: |
+          # GHCR requires a lowercase path; date.run makes the tag sortable.
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          tag="${owner}/fbr-builder-${{ matrix.variant }}:$(date -u +%Y.%m.%d).${GITHUB_RUN_NUMBER}"
+          echo "ref=ghcr.io/${tag}" >> "${GITHUB_OUTPUT}"
+      - name: Build the image
+        env:
+          IMAGE_REF: ${{ steps.image.outputs.ref }}
+        run: |
+          docker build \
+            --build-arg VARIANT="${{ matrix.variant }}" \
+            --file packaging/builder/Dockerfile \
+            --tag "${IMAGE_REF}" \
+            .
+      - name: Smoke-test the image
+        env:
+          IMAGE_REF: ${{ steps.image.outputs.ref }}
+          VARIANT: ${{ matrix.variant }}
+        run: |
+          # Single-quoted on purpose: the script runs inside the container.
+          docker run --rm --env VARIANT "${IMAGE_REF}" bash -euc '
+            for tool in quick-sharun get-debloated-pkgs appimagetool bun; do
+              command -v "${tool}"
+            done
+            bun --version
+            pacman -Qq dpkg gnupg jq patchelf >/dev/null
+            if [ "${VARIANT}" = "webkit" ]; then
+              pacman -Qq webkit2gtk-4.1 libayatana-appindicator >/dev/null
+            fi
+          '
+      - name: Log in to GHCR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # The workflow's default -x would trace the token into the log.
+          set +x
+          echo "${GH_TOKEN}" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+      - name: Push the image
+        env:
+          IMAGE_REF: ${{ steps.image.outputs.ref }}
+        run: |
+          docker push "${IMAGE_REF}"
+          digest="$(docker inspect --format '{{index .RepoDigests 0}}' "${IMAGE_REF}" 2>/dev/null || true)"
+          {
+            echo "### Builder image pushed"
+            echo ""
+            echo "\`${digest:-${IMAGE_REF}}\`"
+            echo ""
+            echo "Pin this tag+digest in \`.github/workflows/build-appimage.yml\`."
+          } >> "${GITHUB_STEP_SUMMARY}"

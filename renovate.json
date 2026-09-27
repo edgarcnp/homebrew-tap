@@ -50,16 +50,29 @@
       "extractVersionTemplate": "^v(?<version>.*)$"
     },
     {
-      "description": "pkgforge appimagetool release pinned by hand in the AppImage build workflow",
+      "description": "pkgforge appimagetool release pinned by hand in the AppImage build workflow and the builder Dockerfile",
       "customType": "regex",
       "managerFilePatterns": [
-        "/^\\.github/workflows/build-appimage\\.yml$/"
+        "/^\\.github/workflows/build-appimage\\.yml$/",
+        "/^packaging\\/builder\\/Dockerfile$/"
       ],
       "matchStrings": [
         "appimagetool/releases/download/(?<currentValue>\\d+\\.\\d+\\.\\d+)/"
       ],
       "datasourceTemplate": "github-releases",
       "depNameTemplate": "pkgforge-dev/appimagetool"
+    },
+    {
+      "description": "Bun version baked into the builder Dockerfile, kept in step with the runtime pin",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^packaging\\/builder\\/Dockerfile$/"
+      ],
+      "matchStrings": [
+        "ARG BUN_VERSION=(?<currentValue>\\d+\\.\\d+\\.\\d+)"
+      ],
+      "datasourceTemplate": "npm",
+      "depNameTemplate": "bun"
     },
     {
       "description": "quick-sharun and get-debloated-pkgs, pinned to a commit of Anylinux-AppImages",
@@ -148,6 +161,17 @@
         "bun"
       ],
       "groupName": "bun runtime"
+    },
+    {
+      "description": "Builder images are pinned by tag+digest; date.run tags need loose ordering",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "ghcr.io/edgarcnp/fbr-builder-base",
+        "ghcr.io/edgarcnp/fbr-builder-webkit"
+      ],
+      "versioning": "loose"
     },
     {
       "description": "Hand-pinned upstream tools whose version is addressed by a URL Renovate rewrites",

@@ -1,0 +1,71 @@
+# Builder image for the AppImage pipeline: the Arch toolchain every build job
+# used to install on each run, baked once. Built by .github/workflows/builder.yml
+# and pinned by tag+digest in build-appimage.yml.
+#
+# Variants (--build-arg VARIANT=):
+#   base   - the shared toolchain
+#   webkit - base plus the webkit2gtk/GTK closure little-genius and cline need
+#
+# Renovate owns the pins: the FROM digest (docker manager), the appimagetool
+# version in the URL below (regex manager), the Bun ARG (regex manager), and
+# packaging/scripts/install-anylinux-tools.sh (git-refs manager).
+#
+# Build from the repository root:
+#   docker build -f packaging/builder/Dockerfile --build-arg VARIANT=base .
+
+FROM ghcr.io/pkgforge-dev/archlinux:v2026.09.05@sha256:b2507f1964270cab3cc190aa8df858521f6a7e45e969146a012877891d5dfc9b
+
+ARG VARIANT=base
+# renovate: datasource=npm depName=bun
+ARG BUN_VERSION=1.4.2
+
+# The shared build toolchain; keep this list in step with what
+# .github/workflows/build-appimage.yml installed before this image existed.
+RUN pacman-key --init \
+ && pacman -Syy --noconfirm archlinux-keyring \
+ && pacman -Syu --noconfirm \
+      7zip \
+      base-devel \
+      curl \
+      dpkg \
+      git \
+      gnupg \
+      jq \
+      nss \
+      patchelf \
+      unzip \
+      wget \
+      xorg-server-xvfb \
+      zsync \
+ && if [ "${VARIANT}" = "webkit" ]; then \
+      pacman -S --noconfirm \
+        gdk-pixbuf2 \
+        glib-networking \
+        gtk3 \
+        libayatana-appindicator \
+        libxcb \
+        libxcursor \
+        libxi \
+        libxkbcommon \
+        libxkbcommon-x11 \
+        libxrandr \
+        libxtst \
+        webkit2gtk-4.1; \
+    fi \
+ && pacman -Scc --noconfirm
+
+# quick-sharun and get-debloated-pkgs, pinned to the commit the script carries.
+COPY packaging/scripts/install-anylinux-tools.sh /usr/local/src/install-anylinux-tools.sh
+RUN bash /usr/local/src/install-anylinux-tools.sh \
+ && rm /usr/local/src/install-anylinux-tools.sh
+
+# pkgforge appimagetool (uruntime). Renovate rewrites the version in this URL.
+RUN curl -fL -o /usr/local/bin/appimagetool \
+      "https://github.com/pkgforge-dev/appimagetool/releases/download/0.5.2/appimagetool-x86_64-linux" \
+ && chmod 0755 /usr/local/bin/appimagetool
+
+# Bun, the orchestrator runtime, pinned to the same version CI sets up.
+RUN curl -fsSL -o /tmp/bun-install.sh https://bun.sh/install \
+ && BUN_INSTALL=/usr/local bash /tmp/bun-install.sh "bun-v${BUN_VERSION}" \
+ && rm /tmp/bun-install.sh \
+ && /usr/local/bin/bun --version
