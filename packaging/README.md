@@ -284,6 +284,8 @@ timeout/cap/atomic write, guards and metadata validation, descriptor validation,
 cask read/update/consistency, the gate table, updater neutralization, desktop
 rendering, run records, and the oracle parsers.
 
-`bun run typecheck` runs `tsc --noEmit` (strict). `scripts/check-style.sh` runs
-the full local gate — shellcheck, typecheck, tests, cask check, brew
-style/audit, actionlint — the same set CI runs per PR.
+`bun run typecheck` runs `tsc --noEmit` (strict). `bun run style` runs
+`brew style edgarcnp/tap` on its own — RuboCop plus shellcheck, shfmt and
+actionlint — the fast subset to run before every commit and push.
+`scripts/check-style.sh` runs the full local gate — shellcheck, typecheck,
+tests, cask check, brew style/audit, actionlint — the same set CI runs per PR.

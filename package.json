@@ -10,7 +10,8 @@
     "fbr": "bun packaging/bin/fbr.ts",
     "test": "bun test packaging/tests",
     "typecheck": "tsc --noEmit",
-    "lint:shell": "find packaging -name '*.sh' -print0 | xargs -0 shellcheck"
+    "lint:shell": "find packaging -name '*.sh' -print0 | xargs -0 shellcheck",
+    "style": "brew style edgarcnp/tap"
   },
   "devDependencies": {
     "@types/bun": "1.4.2",
