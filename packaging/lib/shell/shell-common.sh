@@ -80,7 +80,7 @@ classify_failure() {
   [[ -n "${FBR_FAILURE_OUT:-}" ]] || return 0
   local flat
   flat="$(printf '%s' "${message}" | tr -d '\r\\"' | tr '\n' ' ')"
-  printf '{"code":"%s","message":"%s"}\n' "${code}" "${flat}" > "${FBR_FAILURE_OUT}"
+  printf '{"code":"%s","message":"%s"}\n' "${code}" "${flat}" >"${FBR_FAILURE_OUT}"
 }
 
 normalize_package_payload_permissions() {
