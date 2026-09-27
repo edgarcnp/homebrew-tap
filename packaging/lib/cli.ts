@@ -665,11 +665,24 @@ export async function runCli(argv: string[]): Promise<number> {
       options: command.options,
       strict: true,
       allowPositionals: command.positionals ?? false,
+      tokens: true,
     });
   } catch (error) {
-    // node:util's parse errors are usage errors, not crashes: an unknown,
-    // duplicated or valueless flag exits 2 with the parser's explanation.
+    // node:util's parse errors are usage errors, not crashes: an unknown or
+    // valueless flag exits 2 with the parser's explanation.
     throw new UsageError(error instanceof Error ? error.message : String(error));
+  }
+  // parseArgs keeps the last value of a repeated option, so a duplicate would
+  // silently retarget the command; the CLI contract says exit 2 instead.
+  const seen = new Set<string>();
+  for (const token of parsed.tokens ?? []) {
+    if (token.kind !== "option") continue;
+    const option = command.options[token.name];
+    if (option?.multiple === true) continue;
+    if (seen.has(token.name)) {
+      throw new UsageError(`Option --${token.name} was given more than once`);
+    }
+    seen.add(token.name);
   }
   const flags = new Flags(parsed.values as Values);
   try {

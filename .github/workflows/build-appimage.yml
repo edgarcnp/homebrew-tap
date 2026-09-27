@@ -217,10 +217,27 @@ jobs:
           cask_json="$(bun tap/packaging/bin/fbr.ts cask --action read --app "${APP_ID}" --tap "${GITHUB_WORKSPACE}/tap")"
           cask_version="$(jq -r '.version' <<<"${cask_json}")"
 
+          # Distinguish "no such release" (404) from a failed lookup. Reading a
+          # transient gh/API error as absence would rebuild an already
+          # published version, and the publish job's cleanup would then delete
+          # that release.
+          release_status="$(gh api --include \
+            "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG_PREFIX}${version}" 2>/dev/null \
+            | head -n 1 || true)"
           release_exists=false
-          if gh release view "${TAG_PREFIX}${version}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
-            release_exists=true
-          fi
+          case "${release_status}" in
+            *" 200 "*)
+              release_exists=true
+              ;;
+            *" 404 "*)
+              ;;
+            *)
+              echo "::error::could not determine whether release ${TAG_PREFIX}${version} exists" >&2
+              printf '{"code":"UPSTREAM_UNAVAILABLE","message":"could not determine whether release %s%s exists"}\n' \
+                "${TAG_PREFIX}" "${version}" > "${GITHUB_WORKSPACE}/report-code.json"
+              exit 1
+              ;;
+          esac
 
           matches=""
           if [[ "${release_exists}" = "true" && "${cask_version}" = "${version}" ]]; then
@@ -442,6 +459,9 @@ jobs:
             --title "${APP_NAME} ${PACKAGE_VERSION}" \
             --notes-file release-notes.md \
             "${appimages[@]}"
+          # Marker for the cleanup step: only a release this run created may be
+          # removed on a later failure.
+          touch "${RUNNER_TEMP}/release-created"
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
@@ -474,9 +494,10 @@ jobs:
           done <<< "${stale}"
 
       # A half-published release blocks the next dispatch (the gate would see
-      # the tag and skip), so any failure in this job removes the release and
-      # its tag; the caller's re-dispatch then rebuilds from scratch. pin-cask
-      # runs separately and keeps its tag: a pin failure repairs cheaply.
+      # the tag and skip), so a failure in this job removes the release it
+      # created; the caller's re-dispatch then rebuilds from scratch. A release
+      # that predates this run is not ours to delete. pin-cask runs separately
+      # and keeps its tag: a pin failure repairs cheaply.
       - name: Remove the partial release
         if: failure()
         env:
@@ -486,13 +507,19 @@ jobs:
         run: |
           TAG="${TAG_PREFIX}${PACKAGE_VERSION}"
           REF="repos/${GITHUB_REPOSITORY}/git/refs/tags/${TAG}"
+          if [ ! -f "${RUNNER_TEMP}/release-created" ]; then
+            # Never touch a release or tag this run did not create: an earlier
+            # published release must survive a failed rebuild.
+            echo "this run did not create release ${TAG}; leaving any existing release and tag alone"
+            exit 0
+          fi
+          # This run created the release; a failure after create leaves it
+          # half-published, so remove it and its tag. If it is already gone,
+          # remove a leftover tag ref so the next create is not blocked.
           if gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
             gh release delete "${TAG}" --repo "${GITHUB_REPOSITORY}" --yes --cleanup-tag
             exit 0
           fi
-          # A tag with no release (a half-failed --cleanup-tag above, or a tag
-          # pushed by hand) would fail every later `gh release create` with
-          # nothing left to clean up, so remove the ref too.
           if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" >/dev/null 2>&1; then
             echo "removing tag ${TAG}, which has no release"
             gh api --method DELETE "${REF}"

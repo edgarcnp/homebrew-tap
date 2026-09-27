@@ -13,12 +13,12 @@ import {
   fail,
   isRecord,
 } from "../core/guards.ts";
-import { MAX_PAYLOAD_BYTES, fetchOnce, httpFailure, readPayload } from "../core/http.ts";
+import { MAX_PAYLOAD_BYTES } from "../core/http.ts";
 import { makeMetadata, writeMetadata } from "../core/metadata.ts";
 import { DEB_VERSION } from "../core/patterns.ts";
 import { substitutePlaceholders } from "../core/template.ts";
 import type { Metadata, UpdateManifestOracle } from "../core/types.ts";
-import { downloadVerified } from "./download.ts";
+import { downloadVerified, fetchVerified } from "./download.ts";
 import { prepareOutput, type ResolveRequest } from "./shared.ts";
 
 const MAX_MANIFEST_BYTES = 1024 * 1024;
@@ -89,16 +89,17 @@ export function selectManifestAsset(
 }
 
 // Shared with the provider-specific manifest oracles under custom/: fetch
-// and parse a pinned JSON manifest with the same size cap.
+// and parse a pinned JSON manifest with the same size cap. The manifest is the
+// version and digest trust root, so fetchVerified pins the final URL after any
+// redirect to the host the descriptor declared.
 export async function fetchManifest(repository: string): Promise<unknown> {
-  const response = await fetchOnce(repository, { redirect: "follow", timeoutMs: 30000 });
-  if (!response.ok) {
-    throw httpFailure(
-      response,
-      `Update manifest fetch failed (${response.status}) for ${repository}`,
-    );
-  }
-  const bytes = await readPayload(response, MAX_MANIFEST_BYTES);
+  const { bytes } = await fetchVerified(repository, {
+    allowedHosts: [new URL(repository).hostname],
+    label: "Update manifest",
+    hostLabel: "manifest",
+    timeoutMs: 30000,
+    maxBytes: MAX_MANIFEST_BYTES,
+  });
   return JSON.parse(bytes.toString("utf8"));
 }
 

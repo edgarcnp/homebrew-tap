@@ -533,6 +533,29 @@ describe("descriptor validation", () => {
     );
   });
 
+  it("rejects payload renames and patch targets that leave their roots", () => {
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("wfhelper", (copy) => {
+            nested(copy, "payload")["rename"] = { "WFHelper.AppImage": "../../evil" };
+          }),
+          "wfhelper",
+        ),
+      /repository-relative/,
+    );
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("cline-desktop", (copy) => {
+            nested(nested(copy, "updater"), "patchEndpoint")["targets"] = ["../../etc/hosts"];
+          }),
+          "cline-desktop",
+        ),
+      /repository-relative/,
+    );
+  });
+
   it("rejects unsafe updater configuration", () => {
     assert.throws(
       () =>

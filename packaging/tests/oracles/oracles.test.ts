@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { selectLatestPackage, verifyIndexedFile } from "../../lib/oracles/apt.ts";
+import { GuardViolationError } from "../../lib/core/errors.ts";
 import { parseFinalUrl } from "../../lib/oracles/cdn-redirect.ts";
 import {
   parseFeedRedirect,
@@ -13,6 +14,7 @@ import { selectRelease, isAppImageAsset, updateYmlName } from "../../lib/oracles
 import { assertRepositoryUrl } from "../../lib/oracles/github-api.ts";
 import { normalizeTagVersion, parseSha256Digest } from "../../lib/oracles/release-common.ts";
 import {
+  fetchManifest,
   selectManifestAsset,
   validateManifestEndpoint,
 } from "../../lib/oracles/update-manifest.ts";
@@ -494,5 +496,27 @@ describe("update-manifest oracle", () => {
     assert.throws(() => validateManifestEndpoint("http://opencode.ai/x"), /must be https/);
     assert.throws(() => validateManifestEndpoint("https://opencode.ai/x?y=1"), /query or fragment/);
     assert.throws(() => validateManifestEndpoint("not a url"), /Invalid update manifest endpoint/);
+  });
+});
+
+describe("fetchManifest", () => {
+  it("rejects a redirect that leaves the pinned host", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      const response = new Response('{"version":"1.0.0"}', { status: 200 });
+      Object.defineProperty(response, "url", { value: "https://evil.example/manifest.json" });
+      return response;
+    }) as unknown as typeof fetch;
+    try {
+      await assert.rejects(
+        fetchManifest("https://good.example/manifest.json"),
+        (error: unknown) => {
+          assert.ok(error instanceof GuardViolationError);
+          return true;
+        },
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 });

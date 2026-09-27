@@ -186,10 +186,11 @@ function validatePayload(raw: unknown, label: string): Payload {
     if (renameRaw !== undefined) {
       for (const [from, to] of Object.entries(asObject(renameRaw, `${label}.rename`))) {
         if (typeof to !== "string" || to === "") fail(`${label}.rename.${from} must be a string`);
-        rename[assertSingleLine(from, `${label}.rename`)] = assertSingleLine(
-          to,
+        const target = relativePath(
+          assertSingleLine(to, `${label}.rename.${from}`),
           `${label}.rename.${from}`,
         );
+        rename[assertSingleLine(from, `${label}.rename`)] = target;
       }
     }
     const moveUsr = source["moveUsrToRoot"];
@@ -247,7 +248,11 @@ function validateUpdater(raw: unknown, label: string): UpdaterConfig {
       textReplacement: str(patchSource, "textReplacement", `${label}.patchEndpoint`),
       binaryReplacement,
       targets:
-        targets === "all" ? "all" : strArray(patchSource, "targets", `${label}.patchEndpoint`),
+        targets === "all"
+          ? "all"
+          : strArray(patchSource, "targets", `${label}.patchEndpoint`).map((entry) =>
+              relativePath(entry, `${label}.patchEndpoint.targets`),
+            ),
     };
   }
 

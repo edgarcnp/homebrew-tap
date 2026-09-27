@@ -107,11 +107,14 @@ export function sortDebVersions(versions: readonly string[]): string[] {
   return [...versions].sort(compareDebVersions);
 }
 
-// Strips a numeric build-epoch suffix so a cask/tag version stays stable
-// across per-architecture rebuilds; versions without one are kept verbatim.
+// Strips the Debian epoch and a numeric build-epoch suffix so a cask/tag
+// version stays stable across per-architecture rebuilds. The epoch is kept in
+// metadata's packageVersion (it matters for apt ordering) but cannot reach the
+// cask: DEB_VERSION has no ':'.
 export function normalizeUpstreamVersion(version: string): string {
-  if (/^[0-9][0-9A-Za-z.+~]*-[0-9]+$/.test(version)) {
-    return version.slice(0, version.indexOf("-"));
+  const upstream = version.replace(/^[0-9]+:/, "");
+  if (/^[0-9][0-9A-Za-z.+~]*-[0-9]+$/.test(upstream)) {
+    return upstream.slice(0, upstream.indexOf("-"));
   }
-  return version;
+  return upstream;
 }

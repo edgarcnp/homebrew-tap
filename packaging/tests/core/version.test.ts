@@ -88,4 +88,9 @@ describe("normalizeUpstreamVersion", () => {
     assert.equal(normalizeUpstreamVersion("0.0.109"), "0.0.109");
     assert.equal(normalizeUpstreamVersion("1.18.30"), "1.18.30");
   });
+
+  it("strips a Debian epoch, which a cask version cannot carry", () => {
+    assert.equal(normalizeUpstreamVersion("1:1.133.0-1786487972"), "1.133.0");
+    assert.equal(normalizeUpstreamVersion("2:0.22.3"), "0.22.3");
+  });
 });

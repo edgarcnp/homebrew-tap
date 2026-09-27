@@ -101,6 +101,12 @@ describe("fbr CLI contract", () => {
     assert.match(positional.stderr, /positional/);
   });
 
+  it("rejects a duplicated flag instead of letting the last value win", () => {
+    const duplicated = fbr(["descriptor", "--app", "vscode", "--app", "cline-desktop"]);
+    assert.equal(duplicated.status, 2);
+    assert.match(duplicated.stderr, /--app was given more than once/);
+  });
+
   it("sorts a release-tag version list the way the retention step calls it", () => {
     // The workflow runs exactly this shape: --sort then the stripped versions.
     const sorted = fbr([

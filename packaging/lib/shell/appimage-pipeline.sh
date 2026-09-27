@@ -61,11 +61,19 @@ pipeline_init() {
 pipeline_resolve() {
   info "Resolving ${APP_ID} for ${DEB_ARCH}"
   METADATA_PATH="${WORK_DIR}/metadata.json"
-  PAYLOAD_PATH="$(fbr resolve \
-    --app "${APP_ID}" \
-    --arch "${DEB_ARCH}" \
-    --output-dir "${WORK_DIR}" \
-    --metadata "${METADATA_PATH}")"
+  # Forward the workflow's fragment path the way pipeline_neutralize does: a
+  # classified resolve failure (upstream outage, checksum mismatch, guard) must
+  # name itself in the run record instead of falling back to BUILD_FAILED.
+  local -a resolve_args=(resolve
+    --app "${APP_ID}"
+    --arch "${DEB_ARCH}"
+    --output-dir "${WORK_DIR}"
+    --metadata "${METADATA_PATH}")
+  if [[ -n "${FBR_FAILURE_OUT:-}" ]]
+  then
+    resolve_args+=(--failure-out "${FBR_FAILURE_OUT}")
+  fi
+  PAYLOAD_PATH="$(fbr "${resolve_args[@]}")"
 
   local resolved_version
   resolved_version="$(fbr metadata --file "${METADATA_PATH}" --field version)"
@@ -153,7 +161,8 @@ pipeline_stage() {
       do
         name="$(basename -- "${entry}")"
         is_excluded_payload_entry "${name}" && continue
-        target="$(descriptor_field ".payload.rename[\"${name}\"] // empty")"
+        target="$(jq -r --arg name "${name}" \
+          '(.payload.rename // {})[$name] // empty' <<<"${APP_JSON}")"
         if [[ -n "${target}" ]]
         then
           cp -a -- "${entry}" "${APPDIR}/bin/${target}"

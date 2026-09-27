@@ -93,6 +93,17 @@ describe("planGate", () => {
     assert.match(decision.reason, /ahead of upstream/);
   });
 
+  it("skips when the cask is ahead even if the upstream release is missing", () => {
+    const decision = planGate({
+      cask: cask("1.2.0"),
+      upstreamVersion: "1.1.0",
+      releaseExists: false,
+      releaseMatchesCask: null,
+    });
+    assert.equal(decision.action, "skip");
+    assert.match(decision.reason, /ahead of upstream/);
+  });
+
   it("rebuilds when the cask pins a version with no release", () => {
     const decision = planGate({
       cask: cask("1.1.0"),

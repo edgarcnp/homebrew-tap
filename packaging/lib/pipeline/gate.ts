@@ -33,17 +33,21 @@ export function planGate(input: GateInput): GateDecision {
         };
   }
 
+  if (caskVersion !== upstreamVersion) {
+    // Reachable only when the cask is ahead: isNewer() handled behind and
+    // equal above. Ahead must skip even with no release for the upstream
+    // version, or a feed regression rebuilds the older version and the cask
+    // pin follows it down.
+    return {
+      action: "skip",
+      reason: `Cask ${caskVersion} is ahead of upstream ${upstreamVersion}; skipping`,
+    };
+  }
+
   if (!releaseExists) {
     return {
       action: "build",
       reason: `Cask ${caskVersion} references a version with no release; (re)building`,
-    };
-  }
-
-  if (caskVersion !== upstreamVersion) {
-    return {
-      action: "skip",
-      reason: `Cask ${caskVersion} is ahead of upstream ${upstreamVersion}; skipping`,
     };
   }
 
