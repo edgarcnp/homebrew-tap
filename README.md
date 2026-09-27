@@ -19,12 +19,12 @@ brew install --cask <cask>
 
 | Cask | App | Notes |
 | --- | --- | --- |
-| `gitcomet` | [GitComet](https://gitcomet.dev/) | |
 | `cline-desktop` | [Cline Desktop](https://cline.bot/) | |
-| `opencode-desktop` | [OpenCode Desktop](https://opencode.ai/) | |
+| `gitcomet` | [GitComet](https://gitcomet.dev/) | |
 | `little-genius` | [Little Genius](https://lg.avakot.org/) | Soulframe companion |
-| `wfhelper` | [WFHelper](https://github.com/WFHelper/WFHelper) | Warframe companion |
+| `opencode-desktop` | [OpenCode Desktop](https://opencode.ai/) | |
 | `vscode` | [Visual Studio Code](https://code.visualstudio.com/) | |
+| `wfhelper` | [WFHelper](https://github.com/WFHelper/WFHelper) | Warframe companion |
 
 > [!NOTE]
 > Every cask in this tap is amd64-only. Each descriptor declares
