@@ -5,9 +5,10 @@
   "comment": "Cline AI coding agent",
   "cask": "cline-desktop",
   "watch": {
-    "feedUrl": "https://github.com/cline/cline/releases.atom",
-    "format": "atom",
-    "versionPattern": "^Desktop v(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
+    "feedUrl": "https://github.com/cline/cline/releases/download/desktop-latest/latest.json",
+    "format": "json",
+    "versionField": "version",
+    "versionPattern": "^(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
     "repo": "cline/cline"
   },
   "assetPrefix": "cline-desktop",

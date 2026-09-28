@@ -397,9 +397,10 @@ describe("host helpers", () => {
 describe("release watch", () => {
   it("loads each app's watch block", () => {
     assert.deepEqual(loadDescriptor("vscode").watch, {
-      feedUrl: "https://github.com/microsoft/vscode/releases.atom",
-      format: "atom",
-      versionPattern: "^(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
+      feedUrl: "https://update.code.visualstudio.com/api/update/linux-x64/stable/latest",
+      format: "json",
+      versionField: "productVersion",
+      versionPattern: "^(\\d+\\.\\d+\\.\\d+)$",
       repo: "microsoft/vscode",
     });
     assert.deepEqual(loadDescriptor("opencode-desktop").watch, {
@@ -417,9 +418,10 @@ describe("release watch", () => {
       repo: "Auto-Explore/GitComet",
     });
     assert.deepEqual(loadDescriptor("cline-desktop").watch, {
-      feedUrl: "https://github.com/cline/cline/releases.atom",
-      format: "atom",
-      versionPattern: "^Desktop v(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
+      feedUrl: "https://github.com/cline/cline/releases/download/desktop-latest/latest.json",
+      format: "json",
+      versionField: "version",
+      versionPattern: "^(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
       repo: "cline/cline",
     });
     assert.deepEqual(loadDescriptor("little-genius").watch, {
@@ -437,15 +439,15 @@ describe("release watch", () => {
   });
 
   it("captures the version from a real feed title", () => {
-    // Feed titles are release names, not tags (e.g. "Desktop v0.0.35").
+    // Feed titles are release names, not tags (e.g. "GitComet v0.2.5").
     const titles: Record<string, [string, string]> = {
       vscode: ["1.137.0", "1.137.0"],
       "opencode-desktop": ["2.0.18", "2.0.18"],
       gitcomet: ["GitComet v0.2.5", "0.2.5"],
-      "cline-desktop": ["Desktop v0.0.35", "0.0.35"],
       // JSON feeds carry no titles; the pattern applies to the versionField
-      // value instead — the manifest's top-level "version" ("2.0.18" for
-      // opencode-desktop, "0.6.7" for little-genius).
+      // value instead — vscode reads "productVersion", cline-desktop and
+      // opencode-desktop their top-level "version", little-genius "version".
+      "cline-desktop": ["0.0.37", "0.0.37"],
       "little-genius": ["0.6.7", "0.6.7"],
       wfhelper: ["v2.1.0", "2.1.0"],
     };

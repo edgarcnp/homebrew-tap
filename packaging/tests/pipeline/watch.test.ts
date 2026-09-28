@@ -51,8 +51,8 @@ describe("selectFeedVersion", () => {
   });
 
   it("reads titles that are release names rather than tags", () => {
-    const feed = atom("Release notes from cline", ["CLI v3.0.65", "Desktop v0.0.35"]);
-    assert.equal(selectFeedVersion(watch("cline-desktop"), feed), "0.0.35");
+    const feed = atom("Release notes from gitcomet", ["GitComet v0.2.5", "GitComet v0.2.4"]);
+    assert.equal(selectFeedVersion(watch("gitcomet"), feed), "0.2.5");
   });
 
   it("returns null when no entry matches", () => {
@@ -79,6 +79,17 @@ describe("selectFeedVersion", () => {
     assert.equal(selectFeedVersion(watch("little-genius"), "{\"version\":\"0.6.7\"}"), "0.6.7");
     // The same shape serves opencode-desktop's v2 update manifest.
     assert.equal(selectFeedVersion(watch("opencode-desktop"), "{\"version\":\"2.0.18\"}"), "2.0.18");
+    // cline-desktop reads the desktop-latest updater manifest and vscode the
+    // update API; in vscode's manifest "version" is the commit hash, so the
+    // descriptor reads productVersion.
+    assert.equal(selectFeedVersion(watch("cline-desktop"), "{\"version\":\"0.0.37\"}"), "0.0.37");
+    assert.equal(
+      selectFeedVersion(
+        watch("vscode"),
+        "{\"productVersion\":\"1.139.1\",\"version\":\"04c0d99f4fb0d8afe6ce4f0c58e31e183ac3e4b1\"}",
+      ),
+      "1.139.1",
+    );
     const nested: WatchConfig = {
       feedUrl: "https://example.com/manifest.json",
       format: "json",

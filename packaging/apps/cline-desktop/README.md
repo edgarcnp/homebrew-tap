@@ -15,8 +15,9 @@ from the [cline/cline](https://github.com/cline/cline) releases.
   release list with the CLI (`cli-v…`), the SDK (`sdk/…`) and the plain `v…`
   releases, so only the `desktop-v` prefix selects this line; a resolve for a
   tag without the matching asset fails instead of packaging something else.
-- **Watch** — the same shared feed, but `versionPattern` anchors on the entry
-  *title* `Desktop v…`: a CLI or SDK release can never satisfy it.
+- **Watch** — the rolling `desktop-latest` release carries the updater
+  manifest `latest.json`; `versionField: version` reads its bare version, so
+  a CLI (`cli-v…`) or SDK (`sdk/…`) release can never satisfy the pattern.
 - **Single-arch** — `architectures: ["amd64"]`: upstream publishes no arm64
   `.deb`, so CI builds, publishes and checks amd64 only and the cask pins one
   `sha256` behind `depends_on arch: :x86_64`.

@@ -5,9 +5,10 @@
   "comment": "Code Editing. Redefined.",
   "cask": "vscode",
   "watch": {
-    "feedUrl": "https://github.com/microsoft/vscode/releases.atom",
-    "format": "atom",
-    "versionPattern": "^(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
+    "feedUrl": "https://update.code.visualstudio.com/api/update/linux-x64/stable/latest",
+    "format": "json",
+    "versionField": "productVersion",
+    "versionPattern": "^(\\d+\\.\\d+\\.\\d+)$",
     "repo": "microsoft/vscode"
   },
   "assetPrefix": "vscode",
