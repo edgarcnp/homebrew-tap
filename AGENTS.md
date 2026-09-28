@@ -140,7 +140,7 @@ memory or habit.
 | `build.yml` | build one app or all of them; the app list comes from the descriptors |
 | `build-appimage.yml` | the reusable per-app build (container, toolchain, pack, smoke test) |
 | `builder.yml` | rebuilds the `fbr-builder-{base,webkit}` images on Dockerfile changes and weekly, then pins them |
-| `dispatch.yml` | entry point for programmatic builds (`repository_dispatch` type `trigger-build`, or a manual run) |
+| `dispatch.yml` | entry point for programmatic builds (a manual or API-triggered run) |
 | `cask-smoke.yml` | installs and smoke-tests the casks on push to `main` and weekly |
 | `publish.yml` (`brew pr-pull`) | pulls and publishes a named PR |
 | `autobump.yml` (`brew bump`) | Homebrew's autobump, triggered only when the workflow file itself changes; inert on a cask-only tap |
