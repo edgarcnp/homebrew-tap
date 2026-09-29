@@ -1,6 +1,6 @@
 cask "little-genius" do
-  version "0.6.9"
-  sha256 "d3232a16cbd3c0f9298b655ca9d111921650402c11cba349504ce8c36780e554"
+  version "0.6.10"
+  sha256 "58460712f0e641ecada2c4f0f6f22492e1912cbb5e96df88e624d27c3b7a6489"
 
   url "https://github.com/edgarcnp/homebrew-tap/releases/download/little-genius-v#{version}/little-genius-#{version}-x86_64.AppImage"
   name "Little Genius"
