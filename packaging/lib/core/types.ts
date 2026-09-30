@@ -210,6 +210,15 @@ export interface IconConfig {
   size: string;
 }
 
+// A file copied verbatim from sourceDir into the AppDir after quick-sharun,
+// e.g. Firefox default prefs under bin/defaults/pref. `target` is
+// AppDir-relative; an existing target whose bytes differ fails the build
+// rather than overwriting the payload's own file.
+export interface ExtraFile {
+  source: string;
+  target: string;
+}
+
 // Release-watch block. versionPattern matches the atom entry *title* (the
 // GitHub release name, not the tag), or the JSON `versionField` value for
 // `format: "json"` feeds; capture group 1 is the version.
@@ -283,6 +292,9 @@ export interface AppDescriptor {
   icon: IconConfig;
   // Desktop entry template, relative to sourceDir.
   desktopTemplate: string;
+  // Files copied verbatim from sourceDir into the AppDir after quick-sharun.
+  // Absent when the app ships none.
+  extraFiles?: ExtraFile[];
   updater: UpdaterConfig;
   // quick-sharun build knobs, exported as environment variables at pack time.
   quickSharun: QuickSharunConfig;

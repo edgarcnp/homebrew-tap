@@ -10,6 +10,7 @@ import type {
   AppDescriptor,
   AptOracle,
   Architecture,
+  ExtraFile,
   IconConfig,
   Oracle,
   Payload,
@@ -43,6 +44,7 @@ const TOP_LEVEL_KEYS = [
   "payload",
   "icon",
   "desktopTemplate",
+  "extraFiles",
   "updater",
   "quickSharun",
   "watch",
@@ -461,6 +463,31 @@ function validateHostHelpers(raw: unknown, label: string): string[] | undefined 
   });
 }
 
+// Files copied into the finished AppDir (e.g. Firefox default prefs). Both
+// paths are repository-relative; targets must be unique so a later entry
+// cannot silently replace an earlier one.
+function validateExtraFiles(raw: unknown, label: string): ExtraFile[] | undefined {
+  if (raw === undefined) return undefined;
+  if (!Array.isArray(raw) || raw.length === 0) {
+    fail(`${label} must be a non-empty array`);
+  }
+  const targets = new Set<string>();
+  return raw.map((entry, index) => {
+    const itemLabel = `${label}[${index}]`;
+    const source = asObject(entry, itemLabel);
+    rejectUnknownKeys(source, ["source", "target"], itemLabel);
+    const file: ExtraFile = {
+      source: relativePath(str(source, "source", itemLabel), `${itemLabel}.source`),
+      target: relativePath(str(source, "target", itemLabel), `${itemLabel}.target`),
+    };
+    if (targets.has(file.target)) {
+      fail(`${itemLabel}.target duplicates ${file.target}`);
+    }
+    targets.add(file.target);
+    return file;
+  });
+}
+
 function validateIcon(raw: unknown, label: string): IconConfig {
   const source = asObject(raw, label);
   rejectUnknownKeys(source, ["source", "size"], label);
@@ -536,6 +563,7 @@ export function validateDescriptor(raw: unknown, expectedId: string): AppDescrip
 
   const watch = validateWatch(source["watch"], `${label}.watch`);
   const hostHelpers = validateHostHelpers(source["hostHelpers"], `${label}.hostHelpers`);
+  const extraFiles = validateExtraFiles(source["extraFiles"], `${label}.extraFiles`);
   const descriptor: AppDescriptor = {
     id,
     appName: str(source, "appName", label),
@@ -562,6 +590,7 @@ export function validateDescriptor(raw: unknown, expectedId: string): AppDescrip
   };
   if (watch !== undefined) descriptor.watch = watch;
   if (hostHelpers !== undefined) descriptor.hostHelpers = hostHelpers;
+  if (extraFiles !== undefined) descriptor.extraFiles = extraFiles;
 
   // The app id is the API's app id end to end: cask token and asset prefix are
   // the same string, checked below.

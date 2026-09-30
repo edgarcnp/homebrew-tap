@@ -204,8 +204,13 @@ describe("finalizeApp", () => {
   // finalizeApp reads the hook template from appDir(descriptor.id), i.e. from
   // packaging/apps/<id>. No shipped app carries one since GitButler left, so
   // point the id at this test's own temp directory and stage the fixture there.
-  function fixtureDescriptor(updater: UpdaterConfig): AppDescriptor {
-    return descriptorWith(updater, path.relative(APPS_DIR, appDir));
+  function fixtureDescriptor(
+    updater: UpdaterConfig,
+    extraFiles?: AppDescriptor["extraFiles"],
+  ): AppDescriptor {
+    const descriptor = descriptorWith(updater, path.relative(APPS_DIR, appDir));
+    if (extraFiles !== undefined) descriptor.extraFiles = extraFiles;
+    return descriptor;
   }
 
   it("appends .env entries once and installs the hook", () => {
@@ -234,6 +239,54 @@ describe("finalizeApp", () => {
     assert.throws(
       () => finalizeApp(fixtureDescriptor({ hook: "templates/absent.hook" }), appDir),
       /Missing runtime hook/,
+    );
+  });
+
+  it("copies extra files and is idempotent", () => {
+    write("templates/vaapi-defaults.js", 'pref("a", true);\n');
+    const descriptor = fixtureDescriptor({}, [
+      {
+        source: "templates/vaapi-defaults.js",
+        target: "bin/defaults/pref/vaapi-defaults.js",
+      },
+    ]);
+
+    const first = finalizeApp(descriptor, appDir);
+    const second = finalizeApp(descriptor, appDir);
+
+    assert.equal(first.length, 1);
+    assert.equal(second.length, 1);
+    const installed = path.join(appDir, "bin/defaults/pref/vaapi-defaults.js");
+    assert.equal(fs.readFileSync(installed, "utf8"), 'pref("a", true);\n');
+    assert.equal(fs.statSync(installed).mode & 0o777, 0o644);
+  });
+
+  it("fails when an extra file source is missing", () => {
+    assert.throws(
+      () =>
+        finalizeApp(
+          fixtureDescriptor({}, [{ source: "templates/absent.js", target: "bin/prefs.js" }]),
+          appDir,
+        ),
+      /Missing extra file/,
+    );
+  });
+
+  it("refuses to overwrite payload bytes with a different extra file", () => {
+    write("bin/defaults/pref/channel-prefs.js", "payload\n");
+    write("templates/vaapi-defaults.js", "different\n");
+    assert.throws(
+      () =>
+        finalizeApp(
+          fixtureDescriptor({}, [
+            {
+              source: "templates/vaapi-defaults.js",
+              target: "bin/defaults/pref/channel-prefs.js",
+            },
+          ]),
+          appDir,
+        ),
+      /Refusing to overwrite existing file/,
     );
   });
 });

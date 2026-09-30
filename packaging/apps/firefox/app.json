@@ -39,6 +39,12 @@
     "size": "128x128"
   },
   "desktopTemplate": "templates/firefox.desktop",
+  "extraFiles": [
+    {
+      "source": "templates/vaapi-defaults.js",
+      "target": "bin/defaults/pref/vaapi-defaults.js"
+    }
+  ],
   "updater": {
     "patchEndpoint": {
       "from": "aus5.mozilla.org",
@@ -50,9 +56,11 @@
       "patterns": ["aus5.mozilla.org"],
       "severity": "warning"
     },
+    "hook": "templates/rdd-sandbox-nvidia.hook",
     "env": {
       "MOZ_LEGACY_PROFILES": "1",
-      "MOZ_APP_LAUNCHER": "${APPIMAGE}"
+      "MOZ_APP_LAUNCHER": "${APPIMAGE}",
+      "SHARUN_FALLBACK_LIBRARY_PATH": "/usr/lib/x86_64-linux-gnu:/usr/lib/wsl/lib"
     }
   },
   "quickSharun": {
@@ -60,7 +68,8 @@
     "env": {
       "DEPLOY_OPENGL": "1",
       "DEPLOY_VULKAN": "1",
-      "URUNTIME_PRELOAD": "1"
+      "URUNTIME_PRELOAD": "1",
+      "CROSS_LIBC_DLOPEN": "0"
     },
     "libraries": [
       "/usr/lib/libavcodec.so.63",

@@ -224,5 +224,26 @@ export function finalizeApp(descriptor: AppDescriptor, appDirPath: string): stri
     notes.push(`installed runtime hook ${destination}`);
   }
 
+  for (const file of descriptor.extraFiles ?? []) {
+    const source = path.join(appDir(descriptor.id), file.source);
+    if (!fs.existsSync(source) || !fs.statSync(source).isFile()) {
+      fail(`Missing extra file: ${source}`);
+    }
+    const destination = path.join(appDirPath, file.target);
+    if (fs.existsSync(destination)) {
+      // The payload owns its own paths: an identical copy is a no-op (so a
+      // repeated local run does not fail), different bytes are a mistake
+      // rather than something to overwrite.
+      if (!fs.readFileSync(source).equals(fs.readFileSync(destination))) {
+        fail(`Refusing to overwrite existing file: ${destination}`);
+      }
+    } else {
+      fs.mkdirSync(path.dirname(destination), { recursive: true });
+      fs.copyFileSync(source, destination);
+    }
+    fs.chmodSync(destination, 0o644);
+    notes.push(`installed extra file ${file.target}`);
+  }
+
   return notes;
 }

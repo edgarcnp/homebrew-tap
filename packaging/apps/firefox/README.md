@@ -49,6 +49,35 @@ host.
   deployed automatically by quick-sharun (the `libpulse.so` string is present
   in libxul). `DEPLOY_OPENGL`/`DEPLOY_VULKAN` cover the GPU stacks, and
   `intel-media-driver-mini` supplies the Intel VA-API driver.
+- **NVIDIA VA-API and `CROSS_LIBC_DLOPEN`** — `cross-libc-dlopen.so`'s
+  version-compat forwarders (`pthread_cond_*`, `sched_*affinity`, …) resolve
+  their targets lazily via `dlsym`, which needs the loader lock.
+  `nvidia_drv_video.so`'s ELF constructor calls `cuInit` from inside the
+  `dlopen` that holds that lock, and the first `pthread_cond_broadcast` from
+  CUDA's own helper thread then blocks on it: the VA-API probe times out
+  (`ManageChildProcess(vaapitest): poll failed: Invalid argument`) and Firefox
+  disables hardware decoding. Firefox therefore ships no shim
+  (`quickSharun.env.CROSS_LIBC_DLOPEN=0`), and
+  `SHARUN_FALLBACK_LIBRARY_PATH` adds the host library directories the bundled
+  loader's built-in list misses (Debian multiarch, WSL); the NVIDIA driver's
+  dependencies (`libcuda.so.1`, `libnvcuvid.so.1`, `libgstcodecparsers-1.0.so.0`)
+  then resolve from the host the same way native Firefox finds them. Verified
+  on NVIDIA with `H264/VP8/VP9/AV1/HEVC HWDEC` in `codecSupportInfo`, WebRender
+  accelerated, local H.264 playback advancing and the NVDEC engine busy during
+  playback. Upstream:
+  [pkgforge-dev/cross-libc-dlopen](https://github.com/pkgforge-dev/cross-libc-dlopen)
+  (`src/version-compat.c`, the lazy `VC_SLOT` resolution).
+- **Hardware decoding out of the box** — Firefox 137+ never probes VA-API
+  unless `media.hardware-video-decoding.force-enabled` is set, so
+  `extraFiles` ships `templates/vaapi-defaults.js` as
+  `bin/defaults/pref/vaapi-defaults.js` (user-overridable in `about:config`).
+  Actual decode additionally needs the RDD process unsandboxed:
+  `nvidia-vaapi-driver` cannot open `/proc/version` (nor ioctl CUDA) inside it,
+  and forcing init with `NVD_FORCE_INIT=1` is refused by seccomp
+  (`Sandbox: seccomp sandbox violation`, `CUDA ERROR 'unknown error' (999)`).
+  `templates/rdd-sandbox-nvidia.hook` therefore exports
+  `MOZ_DISABLE_RDD_SANDBOX=1` only when an NVIDIA device is present, so
+  Intel/AMD hosts keep the sandbox.
 - **Locales** — the deb carries en-US only. Other languages are separate
   `firefox-l10n-*` packages that the one-deb pipeline does not stage; a language
   can still be added at runtime from addons.mozilla.org.

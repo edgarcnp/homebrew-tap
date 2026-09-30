@@ -1,0 +1,10 @@
+#!/bin/sh
+# nvidia-vaapi-driver cannot initialise CUDA inside Firefox's RDD sandbox:
+# the sandbox hides /proc/version and blocks the CUDA ioctls, so the driver
+# skips initialisation and hardware decode silently falls back to software.
+# Disable the sandbox only where an NVIDIA device exists; Intel/AMD decode
+# keeps it.
+if [ -e /dev/nvidiactl ] || [ -r /proc/driver/nvidia/version ]
+then
+  export MOZ_DISABLE_RDD_SANDBOX=1
+fi

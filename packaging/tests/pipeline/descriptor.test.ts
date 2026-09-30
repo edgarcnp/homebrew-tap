@@ -269,10 +269,23 @@ describe("descriptor contents (regression against the previous per-app scripts)"
       "bin/libxul.so",
     ]);
     assert.equal(descriptor.updater.residualScan?.severity, "warning");
+    assert.equal(descriptor.updater.hook, "templates/rdd-sandbox-nvidia.hook");
     assert.deepEqual(descriptor.updater.env, {
       MOZ_LEGACY_PROFILES: "1",
       MOZ_APP_LAUNCHER: "${APPIMAGE}",
+      // Host library directories the bundled loader's built-in list misses
+      // (Debian multiarch, WSL); the NVIDIA VA-API driver's dependencies come
+      // from the host and the shim that used to bridge them is not deployed.
+      SHARUN_FALLBACK_LIBRARY_PATH: "/usr/lib/x86_64-linux-gnu:/usr/lib/wsl/lib",
     });
+    // Firefox 137+ needs the force-enabled pref for its VA-API probe to run at
+    // all, so the AppImage ships it as a default pref (user-overridable).
+    assert.deepEqual(descriptor.extraFiles, [
+      {
+        source: "templates/vaapi-defaults.js",
+        target: "bin/defaults/pref/vaapi-defaults.js",
+      },
+    ]);
     // The libs Firefox only dlopens at runtime, i.e. nothing ldd would surface.
     assert.deepEqual(descriptor.quickSharun.libraries, [
       "/usr/lib/libavcodec.so.63",
@@ -291,6 +304,9 @@ describe("descriptor contents (regression against the previous per-app scripts)"
       DEPLOY_OPENGL: "1",
       DEPLOY_VULKAN: "1",
       URUNTIME_PRELOAD: "1",
+      // cross-libc-dlopen's version-compat forwarders resolve lazily via dlsym
+      // and deadlock when CUDA's cuInit first calls one from inside dlopen.
+      CROSS_LIBC_DLOPEN: "0",
     });
   });
 });
@@ -450,6 +466,90 @@ describe("host helpers", () => {
           "vscode",
         ),
       /must be a file under bin\//,
+    );
+  });
+});
+
+describe("extra files", () => {
+  it("omits the field when the block is absent", () => {
+    const descriptor = validateDescriptor(
+      mutated("vscode", (copy) => {
+        delete copy["extraFiles"];
+      }),
+      "vscode",
+    );
+    assert.equal(descriptor.extraFiles, undefined);
+  });
+
+  it("accepts source/target pairs", () => {
+    const descriptor = validateDescriptor(
+      mutated("vscode", (copy) => {
+        copy["extraFiles"] = [
+          { source: "templates/prefs.js", target: "bin/defaults/pref/prefs.js" },
+        ];
+      }),
+      "vscode",
+    );
+    assert.deepEqual(descriptor.extraFiles, [
+      { source: "templates/prefs.js", target: "bin/defaults/pref/prefs.js" },
+    ]);
+  });
+
+  it("rejects non-arrays, escapes, unknown keys and duplicate targets", () => {
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("vscode", (copy) => {
+            copy["extraFiles"] = {};
+          }),
+          "vscode",
+        ),
+      /extraFiles must be a non-empty array/,
+    );
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("vscode", (copy) => {
+            copy["extraFiles"] = [{ source: "templates/prefs.js", target: "/bin/prefs.js" }];
+          }),
+          "vscode",
+        ),
+      /must be a repository-relative path/,
+    );
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("vscode", (copy) => {
+            copy["extraFiles"] = [{ source: "templates/prefs.js", target: "bin/../prefs.js" }];
+          }),
+          "vscode",
+        ),
+      /must be a repository-relative path/,
+    );
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("vscode", (copy) => {
+            copy["extraFiles"] = [
+              { source: "templates/prefs.js", target: "bin/prefs.js", mode: "0644" },
+            ];
+          }),
+          "vscode",
+        ),
+      /is not a known field/,
+    );
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("vscode", (copy) => {
+            copy["extraFiles"] = [
+              { source: "templates/a.js", target: "bin/prefs.js" },
+              { source: "templates/b.js", target: "bin/prefs.js" },
+            ];
+          }),
+          "vscode",
+        ),
+      /duplicates/,
     );
   });
 });
