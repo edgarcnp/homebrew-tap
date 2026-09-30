@@ -78,6 +78,18 @@ host.
   `templates/rdd-sandbox-nvidia.hook` therefore exports
   `MOZ_DISABLE_RDD_SANDBOX=1` only when an NVIDIA device is present, so
   Intel/AMD hosts keep the sandbox.
+- **Vulkan video ahead** — Firefox is moving to Vulkan video decoding by
+  default on Linux
+  ([bug 2053144](https://bugzilla.mozilla.org/show_bug.cgi?id=2053144)). Forced
+  on (`media.hardware-video-decoding.enabled`,
+  `media.hardware-video-decoding-vulkan.enabled`,
+  `media.hardware-video-decoding-vulkan.force-enabled`,
+  `media.hardware-video-decoding-vulkan.direct-export.enabled`), it decodes
+  H.264/VP9/AV1/HEVC on an RTX 3080 (driver 615.71.09) with the NVDEC engine
+  busy, but there is no Vulkan VP8 decoder (VP8 falls back to software) and
+  the NVIDIA issues are open (2054380 fails with NVIDIA, 2072790 crash in
+  `cuVDPAUCtxCreate`). The shipped defaults stay on VA-API, which decodes all
+  five codecs, until the upstream switch is ready.
 - **Locales** — the deb carries en-US only. Other languages are separate
   `firefox-l10n-*` packages that the one-deb pipeline does not stage; a language
   can still be added at runtime from addons.mozilla.org.
