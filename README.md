@@ -20,7 +20,7 @@ brew install --cask <cask>
 | Cask | App | Notes |
 | --- | --- | --- |
 | `cline-desktop` | [Cline Desktop](https://cline.bot/) | |
-| `firefox` | [Firefox](https://www.mozilla.org/firefox/) | en-US build; [hardware decoding notes](#hardware-video-decoding) |
+| `firefox` | [Firefox](https://www.mozilla.org/firefox/) | en-US build; [hardware decoding notes](packaging/apps/firefox/README.md) |
 | `gitcomet` | [GitComet](https://gitcomet.dev/) | |
 | `little-genius` | [Little Genius](https://lg.avakot.org/) | Soulframe companion |
 | `opencode-desktop` | [OpenCode Desktop](https://opencode.ai/) | |
@@ -50,36 +50,6 @@ brew install --cask <cask>
   `brew install --cask --appimagedir=<dir>`.
 - A launcher on your `PATH`, plus a desktop entry and icon under
   `~/.local/share/`.
-
-## Hardware video decoding
-
-The `firefox` AppImage enables hardware video decoding by default. It ships
-`media.ffmpeg.vaapi.enabled`, `media.hardware-video-decoding.force-enabled` and
-`media.rdd-ffmpeg.enabled` as default prefs (overridable in `about:config`),
-and it disables Firefox's RDD sandbox **only on hosts with an NVIDIA device**,
-because the driver cannot initialise CUDA inside it.
-
-- **Intel / AMD** — decoded by the bundled drivers (`intel-media-driver`,
-  Mesa); nothing to install.
-- **NVIDIA** — decoded by the host's
-  [`nvidia-vaapi-driver`](https://github.com/elFarto/nvidia-vaapi-driver)
-  (e.g. the `libva-nvidia-driver` package), which must be installed, with the
-  NVIDIA kernel module running `nvidia-drm.modeset=1`. Without it, decoding
-  falls back to software. Because the driver needs it, the AppImage sets
-  `MOZ_DISABLE_RDD_SANDBOX=1` on NVIDIA hosts, which weakens the media
-  process isolation — the price of hardware decoding there. Verified on an
-  RTX 3080 (driver 615.71.09): H.264, VP8, VP9, AV1 and HEVC all decode in
-  hardware.
-
-> [!NOTE]
-> Firefox is moving to Vulkan video decoding by default on Linux
-> ([bug 2053144](https://bugzilla.mozilla.org/show_bug.cgi?id=2053144)). The
-> tap stays on VA-API for now: Vulkan has to be forced on, has no VP8 decoder
-> (that codec would fall back to software), and its NVIDIA issues are still
-> open ([2054380](https://bugzilla.mozilla.org/show_bug.cgi?id=2054380),
-> [2072790](https://bugzilla.mozilla.org/show_bug.cgi?id=2072790)). Forcing it
-> here does decode H.264/VP9/AV1/HEVC on the NVDEC engine; the defaults will
-> be revisited once the upstream switch lands.
 
 ## Uninstall
 

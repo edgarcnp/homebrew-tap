@@ -71,13 +71,21 @@ host.
   unless `media.hardware-video-decoding.force-enabled` is set, so
   `extraFiles` ships `templates/vaapi-defaults.js` as
   `bin/defaults/pref/vaapi-defaults.js` (user-overridable in `about:config`).
-  Actual decode additionally needs the RDD process unsandboxed:
+  Intel/AMD need nothing beyond the bundled `intel-media-driver`/Mesa; NVIDIA
+  needs the host's
+  [`nvidia-vaapi-driver`](https://github.com/elFarto/nvidia-vaapi-driver)
+  (e.g. the `libva-nvidia-driver` package) with the kernel module running
+  `nvidia-drm.modeset=1`, otherwise decoding falls back to software. Verified
+  on an RTX 3080 (driver 615.71.09): H.264, VP8, VP9, AV1 and HEVC all decode
+  in hardware.
+- **NVIDIA RDD sandbox** — actual decode needs the RDD process unsandboxed:
   `nvidia-vaapi-driver` cannot open `/proc/version` (nor ioctl CUDA) inside it,
   and forcing init with `NVD_FORCE_INIT=1` is refused by seccomp
   (`Sandbox: seccomp sandbox violation`, `CUDA ERROR 'unknown error' (999)`).
   `templates/rdd-sandbox-nvidia.hook` therefore exports
   `MOZ_DISABLE_RDD_SANDBOX=1` only when an NVIDIA device is present, so
-  Intel/AMD hosts keep the sandbox.
+  Intel/AMD hosts keep the sandbox; on NVIDIA hosts it weakens the media
+  process isolation — the price of hardware decoding there.
 - **Vulkan video ahead** — Firefox is moving to Vulkan video decoding by
   default on Linux
   ([bug 2053144](https://bugzilla.mozilla.org/show_bug.cgi?id=2053144)). Forced
