@@ -62,6 +62,29 @@ describe("apt oracle", () => {
     assert.equal(selectLatestPackage(newer, "code", "amd64").version, "1.137.0a");
   });
 
+  it("normalizes Mozilla's ~buildN version so the cask tracks the release feed", () => {
+    const mozilla = [
+      "Package: firefox",
+      "Architecture: amd64",
+      "Version: 156.0.1~build1",
+      `SHA256: ${"c".repeat(64)}`,
+      "Size: 1024",
+      "Filename: pool/mozilla/firefox_156.0.1~build1_amd64_deadbeef.deb",
+      "",
+      "Package: firefox",
+      "Architecture: amd64",
+      "Version: 157.0~build1",
+      `SHA256: ${"d".repeat(64)}`,
+      "Size: 2048",
+      "Filename: pool/mozilla/firefox_157.0~build1_amd64_feedface.deb",
+      "",
+    ].join("\n");
+    const selected = selectLatestPackage(mozilla, "firefox", "amd64");
+    assert.equal(selected.version, "157.0");
+    assert.equal(selected.packageVersion, "157.0~build1");
+    assert.equal(selected.sha256, "d".repeat(64));
+  });
+
   it("rejects unsafe indexes and unknown packages", () => {
     assert.throws(() => selectLatestPackage(packages, "firefox", "amd64"), /No firefox\/amd64 entry/);
     assert.throws(

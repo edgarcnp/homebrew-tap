@@ -121,7 +121,7 @@ export function selectLatestPackage(
       throw new Error(`Invalid ${packageName} version in Packages`);
     }
     const filename = entry["Filename"] ?? "";
-    if (!/^pool\/[A-Za-z0-9._+/-]+\.deb$/.test(filename)) {
+    if (!/^pool\/[A-Za-z0-9._+~/-]+\.deb$/.test(filename)) {
       throw new Error(`Unsafe ${packageName} Filename in Packages`);
     }
     if (filename.includes("..") || filename.startsWith("/")) {
@@ -181,6 +181,7 @@ export async function resolveWithApt(
     /\/+$/,
     "",
   );
+  const suite = assertMatches(oracle.suite ?? "stable", /^[A-Za-z0-9][A-Za-z0-9._-]*$/, "suite");
   const { outputDir, metadataPath } = prepareOutput(request);
   const architecture = request.architecture;
 
@@ -188,7 +189,7 @@ export async function resolveWithApt(
   writeFileAtomic(keyPath, Buffer.from(resolveKeyBase64(oracle.keyBase64Path, outputDir), "base64"));
 
   const inReleasePath = path.join(outputDir, "InRelease");
-  await download(`${repository}/dists/stable/InRelease`, inReleasePath);
+  await download(`${repository}/dists/${suite}/InRelease`, inReleasePath);
   const releasePayload = verifyInRelease(inReleasePath, keyPath, fingerprint);
   assertReleaseFreshness(releasePayload);
 
@@ -199,7 +200,7 @@ export async function resolveWithApt(
   }
 
   const packagesPath = path.join(outputDir, `Packages.${architecture}`);
-  await download(`${repository}/dists/stable/${packagesRelative}`, packagesPath);
+  await download(`${repository}/dists/${suite}/${packagesRelative}`, packagesPath);
   verifyIndexedFile(packagesPath, indexedPackages, packagesRelative);
   const selected = selectLatestPackage(
     fs.readFileSync(packagesPath, "utf8"),

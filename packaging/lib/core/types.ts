@@ -30,6 +30,9 @@ export interface Metadata {
 export interface AptOracle {
   kind: "apt";
   repository: string;
+  // Suite under dists/ (the `stable` in `deb ... stable main`), e.g. "stable"
+  // or Mozilla's "mozilla". Omitted means "stable".
+  suite?: string;
   packageName: string;
   fingerprint: string;
   keyBase64Path: string;

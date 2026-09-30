@@ -94,6 +94,19 @@ describe("normalizeUpstreamVersion", () => {
     assert.equal(normalizeUpstreamVersion("1:1.133.0-1786487972"), "1.133.0");
     assert.equal(normalizeUpstreamVersion("2:0.22.3"), "0.22.3");
   });
+
+  it("strips Mozilla's apt ~buildN rebuild marker", () => {
+    assert.equal(normalizeUpstreamVersion("157.0~build1"), "157.0");
+    assert.equal(normalizeUpstreamVersion("157.0.1~build1"), "157.0.1");
+    assert.equal(normalizeUpstreamVersion("157.0~build12"), "157.0");
+    assert.equal(normalizeUpstreamVersion("1:157.0~build1"), "157.0");
+  });
+
+  it("keeps a '~' pre-release marker that is not a ~buildN rebuild", () => {
+    assert.equal(normalizeUpstreamVersion("1.0~rc1"), "1.0~rc1");
+    assert.equal(normalizeUpstreamVersion("1.0~build"), "1.0~build");
+    assert.equal(normalizeUpstreamVersion("1.0~build1.1"), "1.0~build1.1");
+  });
 });
 
 describe("DEB_VERSION", () => {

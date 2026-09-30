@@ -101,7 +101,7 @@ record whose `app` does not — `fbr report` refuses such a record first.
 
 | Kind | Version and payload source |
 | --- | --- |
-| `apt` | Signed apt repo: pinned key → `InRelease` (verified with `gpgv` against a pinned fingerprint) → `Packages` SHA-256 → package SHA-256/size. Newest entry per architecture wins, by dpkg ordering. |
+| `apt` | Signed apt repo: pinned key → `InRelease` (verified with `gpgv` against a pinned fingerprint) → `Packages` SHA-256 → package SHA-256/size. Newest entry per architecture wins, by dpkg ordering. Reads the `stable` suite unless the descriptor pins `suite` (Mozilla serves `dists/mozilla`), and strips Mozilla's `~buildN` rebuild marker from the cask version so it matches the release feed. |
 | `github-release` | GitHub release assets. Legacy: newest release carrying both `<assetPrefix>-<arch>.deb`. Versioned-asset: pins a tag prefix plus an `assetNameTemplate` and resolves each shipped architecture separately. A `.AppImage` asset additionally cross-checks the release's electron-builder update yml (SHA-512 + size) before downloading. |
 | `electron-feed` | An electron-updater feed whose 302 names the release tag. The yml supplies filename, SHA-512 and size; the GitHub API supplies the SHA-256. All three must agree. |
 | `cdn-redirect` | A CDN download redirect that is itself the version source. The target URL shape is pinned and the payload is hashed on download (the CDN publishes no checksums). No app currently consumes it; it is validated and tested as infrastructure for a future CDN-sourced app. |
@@ -258,6 +258,11 @@ non-FHS and old distros.
   without this an app that copies a helper out at runtime — opencode-desktop
   staging `bin/resources/opencode-cli` to userData — ships a helper that dies
   with `Interpreter not found!`.
+- A staged payload tree can keep its libraries beside its binaries (Firefox's
+  `usr/lib/firefox` does, and those libraries carry no `$ORIGIN` rpath). The
+  pack stage runs `quick-sharun` with `LD_LIBRARY_PATH=<AppDir>/bin` for exactly
+  that call, so the closure scan resolves the siblings instead of aborting on
+  "missing libraries".
 - Three things stay in this pipeline rather than delegating to `quick-sharun`:
   updater neutralization, the smoke gate (run against the packed AppImage), and
   the `appimagetool` invocation (so no zsync updater feed is embedded).

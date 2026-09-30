@@ -232,6 +232,67 @@ describe("descriptor contents (regression against the previous per-app scripts)"
     assert.deepEqual(descriptor.updater.env, { WF_DISABLE_AUTO_UPDATE: "1" });
     assert.equal(descriptor.updater.residualScan?.severity, "warning");
   });
+
+  it("keeps firefox's Mozilla apt suite, tree staging and codec dlopens", () => {
+    const descriptor = loadDescriptor("firefox");
+    assert.equal(descriptor.oracle.kind, "apt");
+    if (descriptor.oracle.kind === "apt") {
+      assert.equal(descriptor.oracle.repository, "https://packages.mozilla.org/apt");
+      // The suite is what makes the oracle read dists/mozilla instead of dists/stable.
+      assert.equal(descriptor.oracle.suite, "mozilla");
+      assert.equal(descriptor.oracle.packageName, "firefox");
+      assert.equal(descriptor.oracle.fingerprint, "35BAA0B33E9EB396F59CA838C0BA5CE6DC6315A3");
+    }
+    assert.deepEqual(descriptor.architectures, ["amd64"]);
+    assert.deepEqual(descriptor.binaryTargets, ["firefox"]);
+    assert.equal(descriptor.payload.kind, "deb-tree");
+    assert.equal(
+      descriptor.payload.kind === "deb-tree" ? descriptor.payload.tree : "",
+      "usr/lib/firefox",
+    );
+    assert.equal(descriptor.icon.size, "128x128");
+    assert.equal(descriptor.needsWebkit, false);
+    assert.equal(
+      descriptor.debloatArgs,
+      "--add-common --prefer-nano ffmpeg-mini intel-media-driver-mini",
+    );
+    assert.deepEqual(descriptor.buildPackages, ["libcanberra", "libxss", "speech-dispatcher"]);
+    // The update service endpoint lives in application.ini, firefox-bin and
+    // libxul, which can be same-length patched (libxul stores the bare host,
+    // hence the scheme-less `from`). omni.ja also carries it but is a
+    // CRC-checked archive, so the scan records that inert copy as a warning.
+    assert.equal(descriptor.updater.patchEndpoint?.from, "aus5.mozilla.org");
+    assert.equal(descriptor.updater.patchEndpoint?.binaryReplacement.length, 16);
+    assert.deepEqual(descriptor.updater.patchEndpoint?.targets, [
+      "bin/application.ini",
+      "bin/firefox-bin",
+      "bin/libxul.so",
+    ]);
+    assert.equal(descriptor.updater.residualScan?.severity, "warning");
+    assert.deepEqual(descriptor.updater.env, {
+      MOZ_LEGACY_PROFILES: "1",
+      MOZ_APP_LAUNCHER: "${APPIMAGE}",
+    });
+    // The libs Firefox only dlopens at runtime, i.e. nothing ldd would surface.
+    assert.deepEqual(descriptor.quickSharun.libraries, [
+      "/usr/lib/libavcodec.so.63",
+      "/usr/lib/libpipewire-0.3.so.0",
+      "/usr/lib/libva.so.2",
+      "/usr/lib/libva-drm.so.2",
+      "/usr/lib/libcups.so.2",
+      "/usr/lib/libsecret-1.so.0",
+      "/usr/lib/libgssapi_krb5.so.2",
+      "/usr/lib/libudev.so.1",
+      "/usr/lib/libXss.so.1",
+      "/usr/lib/libcanberra.so.0",
+      "/usr/lib/libspeechd.so.2",
+    ]);
+    assert.deepEqual(descriptor.quickSharun.env, {
+      DEPLOY_OPENGL: "1",
+      DEPLOY_VULKAN: "1",
+      URUNTIME_PRELOAD: "1",
+    });
+  });
 });
 
 describe("quick-sharun configuration", () => {
@@ -239,7 +300,6 @@ describe("quick-sharun configuration", () => {
     for (const app of APPS) {
       const quickSharun = loadDescriptor(app).quickSharun;
       assert.deepEqual(quickSharun.hooks, ["fix-namespaces.hook"]);
-      assert.equal(quickSharun.env, undefined);
     }
   });
 
@@ -616,6 +676,18 @@ describe("descriptor validation", () => {
         ),
       /targets must not be empty/,
     );
+  });
+
+  it("accepts an apt suite and rejects one that would escape dists/", () => {
+    const accepted = mutated("vscode", () => {});
+    const acceptedOracle = nested(accepted, "oracle");
+    acceptedOracle["suite"] = "mozilla";
+    assert.doesNotThrow(() => validateDescriptor(accepted, "vscode"));
+
+    const rejected = mutated("vscode", () => {});
+    const rejectedOracle = nested(rejected, "oracle");
+    rejectedOracle["suite"] = "../evil";
+    assert.throws(() => validateDescriptor(rejected, "vscode"), /suite is not a safe dists suite name/);
   });
 
   it("rejects unknown keys instead of dropping a typo", () => {

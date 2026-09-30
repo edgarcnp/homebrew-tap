@@ -8,6 +8,7 @@ import { APP_ID, GITHUB_API_REPOSITORY, SAFE_REFERENCE } from "../core/patterns.
 import { ARCHITECTURES, isArchitecture } from "../core/types.ts";
 import type {
   AppDescriptor,
+  AptOracle,
   Architecture,
   IconConfig,
   Oracle,
@@ -108,19 +109,27 @@ function validateOracle(raw: unknown, label: string): Oracle {
   const source = asObject(raw, label);
   const kind = str(source, "kind", label);
   switch (kind) {
-    case "apt":
+    case "apt": {
       rejectUnknownKeys(
         source,
-        ["kind", "repository", "packageName", "fingerprint", "keyBase64Path"],
+        ["kind", "repository", "packageName", "suite", "fingerprint", "keyBase64Path"],
         label,
       );
-      return {
+      // A dists/<suite> path segment only: no slashes, no traversal.
+      const suite = optionalStr(source, "suite", label);
+      if (suite !== undefined && !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(suite)) {
+        fail(`${label}.suite is not a safe dists suite name: ${suite}`);
+      }
+      const apt: AptOracle = {
         kind,
         repository: str(source, "repository", label),
         packageName: str(source, "packageName", label),
         fingerprint: str(source, "fingerprint", label),
         keyBase64Path: relativePath(str(source, "keyBase64Path", label), `${label}.keyBase64Path`),
       };
+      if (suite !== undefined) apt.suite = suite;
+      return apt;
+    }
     case "github-release": {
       rejectUnknownKeys(
         source,

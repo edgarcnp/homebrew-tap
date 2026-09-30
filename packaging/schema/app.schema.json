@@ -314,6 +314,11 @@
           "type": "string",
           "minLength": 1
         },
+        "suite": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+          "description": "The dists/<suite> index to read (the suite in `deb <url> <suite> main`); defaults to stable."
+        },
         "packageName": {
           "type": "string",
           "minLength": 1

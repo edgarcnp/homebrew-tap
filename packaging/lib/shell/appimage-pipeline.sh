@@ -447,7 +447,13 @@ Install the Anylinux tools (packaging/scripts/install-anylinux-tools.sh) or add 
   pipeline_collect_targets
   pipeline_export_quick_sharun_env
   pipeline_stash_host_helpers
-  quick-sharun "${TARGETS[@]}"
+  # A staged tree can keep its libraries beside its binaries (Firefox's deb
+  # tree does, and those libraries carry no $ORIGIN rpath), so the staged bin
+  # dir must be on the search path for quick-sharun's ldd and strace scans to
+  # resolve siblings; without it the build aborts on "missing libraries".
+  # Scoped to the call so the later appimagetool run sees the ambient env.
+  LD_LIBRARY_PATH="${APPDIR}/bin${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}" \
+    quick-sharun "${TARGETS[@]}"
   pipeline_restore_host_helpers
   pipeline_reconcile_sharun_sidecars
 

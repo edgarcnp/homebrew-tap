@@ -1,0 +1,79 @@
+{
+  "id": "firefox",
+  "appName": "Firefox",
+  "displayName": "Firefox",
+  "comment": "Fast, private, open-source web browser",
+  "cask": "firefox",
+  "watch": {
+    "feedUrl": "https://product-details.mozilla.org/1.0/firefox_versions.json",
+    "format": "json",
+    "versionField": "LATEST_FIREFOX_VERSION",
+    "versionPattern": "^(\\d+\\.\\d+(?:\\.\\d+)*)$",
+    "repo": "mozilla/gecko-dev"
+  },
+  "assetPrefix": "firefox",
+  "tagPrefix": "firefox-v",
+  "sourceRepo": "edgarcnp/homebrew-tap",
+  "sourceOwner": "edgarcnp",
+  "sourceDir": "packaging/apps/firefox",
+  "buildCommand": "./build.sh",
+  "debloatArgs": "--add-common --prefer-nano ffmpeg-mini intel-media-driver-mini",
+  "needsWebkit": false,
+  "buildPackages": ["libcanberra", "libxss", "speech-dispatcher"],
+  "architectures": ["amd64"],
+  "binaryTargets": ["firefox"],
+  "oracle": {
+    "kind": "apt",
+    "repository": "https://packages.mozilla.org/apt",
+    "suite": "mozilla",
+    "packageName": "firefox",
+    "fingerprint": "35BAA0B33E9EB396F59CA838C0BA5CE6DC6315A3",
+    "keyBase64Path": "packaging/apps/firefox/assets/mozilla-packages-key.gpg.base64"
+  },
+  "payload": {
+    "kind": "deb-tree",
+    "tree": "usr/lib/firefox"
+  },
+  "icon": {
+    "source": "usr/share/icons/hicolor/128x128/apps/firefox.png",
+    "size": "128x128"
+  },
+  "desktopTemplate": "templates/firefox.desktop",
+  "updater": {
+    "patchEndpoint": {
+      "from": "aus5.mozilla.org",
+      "textReplacement": "aus5.invalid.tld",
+      "binaryReplacement": "aus5.invalid.tld",
+      "targets": ["bin/application.ini", "bin/firefox-bin", "bin/libxul.so"]
+    },
+    "residualScan": {
+      "patterns": ["aus5.mozilla.org"],
+      "severity": "warning"
+    },
+    "env": {
+      "MOZ_LEGACY_PROFILES": "1",
+      "MOZ_APP_LAUNCHER": "${APPIMAGE}"
+    }
+  },
+  "quickSharun": {
+    "hooks": ["fix-namespaces.hook"],
+    "env": {
+      "DEPLOY_OPENGL": "1",
+      "DEPLOY_VULKAN": "1",
+      "URUNTIME_PRELOAD": "1"
+    },
+    "libraries": [
+      "/usr/lib/libavcodec.so.63",
+      "/usr/lib/libpipewire-0.3.so.0",
+      "/usr/lib/libva.so.2",
+      "/usr/lib/libva-drm.so.2",
+      "/usr/lib/libcups.so.2",
+      "/usr/lib/libsecret-1.so.0",
+      "/usr/lib/libgssapi_krb5.so.2",
+      "/usr/lib/libudev.so.1",
+      "/usr/lib/libXss.so.1",
+      "/usr/lib/libcanberra.so.0",
+      "/usr/lib/libspeechd.so.2"
+    ]
+  }
+}

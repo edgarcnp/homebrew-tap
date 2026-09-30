@@ -20,6 +20,7 @@ brew install --cask <cask>
 | Cask | App | Notes |
 | --- | --- | --- |
 | `cline-desktop` | [Cline Desktop](https://cline.bot/) | |
+| `firefox` | [Firefox](https://www.mozilla.org/firefox/) | en-US build |
 | `gitcomet` | [GitComet](https://gitcomet.dev/) | |
 | `little-genius` | [Little Genius](https://lg.avakot.org/) | Soulframe companion |
 | `opencode-desktop` | [OpenCode Desktop](https://opencode.ai/) | |
