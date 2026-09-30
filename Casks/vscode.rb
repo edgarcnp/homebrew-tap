@@ -1,6 +1,6 @@
 cask "vscode" do
-  version "1.139.1"
-  sha256 "b769b3980d4e2a38dc27d11278450087f6fec858fcd0a88d0643fa2fbb7f32f9"
+  version "1.140.0"
+  sha256 "feccd865fb99845c94054f93bcd2df708315f01bca2045a92ca70266087dbffd"
 
   url "https://github.com/edgarcnp/homebrew-tap/releases/download/vscode-v#{version}/vscode-#{version}-x86_64.AppImage"
   name "Visual Studio Code"
