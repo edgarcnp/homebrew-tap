@@ -30,7 +30,7 @@ describe("descriptor loading", () => {
   it("resolves app ids, which are also the cask tokens", () => {
     // Dispatch names apps by id or cask token; validateDescriptor requires the
     // two to be the same string, so both forms resolve directly.
-    assert.equal(resolveApp("cline-desktop"), "cline-desktop");
+    assert.equal(resolveApp("little-genius"), "little-genius");
     assert.equal(resolveApp("opencode-desktop"), "opencode-desktop");
     assert.equal(resolveApp("gitcomet"), "gitcomet");
     assert.equal(resolveApp("vscode"), "vscode");
@@ -68,7 +68,7 @@ describe("descriptor loading", () => {
       assert.ok(APP_ID.test(app), `${app} must match the API's app id`);
     }
     assert.throws(() => loadDescriptor("VSCode"), /Invalid app name/);
-    assert.throws(() => loadDescriptor("cline_desktop"), /Invalid app name/);
+    assert.throws(() => loadDescriptor("opencode_desktop"), /Invalid app name/);
     assert.throws(() => loadDescriptor(`a${"b".repeat(64)}`), /Invalid app name/);
   });
 
@@ -150,39 +150,6 @@ describe("descriptor contents (regression against the previous per-app scripts)"
     assert.equal(descriptor.updater.hook, undefined);
     assert.equal(descriptor.updater.residualScan, undefined);
     assert.deepEqual(descriptor.quickSharun, { hooks: ["fix-namespaces.hook"] });
-  });
-
-  it("keeps cline-desktop's versioned-asset oracle, file staging and endpoint patch", () => {
-    const descriptor = loadDescriptor("cline-desktop");
-    assert.equal(descriptor.oracle.kind, "github-release");
-    assert.equal(
-      descriptor.oracle.kind === "github-release" ? descriptor.oracle.assetNameTemplate : "",
-      "Cline_{version}_{arch}.deb",
-    );
-    assert.equal(
-      descriptor.oracle.kind === "github-release" ? descriptor.oracle.tagPrefix : "",
-      "desktop-v",
-    );
-    assert.equal(
-      descriptor.oracle.kind === "github-release" ? descriptor.oracle.packageName : "",
-      "cline",
-    );
-    assert.deepEqual(descriptor.architectures, ["amd64"]);
-    assert.equal(descriptor.payload.kind, "deb-files");
-    assert.deepEqual(
-      descriptor.payload.kind === "deb-files" ? descriptor.payload.files : [],
-      ["usr/bin/cline-app", "usr/bin/code-sidecar"],
-    );
-    assert.equal(descriptor.icon.size, "256x256");
-    assert.equal(descriptor.needsWebkit, true);
-    // libayatana-appindicator moved from buildPackages into the webkit image.
-    assert.deepEqual(descriptor.buildPackages, []);
-    // The endpoint lives once in an ELF, so the replacement must not shift a
-    // byte; the scan then requires it gone from the whole AppDir.
-    assert.equal(descriptor.updater.patchEndpoint?.from.length, 75);
-    assert.equal(descriptor.updater.patchEndpoint?.binaryReplacement.length, 75);
-    assert.deepEqual(descriptor.updater.patchEndpoint?.targets, ["bin/cline-app"]);
-    assert.equal(descriptor.updater.residualScan?.severity, "error");
   });
 
   it("keeps little-genius' avakot oracle, file list and error-level scan", () => {
@@ -577,13 +544,6 @@ describe("release watch", () => {
       skipPattern: "^GitComet v\\d+\\.\\d+\\.\\d+-rc",
       repo: "Auto-Explore/GitComet",
     });
-    assert.deepEqual(loadDescriptor("cline-desktop").watch, {
-      feedUrl: "https://github.com/cline/cline/releases/download/desktop-latest/latest.json",
-      format: "json",
-      versionField: "version",
-      versionPattern: "^(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
-      repo: "cline/cline",
-    });
     assert.deepEqual(loadDescriptor("little-genius").watch, {
       feedUrl: "https://api.avakot.org/lg/manifest.json",
       format: "json",
@@ -605,9 +565,8 @@ describe("release watch", () => {
       "opencode-desktop": ["2.0.18", "2.0.18"],
       gitcomet: ["GitComet v0.2.5", "0.2.5"],
       // JSON feeds carry no titles; the pattern applies to the versionField
-      // value instead — vscode reads "productVersion", cline-desktop and
-      // opencode-desktop their top-level "version", little-genius "version".
-      "cline-desktop": ["0.0.37", "0.0.37"],
+      // value instead — vscode reads "productVersion", while opencode-desktop
+      // and little-genius read their top-level "version".
       "little-genius": ["0.6.7", "0.6.7"],
       wfhelper: ["v2.1.0", "2.1.0"],
     };
@@ -748,10 +707,10 @@ describe("descriptor validation", () => {
     assert.throws(
       () =>
         validateDescriptor(
-          mutated("cline-desktop", (copy) => {
+          mutated("little-genius", (copy) => {
             nested(nested(copy, "updater"), "patchEndpoint")["targets"] = ["../../etc/hosts"];
           }),
-          "cline-desktop",
+          "little-genius",
         ),
       /repository-relative/,
     );
@@ -769,10 +728,10 @@ describe("descriptor validation", () => {
     assert.throws(
       () =>
         validateDescriptor(
-          mutated("cline-desktop", (copy) => {
+          mutated("little-genius", (copy) => {
             nested(nested(copy, "updater"), "patchEndpoint")["targets"] = [];
           }),
-          "cline-desktop",
+          "little-genius",
         ),
       /targets must not be empty/,
     );
@@ -822,20 +781,20 @@ describe("descriptor validation", () => {
     assert.throws(
       () =>
         validateDescriptor(
-          mutated("cline-desktop", (copy) => {
+          mutated("vscode", (copy) => {
             nested(copy, "updater")["env"] = { "bad key": "1" };
           }),
-          "cline-desktop",
+          "vscode",
         ),
       /not a valid name/,
     );
     assert.throws(
       () =>
         validateDescriptor(
-          mutated("cline-desktop", (copy) => {
+          mutated("vscode", (copy) => {
             nested(copy, "updater")["env"] = { OK: "value\ninjected" };
           }),
-          "cline-desktop",
+          "vscode",
         ),
       /newlines or NUL/,
     );
@@ -902,24 +861,24 @@ describe("descriptor validation", () => {
     assert.throws(
       () =>
         validateDescriptor(
-          mutated("cline-desktop", (copy) => { delete nested(copy, "oracle")["tagPrefix"]; }),
-          "cline-desktop",
+          mutated("wfhelper", (copy) => { delete nested(copy, "oracle")["tagPrefix"]; }),
+          "wfhelper",
         ),
       /must be set together/,
     );
     assert.throws(
       () =>
         validateDescriptor(
-          mutated("cline-desktop", (copy) => { nested(copy, "oracle")["assetPrefix"] = "x"; }),
-          "cline-desktop",
+          mutated("wfhelper", (copy) => { nested(copy, "oracle")["assetPrefix"] = "x"; }),
+          "wfhelper",
         ),
       /mutually exclusive/,
     );
     assert.throws(
       () =>
         validateDescriptor(
-          mutated("cline-desktop", (copy) => { nested(copy, "oracle")["assetNameTemplate"] = "no-version-here.deb"; }),
-          "cline-desktop",
+          mutated("wfhelper", (copy) => { nested(copy, "oracle")["assetNameTemplate"] = "no-version-here.deb"; }),
+          "wfhelper",
         ),
       /must contain \{version\}/,
     );
@@ -1132,21 +1091,21 @@ describe("descriptor validation", () => {
 describe("descriptor env and output lines", () => {
   it("emits the workflow variables", () => {
     const env = new Map(
-      descriptorLines(loadDescriptor("cline-desktop"), "env").map((line) => {
+      descriptorLines(loadDescriptor("little-genius"), "env").map((line) => {
         const [key = "", ...rest] = line.split("=");
         return [key, rest.join("=")] as [string, string];
       }),
     );
-    assert.equal(env.get("APP_ID"), "cline-desktop");
-    assert.equal(env.get("APP_CASK"), "cline-desktop");
-    assert.equal(env.get("WATCH"), JSON.stringify(loadDescriptor("cline-desktop").watch));
-    assert.equal(env.get("TAG_PREFIX"), "cline-desktop-v");
-    assert.equal(env.get("SOURCE_DIR"), "packaging/apps/cline-desktop");
+    assert.equal(env.get("APP_ID"), "little-genius");
+    assert.equal(env.get("APP_CASK"), "little-genius");
+    assert.equal(env.get("WATCH"), JSON.stringify(loadDescriptor("little-genius").watch));
+    assert.equal(env.get("TAG_PREFIX"), "little-genius-v");
+    assert.equal(env.get("SOURCE_DIR"), "packaging/apps/little-genius");
     assert.equal(env.get("BUILD_COMMAND"), "./build.sh");
     assert.equal(env.get("NEEDS_WEBKIT"), "true");
     assert.equal(env.get("DEBLOAT_ARGS"), "--add-common --prefer-nano webkit2gtk-4.1-mini");
     assert.equal(env.get("APP_ARCHITECTURES"), '["amd64"]');
-    // No app declares buildPackages any more; the webkit image carries the
+    // little-genius declares no buildPackages: the webkit image carries its
     // tray indicator.
     assert.equal(env.get("BUILD_PACKAGES"), "");
   });

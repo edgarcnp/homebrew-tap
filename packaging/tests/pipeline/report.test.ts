@@ -204,7 +204,7 @@ describe("run records", () => {
     for (const app of listApps()) {
       assert.equal(buildReport({ ...base, app }).app, app);
     }
-    for (const app of ["VSCode", "cline_desktop", "a.b", "a".repeat(65)]) {
+    for (const app of ["VSCode", "opencode_desktop", "a.b", "a".repeat(65)]) {
       assert.throws(() => buildReport({ ...base, app }), /Invalid report app/);
     }
   });

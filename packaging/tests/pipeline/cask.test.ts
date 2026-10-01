@@ -23,7 +23,7 @@ describe("readCask", () => {
   });
 
   it("reads the single-arch cask with one checksum", () => {
-    const descriptor = loadDescriptor("cline-desktop");
+    const descriptor = loadDescriptor("opencode-desktop");
     const state = readCaskFile(caskPath(descriptor.cask));
     assert.equal(state.sha256["amd64"]?.length, 64);
     assert.equal(state.sha256["arm64"], undefined);
@@ -128,7 +128,7 @@ describe("checkCask", () => {
   });
 
   it("ignores a commented-out checksum and rejects an arch mapping on a single-arch cask", () => {
-    const single = loadDescriptor("cline-desktop");
+    const single = loadDescriptor("opencode-desktop");
     const singleSource = fs.readFileSync(caskPath(single.cask), "utf8");
     const commented = `${singleSource}\n  # arm64_linux: "${HASH_A}"\n`;
     assert.deepEqual(checkCask(single, commented), []);

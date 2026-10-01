@@ -79,10 +79,8 @@ describe("selectFeedVersion", () => {
     assert.equal(selectFeedVersion(watch("little-genius"), "{\"version\":\"0.6.7\"}"), "0.6.7");
     // The same shape serves opencode-desktop's v2 update manifest.
     assert.equal(selectFeedVersion(watch("opencode-desktop"), "{\"version\":\"2.0.18\"}"), "2.0.18");
-    // cline-desktop reads the desktop-latest updater manifest and vscode the
-    // update API; in vscode's manifest "version" is the commit hash, so the
-    // descriptor reads productVersion.
-    assert.equal(selectFeedVersion(watch("cline-desktop"), "{\"version\":\"0.0.37\"}"), "0.0.37");
+    // vscode reads the update API; in its manifest "version" is the commit
+    // hash, so the descriptor reads productVersion.
     assert.equal(
       selectFeedVersion(
         watch("vscode"),

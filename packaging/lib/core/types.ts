@@ -43,7 +43,7 @@ export interface GithubReleaseOracle {
   repository: string;
   // Legacy layout: "<assetPrefix>-<arch>.deb".
   assetPrefix?: string;
-  // Versioned-asset flavor (e.g. cline-desktop), set together with tagPrefix and
+  // Versioned-asset flavor (e.g. wfhelper), set together with tagPrefix and
   // packageName and instead of assetPrefix. {version} and {arch} substitute.
   assetNameTemplate?: string;
   tagPrefix?: string;

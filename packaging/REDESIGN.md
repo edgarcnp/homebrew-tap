@@ -192,7 +192,7 @@ descriptor field or an explicit escape hatch rather than a hand edit.
 `packaging/builder/Dockerfile` (`FROM` the current pkgforge Arch digest) and
 published by a workflow on changes and on a weekly schedule.
 
-- `base` carries the shared toolchain; `webkit` adds the little-genius/cline
+- `base` carries the shared toolchain; `webkit` adds the little-genius
   webkit closure plus `libayatana-appindicator`.
 - Baked: pacman packages, `quick-sharun`/`get-debloated-pkgs` (via the existing
   pinned `install-anylinux-tools.sh`), `appimagetool`, Bun.

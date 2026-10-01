@@ -269,7 +269,7 @@ non-FHS and old distros.
   the `appimagetool` invocation (so no zsync updater feed is embedded).
 - The `webkit` image variant carries the webkit2gtk/GTK closure (+ X11 libs,
   mirroring upstream `webkit2gtk4-demo-appimage.sh`) for the apps with
-  `needsWebkit` (little-genius, cline-desktop); the `base` variant serves the
+  `needsWebkit` (little-genius); the `base` variant serves the
   rest. Both debloat per app with `--add-common --prefer-nano
   webkit2gtk-4.1-mini`.
 

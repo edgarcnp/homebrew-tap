@@ -143,7 +143,7 @@ describe("github-release oracle", () => {
 
   it("recognizes AppImage payloads and names the per-arch update yml", () => {
     assert.equal(isAppImageAsset("WFHelper-2.1.0.AppImage"), true);
-    assert.equal(isAppImageAsset("Cline_0.0.35_amd64.deb"), false);
+    assert.equal(isAppImageAsset("opencode-desktop-linux-amd64.deb"), false);
     assert.equal(updateYmlName("amd64"), "latest-linux.yml");
     assert.equal(updateYmlName("arm64"), "latest-linux-arm64.yml");
   });

@@ -41,9 +41,9 @@ describe("fbr CLI contract", () => {
   });
 
   it("resolves an app name the way the build plan calls it", () => {
-    const hyphenated = fbr(["resolve-app", "--name", "cline-desktop"]);
+    const hyphenated = fbr(["resolve-app", "--name", "opencode-desktop"]);
     assert.equal(hyphenated.status, 0, hyphenated.stderr);
-    assert.equal(hyphenated.stdout.trim(), "cline-desktop");
+    assert.equal(hyphenated.stdout.trim(), "opencode-desktop");
 
     const plain = fbr(["resolve-app", "--name", "vscode"]);
     assert.equal(plain.status, 0, plain.stderr);
@@ -102,7 +102,7 @@ describe("fbr CLI contract", () => {
   });
 
   it("rejects a duplicated flag instead of letting the last value win", () => {
-    const duplicated = fbr(["descriptor", "--app", "vscode", "--app", "cline-desktop"]);
+    const duplicated = fbr(["descriptor", "--app", "vscode", "--app", "opencode-desktop"]);
     assert.equal(duplicated.status, 2);
     assert.match(duplicated.stderr, /--app was given more than once/);
   });
