@@ -1,4 +1,3 @@
 {
-  "base": "ghcr.io/edgarcnp/fbr-builder-base:2026.10.01.12@sha256:2c41f71f357cc56bb6b86d6f9c99c97cea5ebfb2358daa5ca8dec80088619b35",
-  "webkit": "ghcr.io/edgarcnp/fbr-builder-webkit:2026.10.01.12@sha256:c5fed51ef19895a1d6b715eb80f9ab680c0bc69a1ccbe982c6125e29aff4b17e"
+  "image": "ghcr.io/edgarcnp/fbr-builder-base:2026.10.01.12@sha256:2c41f71f357cc56bb6b86d6f9c99c97cea5ebfb2358daa5ca8dec80088619b35"
 }

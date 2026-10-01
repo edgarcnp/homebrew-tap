@@ -196,13 +196,12 @@
       "groupName": "bun runtime"
     },
     {
-      "description": "The builder images are pinned by the builder workflow's pin job, not Renovate",
+      "description": "The builder image is pinned by the builder workflow's pin job, not Renovate",
       "matchDatasources": [
         "docker"
       ],
       "matchPackageNames": [
-        "ghcr.io/edgarcnp/fbr-builder-base",
-        "ghcr.io/edgarcnp/fbr-builder-webkit"
+        "ghcr.io/edgarcnp/fbr-builder-base"
       ],
       "enabled": false
     },

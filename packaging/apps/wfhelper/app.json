@@ -17,7 +17,6 @@
   "sourceDir": "packaging/apps/wfhelper",
   "buildCommand": "./build.sh",
   "debloatArgs": "--add-common --prefer-nano ffmpeg-mini",
-  "needsWebkit": false,
   "architectures": ["amd64"],
   "binaryTargets": ["wfhelper"],
   "oracle": {

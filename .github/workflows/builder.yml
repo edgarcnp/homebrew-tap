@@ -1,9 +1,9 @@
 name: Builder image
 
-# Builds the pinned Arch images every AppImage build job runs in: the shared
-# toolchain (pacman packages, quick-sharun, appimagetool, Bun) baked once
-# instead of reinstalled per run. Two images: fbr-builder-base and
-# fbr-builder-webkit (the webkit2gtk/GTK closure).
+# Builds the pinned Arch image every AppImage build job runs in: the shared
+# base toolchain (pacman packages, quick-sharun, appimagetool, Bun) baked once
+# instead of reinstalled per run. Per-app pack-time packages stay in the
+# descriptor's buildPackages.
 #
 # Renovate owns the pins inside the image (packaging/builder/Dockerfile); the
 # pin job below commits the pushed tag+digest into packaging/builder/pins.json,
@@ -37,10 +37,6 @@ defaults:
 
 jobs:
   build:
-    strategy:
-      fail-fast: false
-      matrix:
-        variant: [base, webkit]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -55,32 +51,27 @@ jobs:
         run: |
           # GHCR requires a lowercase path; date.run makes the tag sortable.
           owner="${GITHUB_REPOSITORY_OWNER,,}"
-          tag="${owner}/fbr-builder-${{ matrix.variant }}:$(date -u +%Y.%m.%d).${GITHUB_RUN_NUMBER}"
+          tag="${owner}/fbr-builder-base:$(date -u +%Y.%m.%d).${GITHUB_RUN_NUMBER}"
           echo "ref=ghcr.io/${tag}" >> "${GITHUB_OUTPUT}"
       - name: Build the image
         env:
           IMAGE_REF: ${{ steps.image.outputs.ref }}
         run: |
           docker build \
-            --build-arg VARIANT="${{ matrix.variant }}" \
             --file packaging/builder/Dockerfile \
             --tag "${IMAGE_REF}" \
             .
       - name: Smoke-test the image
         env:
           IMAGE_REF: ${{ steps.image.outputs.ref }}
-          VARIANT: ${{ matrix.variant }}
         run: |
           # Single-quoted on purpose: the script runs inside the container.
-          docker run --rm --env VARIANT "${IMAGE_REF}" bash -euc '
+          docker run --rm "${IMAGE_REF}" bash -euc '
             for tool in quick-sharun get-debloated-pkgs appimagetool bun; do
               command -v "${tool}"
             done
             bun --version
             pacman -Qq dpkg gnupg jq patchelf >/dev/null
-            if [ "${VARIANT}" = "webkit" ]; then
-              pacman -Qq webkit2gtk-4.1 libayatana-appindicator >/dev/null
-            fi
           '
       - name: Log in to GHCR
         env:
@@ -105,20 +96,20 @@ jobs:
           } >> "${GITHUB_STEP_SUMMARY}"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: image-ref-${{ matrix.variant }}
+          name: image-ref
           path: image-ref.txt
           if-no-files-found: error
           retention-days: 7
           overwrite: true
 
-  # After both variants are pushed, commit the new tag+digest into
-  # packaging/builder/pins.json so dispatches always run the images this
+  # After the image is pushed, commit the new tag+digest into
+  # packaging/builder/pins.json so dispatches always run the image this
   # workflow produced. Signed and pushed with the same PAT the cask pins use,
   # because main requires changes through a PR; the pins live outside
   # .github/workflows/ so that PAT needs no `workflow` scope.
   pin:
     needs: build
-    # A dispatch from a feature branch must not pin its images onto main.
+    # A dispatch from a feature branch must not pin its image onto main.
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -133,14 +124,13 @@ jobs:
           persist-credentials: false
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          pattern: image-ref-*
+          name: image-ref
           path: image-refs
-      - name: Pin the builder images
+      - name: Pin the builder image
         run: |
           bash packaging/scripts/pin-builder-image.sh \
             packaging/builder/pins.json \
-            "$(cat image-refs/image-ref-base/image-ref.txt)" \
-            "$(cat image-refs/image-ref-webkit/image-ref.txt)"
+            "$(cat image-refs/image-ref.txt)"
       - name: Import GPG signing key
         id: import-gpg
         env:
@@ -164,7 +154,7 @@ jobs:
           GPG_NAME: ${{ steps.import-gpg.outputs.gpg_name }}
           GPG_EMAIL: ${{ steps.import-gpg.outputs.gpg_email }}
         run: |
-          tag="$(sed -E 's/^.*:([^:@]+)@.*$/\1/' image-refs/image-ref-base/image-ref.txt)"
+          tag="$(sed -E 's/^.*:([^:@]+)@.*$/\1/' image-refs/image-ref.txt)"
           if git diff --quiet; then
             echo "already pinned to ${tag}; nothing to commit"
             exit 0
@@ -176,10 +166,10 @@ jobs:
           git config user.signingkey "${GPG_KEY_ID}"
           git config commit.gpgsign true
           git add packaging/builder/pins.json
-          git commit -S -m "chore(ci): pin the builder images to ${tag}"
+          git commit -S -m "chore(ci): pin the builder image to ${tag}"
           for _ in 1 2 3 4 5; do
             if git push origin HEAD:main; then
-              echo "pinned the builder images to ${tag}"
+              echo "pinned the builder image to ${tag}"
               exit 0
             fi
             # A concurrent cask pin may advance main; rebase and retry.

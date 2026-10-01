@@ -18,7 +18,6 @@
   "sourceDir": "packaging/apps/firefox",
   "buildCommand": "./build.sh",
   "debloatArgs": "--add-common --prefer-nano ffmpeg-mini intel-media-driver-mini",
-  "needsWebkit": false,
   "buildPackages": ["libcanberra", "libxss", "speech-dispatcher"],
   "architectures": ["amd64"],
   "binaryTargets": ["firefox"],

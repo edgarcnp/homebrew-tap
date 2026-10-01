@@ -1,7 +1,7 @@
 # Redesigning the packaging toolchain
 
 Status: **phases 0–1 landed; the rest proposed**. Phase 0 (the v2 and manifest
-schemas) and phase 1 (the pinned builder images) are live on `main`; phases 2–5
+schemas) and phase 1 (the pinned builder image) are live on `main`; phases 2–5
 are targets, not code. Current behavior lives in [`README.md`](README.md);
 where this document and the code disagree, the README and the code are the
 truth. Nothing here changes the Homebrew surface — the casks, their install
@@ -120,7 +120,7 @@ validation.
 | Required | `architectures` must be declared: no silent amd64+arm64 default. |
 | Renamed | `sourceRepo` → `releaseRepo`: the one source-block field with a live consumer, the repo whose releases the cask URL points at (`packaging/lib/pipeline/cask.ts:157`). |
 | Removed | `sourceOwner`, `sourceDir`, `buildCommand` and the second checkout — nothing builds from an upstream repo. |
-| Demoted | `buildPackages` becomes an escape hatch: it forces a build-time package install; the current webkit apps move into the image instead. |
+| Demoted | `buildPackages` stays an escape hatch: it forces a build-time package install, which is how little-genius gets its pack-time webkit2gtk/GTK closure. |
 
 Everything else keeps its current meaning, so a v2 descriptor reads like a v1
 one minus the source block.
@@ -187,13 +187,13 @@ descriptor field or an explicit escape hatch rather than a hand edit.
 
 ### Builder image
 
-`ghcr.io/edgarcnp/fbr-builder-base` and
-`ghcr.io/edgarcnp/fbr-builder-webkit`, built from
+`ghcr.io/edgarcnp/fbr-builder-base`, built from
 `packaging/builder/Dockerfile` (`FROM` the current pkgforge Arch digest) and
 published by a workflow on changes and on a weekly schedule.
 
-- `base` carries the shared toolchain; `webkit` adds the little-genius
-  webkit closure plus `libayatana-appindicator`.
+- One base image carries the shared toolchain; pack-time-only libraries come
+  from each descriptor's `buildPackages` (little-genius's webkit2gtk/GTK
+  closure and `libayatana-appindicator`).
 - Baked: pacman packages, `quick-sharun`/`get-debloated-pkgs` (via the existing
   pinned `install-anylinux-tools.sh`), `appimagetool`, Bun.
 - Not baked: the orchestrator itself — it always comes from the checkout, so it
@@ -272,8 +272,8 @@ pipeline is still the only build path, so phases 2–5 are not started.
   `autobump.yml` stays as the tap-new template (inert on a cask-only tap).
 - README cask table: generate it in `fbr check`, or leave the table manual?
 - Webkit closure: image variant (as proposed) or installed per build; and the
-  scheduled rebuild cadence for the builder images. **Answered by phase 1:**
-  the `webkit` image variant, rebuilt weekly (`builder.yml`).
+  scheduled rebuild cadence for the builder image. **Answered:** one base image
+  with the closure in `buildPackages`, rebuilt weekly (`builder.yml`).
 - Does the API ever want the manifest (artifact facts) in the record, or is it
   happy with versions and codes? If it does, that is an additive schema-1 field
   proposed from the API side, not invented here.

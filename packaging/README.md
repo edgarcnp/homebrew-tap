@@ -8,7 +8,7 @@ The TypeScript runs directly on Bun — no build step, no runtime dependencies.
 `typescript` and `@types/bun` are dev-only (for `tsc --noEmit` and editors).
 
 The redesign of this toolchain is [`REDESIGN.md`](REDESIGN.md): phases 0–1
-(the v2 and manifest schemas, the pinned builder images) are live, while the
+(the v2 and manifest schemas, the pinned builder image) are live, while the
 descriptor v2 migration and the `plan`/`build`/`publish`/`cask render` commands
 are not. This file describes what runs today.
 
@@ -21,7 +21,7 @@ packaging/
   apps/<app>/templates/    desktop entry (+ runtime hook)
   apps/<app>/assets/       pinned signing key material
   bin/fbr.ts               the CLI
-  builder/Dockerfile       the pinned Arch builder image (base + webkit variants)
+  builder/Dockerfile       the pinned Arch builder image
   builder/pins.json        the image refs the build workflow reads
   lib/cli.ts               CLI composition root
   lib/core/                primitives: paths, types, guards, patterns, version,
@@ -84,7 +84,7 @@ record whose `app` does not — `fbr report` refuses such a record first.
 | `appName`, `displayName`, `comment` | Release title and desktop entry `Name=`/`Comment=`. |
 | `sourceRepo`, `sourceOwner` | Upstream repo to build from, and the owner of the fallback fork. |
 | `sourceDir`, `buildCommand` | Where CI `cd`s before building. |
-| `debloatArgs`, `needsWebkit` | pkgforge debloat flags; whether the webkit2gtk/GTK build deps are needed. |
+| `debloatArgs` | pkgforge debloat flags. |
 | `buildPackages` | Arch packages CI installs into the build container for this app, beyond the shared toolchain — for libraries that must exist at pack time, e.g. one named in `quickSharun.libraries`. |
 | `architectures` | Arches this app ships; the pipeline builds, publishes and checks only these. |
 | `binaryTargets` | Names the cask must expose on `PATH` (checked by `fbr cask --action check`). |
@@ -228,11 +228,13 @@ directory.
 
 ## Build model
 
-Builds run in the pinned builder images (`packaging/builder/Dockerfile`):
-`ghcr.io/edgarcnp/fbr-builder-base` for most apps, `fbr-builder-webkit` for the
-two webkit apps. The builder workflow rebuilds them and its `pin` job commits
-the new tag+digest into `packaging/builder/pins.json`, which the build job
-reads for its container, so the reference cannot drift from the image.
+Builds run in the pinned base builder image (`packaging/builder/Dockerfile`):
+`ghcr.io/edgarcnp/fbr-builder-base`, one Arch environment carrying the shared
+toolchain. Pack-time libraries an app needs beyond it are declared in the
+descriptor's `buildPackages` and installed by the build job. The builder
+workflow rebuilds the image and its `pin` job commits the new tag+digest into
+`packaging/builder/pins.json`, which the build job reads for its container, so
+the reference cannot drift from the image.
 `linuxdeploy` was retired:
 `quick-sharun` bundles the app's dynamic-linker closure **including glibc and
 ld-linux**, so the AppImages have no host-libc dependency and run on musl,
@@ -267,11 +269,10 @@ non-FHS and old distros.
 - Three things stay in this pipeline rather than delegating to `quick-sharun`:
   updater neutralization, the smoke gate (run against the packed AppImage), and
   the `appimagetool` invocation (so no zsync updater feed is embedded).
-- The `webkit` image variant carries the webkit2gtk/GTK closure (+ X11 libs,
-  mirroring upstream `webkit2gtk4-demo-appimage.sh`) for the apps with
-  `needsWebkit` (little-genius); the `base` variant serves the
-  rest. Both debloat per app with `--add-common --prefer-nano
-  webkit2gtk-4.1-mini`.
+- Pack-time-only libraries come from `buildPackages`: little-genius installs
+  the webkit2gtk/GTK closure (+ X11 libs, mirroring upstream
+  `webkit2gtk4-demo-appimage.sh`) plus `libayatana-appindicator`, then debloats
+  with `--add-common --prefer-nano webkit2gtk-4.1-mini`.
 
 `scripts/install-anylinux-tools.sh` fetches `quick-sharun` and
 `get-debloated-pkgs` from a URL addressed by a commit digest of
@@ -303,7 +304,7 @@ grouped rules in `renovate.json` for routine bumps:
 | GitHub Actions | workflow `uses:` | github-actions (SHA re-pinned) |
 | `Homebrew/actions` | workflow `uses:` (SHA plus CalVer comment) | regex custom manager (the built-in manager truncates the four-part CalVer tag) |
 | Container images | workflow `container:`, including the nested matrix image, and the builder Dockerfile's `FROM` | docker (regex for the matrix) |
-| Builder images (`fbr-builder-base`, `fbr-builder-webkit`) | `packaging/builder/pins.json` | pinned by the builder workflow's `pin` job, not Renovate |
+| Builder image (`fbr-builder-base`) | `packaging/builder/pins.json` | pinned by the builder workflow's `pin` job, not Renovate |
 | Runner labels | `runs-on:`, and the labels the build matrix bakes in | github-runners (regex for the matrix) |
 | Bun version | `bun-version:`, the builder Dockerfile | uses-with, regex custom manager |
 | actionlint, pkgforge `appimagetool` | workflow (actionlint), builder Dockerfile (appimagetool) | regex custom managers |

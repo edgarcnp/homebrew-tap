@@ -37,7 +37,7 @@ is **data** (`packaging/apps/<app>/app.json`), never a forked script.
 | `Casks/<app>.rb` | the cask: version and `sha256` pinned |
 | `packaging/apps/<app>/` | `app.json` descriptor, `build.sh` shim, templates, key material |
 | `packaging/bin/fbr.ts` | the CLI; `packaging/lib/{core,pipeline,oracles,schema,shell}/` its library |
-| `packaging/builder/` | the pinned builder image: `Dockerfile`, `pins.json` (the refs the build job reads) |
+| `packaging/builder/` | the pinned builder image: `Dockerfile`, `pins.json` (the ref the build job reads) |
 | `packaging/lib/shell/` | the bash pipeline the build runs |
 | `packaging/schema/` | the descriptor v2 and manifest JSON Schemas, with examples |
 | `packaging/tests/` | unit suite, mirroring `lib/` |
@@ -139,7 +139,7 @@ memory or habit.
 | `tests.yml` (`brew test-bot`) | PR gate: typecheck, tests, cask check, shellcheck, actionlint, `brew style`/`audit`, tap syntax |
 | `build.yml` | build one app or all of them; the app list comes from the descriptors |
 | `build-appimage.yml` | the reusable per-app build (container, toolchain, pack, smoke test) |
-| `builder.yml` | rebuilds the `fbr-builder-{base,webkit}` images on Dockerfile changes and weekly, then pins them |
+| `builder.yml` | rebuilds the `fbr-builder-base` image on Dockerfile changes and weekly, then pins it |
 | `dispatch.yml` | entry point for programmatic builds (a manual or API-triggered run) |
 | `cask-smoke.yml` | installs and smoke-tests the casks on push to `main` and weekly |
 | `publish.yml` (`brew pr-pull`) | pulls and publishes a named PR |

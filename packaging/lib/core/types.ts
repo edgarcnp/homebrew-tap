@@ -268,8 +268,6 @@ export interface AppDescriptor {
   buildCommand: string;
   // Flags for pkgforge's get-debloated-pkgs.
   debloatArgs: string;
-  // Whether the build needs the webkit2gtk/GTK build dependencies.
-  needsWebkit: boolean;
   // Arch packages CI installs into the build container for this app, beyond
   // the shared toolchain: only for libraries that must exist at build time
   // (e.g. a dlopened library listed in quickSharun.libraries). Empty when the

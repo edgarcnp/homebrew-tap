@@ -27,7 +27,6 @@ function descriptorWith(updater: UpdaterConfig, id = "vscode"): AppDescriptor {
     sourceDir: "packaging/apps/vscode",
     buildCommand: "./build.sh",
     debloatArgs: "--add-common",
-    needsWebkit: false,
     buildPackages: [],
     architectures: ["amd64", "arm64"],
     binaryTargets: ["code"],

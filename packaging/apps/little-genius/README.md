@@ -27,16 +27,15 @@ the same pinned JSON manifest (`https://api.avakot.org/lg/manifest.json`).
   `usr/bin/lg-linux-compat` are staged side by side into `AppDir/bin`, which is
   also where the app looks for its helper ("not found next to the app" is its
   own fallback path). Both binaries are cask `binaryTargets`.
-- **webkit2gtk** — `needsWebkit: true`: the main binary links
-  `libwebkit2gtk-4.1` and GTK 3, so the `webkit` builder image carries the
-  webkit2gtk/GTK closure plus X11 libs, and the build debloats with
-  `webkit2gtk-4.1-mini`.
+- **webkit2gtk** — the main binary links `libwebkit2gtk-4.1` and GTK 3, so
+  `buildPackages` installs the webkit2gtk/GTK closure plus X11 libs before the
+  build, which then debloats webkit2gtk-4.1 to its mini variant.
 - **Tray indicator** — `libappindicator-sys` `dlopen`s
   `libayatana-appindicator3.so.1` at startup and panics without it, and a
   `dlopen`ed library is absent from the ELF `NEEDED` entries, so an `ldd` scan
   never bundles it: the smoke test fails on
-  `cannot open shared object file`. The `webkit` builder image carries
-  `libayatana-appindicator` (the descriptor declares no `buildPackages`), and
+  `cannot open shared object file`. `buildPackages` installs
+  `libayatana-appindicator`, and
   `quickSharun.libraries` hands `/usr/lib/libayatana-appindicator3.so.1` to
   quick-sharun as a deploy target, which bundles it together with its `ldd`
   closure (`libayatana-indicator`, `libdbusmenu-{glib,gtk3}`).

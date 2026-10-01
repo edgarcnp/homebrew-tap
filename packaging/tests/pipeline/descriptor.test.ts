@@ -104,7 +104,6 @@ describe("descriptor contents (regression against the previous per-app scripts)"
     assert.equal(descriptor.payload.kind, "deb-tree");
     assert.equal(descriptor.payload.tree, "usr/share/code");
     assert.equal(descriptor.icon.size, "256x256");
-    assert.equal(descriptor.needsWebkit, false);
     assert.equal(descriptor.updater.removeJsonKeys?.keys.join(","), "updateUrl,checksums");
     assert.equal(descriptor.updater.patchEndpoint?.from, "update.code.visualstudio.com");
     assert.equal(descriptor.updater.patchEndpoint?.targets, "all");
@@ -135,10 +134,9 @@ describe("descriptor contents (regression against the previous per-app scripts)"
     assert.deepEqual(descriptor.hostHelpers, ["bin/resources/opencode-cli"]);
   });
 
-  it("keeps gitcomet's signed apt oracle, single-binary file list and no webkit", () => {
+  it("keeps gitcomet's signed apt oracle and single-binary file list", () => {
     const descriptor = loadDescriptor("gitcomet");
     assert.equal(descriptor.oracle.kind, "apt");
-    assert.equal(descriptor.needsWebkit, false);
     assert.equal(descriptor.debloatArgs, "--add-common");
     assert.deepEqual(descriptor.architectures, ["amd64"]);
     assert.deepEqual(descriptor.payload.files, ["usr/bin/gitcomet"]);
@@ -163,10 +161,9 @@ describe("descriptor contents (regression against the previous per-app scripts)"
       ["usr/bin/little-genius", "usr/bin/lg-linux-compat"],
     );
     assert.equal(descriptor.icon.size, "512x512");
-    assert.equal(descriptor.needsWebkit, true);
-    // The tray indicator is dlopened at runtime; the webkit builder image
-    // carries it and the descriptor names it as a quick-sharun deploy target.
-    assert.deepEqual(descriptor.buildPackages, []);
+    // The tray indicator is dlopened at runtime; buildPackages installs it and
+    // the descriptor names it as a quick-sharun deploy target.
+    assert.deepEqual(descriptor.buildPackages, ["libayatana-appindicator"]);
     assert.deepEqual(descriptor.quickSharun.libraries, ["/usr/lib/libayatana-appindicator3.so.1"]);
     assert.equal(descriptor.updater.patchEndpoint?.from, "https://api.avakot.org/lg/manifest.json");
     assert.equal(descriptor.updater.patchEndpoint?.binaryReplacement.length, 39);
@@ -218,7 +215,6 @@ describe("descriptor contents (regression against the previous per-app scripts)"
       "usr/lib/firefox",
     );
     assert.equal(descriptor.icon.size, "128x128");
-    assert.equal(descriptor.needsWebkit, false);
     assert.equal(
       descriptor.debloatArgs,
       "--add-common --prefer-nano ffmpeg-mini intel-media-driver-mini",
@@ -605,10 +601,6 @@ describe("descriptor validation", () => {
     assert.throws(
       () => validateDescriptor(mutated("vscode", (copy) => { copy["sourceDir"] = "../../etc"; }), "vscode"),
       /must be a repository-relative path/,
-    );
-    assert.throws(
-      () => validateDescriptor(mutated("vscode", (copy) => { copy["needsWebkit"] = "yes"; }), "vscode"),
-      /needsWebkit must be a boolean/,
     );
     assert.throws(
       () => validateDescriptor(mutated("vscode", (copy) => { copy["binaryTargets"] = []; }), "vscode"),
@@ -1102,16 +1094,14 @@ describe("descriptor env and output lines", () => {
     assert.equal(env.get("TAG_PREFIX"), "little-genius-v");
     assert.equal(env.get("SOURCE_DIR"), "packaging/apps/little-genius");
     assert.equal(env.get("BUILD_COMMAND"), "./build.sh");
-    assert.equal(env.get("NEEDS_WEBKIT"), "true");
     assert.equal(env.get("DEBLOAT_ARGS"), "--add-common --prefer-nano webkit2gtk-4.1-mini");
     assert.equal(env.get("APP_ARCHITECTURES"), '["amd64"]');
-    // little-genius declares no buildPackages: the webkit image carries its
-    // tray indicator.
-    assert.equal(env.get("BUILD_PACKAGES"), "");
+    // The webkit closure and tray indicator are build-time-only packages.
+    assert.equal(env.get("BUILD_PACKAGES"), "libayatana-appindicator");
   });
 
-  it("emits an empty build package list when no app declares one", () => {
-    const lines = descriptorLines(loadDescriptor("little-genius"), "env");
+  it("emits an empty build package list when an app declares none", () => {
+    const lines = descriptorLines(loadDescriptor("opencode-desktop"), "env");
     assert.ok(lines.includes("BUILD_PACKAGES="));
   });
 
@@ -1122,7 +1112,6 @@ describe("descriptor env and output lines", () => {
     assert.ok(lines.includes("cask=little-genius"));
     assert.ok(lines.includes(`watch=${JSON.stringify(littleGenius.watch)}`));
     assert.ok(lines.includes("asset_prefix=little-genius"));
-    assert.ok(lines.includes("needs_webkit=true"));
     assert.ok(lines.every((line) => /^[a-z_]+=/.test(line)));
   });
 });

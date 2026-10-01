@@ -36,7 +36,6 @@ const TOP_LEVEL_KEYS = [
   "sourceDir",
   "buildCommand",
   "debloatArgs",
-  "needsWebkit",
   "buildPackages",
   "architectures",
   "binaryTargets",
@@ -577,7 +576,6 @@ export function validateDescriptor(raw: unknown, expectedId: string): AppDescrip
     sourceDir: relativePath(str(source, "sourceDir", label), `${label}.sourceDir`),
     buildCommand: str(source, "buildCommand", label),
     debloatArgs: str(source, "debloatArgs", label),
-    needsWebkit: bool(source, "needsWebkit", label),
     buildPackages: strArray(source, "buildPackages", label),
     architectures: validateArchitectures(source["architectures"], label),
     binaryTargets: strArray(source, "binaryTargets", label),
@@ -658,7 +656,6 @@ export interface DescriptorExport {
   source_dir: string;
   build_command: string;
   debloat_args: string;
-  needs_webkit: string;
   // Space-separated; "" when the app declares no build packages.
   build_packages: string;
   architectures: string;
@@ -677,7 +674,6 @@ export function descriptorExport(descriptor: AppDescriptor): DescriptorExport {
     source_dir: descriptor.sourceDir,
     build_command: descriptor.buildCommand,
     debloat_args: descriptor.debloatArgs,
-    needs_webkit: descriptor.needsWebkit ? "true" : "false",
     build_packages: descriptor.buildPackages.join(" "),
     architectures: JSON.stringify(descriptor.architectures),
   };
@@ -705,7 +701,6 @@ export function descriptorLines(
     `SOURCE_DIR=${values.source_dir}`,
     `BUILD_COMMAND=${values.build_command}`,
     `DEBLOAT_ARGS=${values.debloat_args}`,
-    `NEEDS_WEBKIT=${values.needs_webkit}`,
     `BUILD_PACKAGES=${values.build_packages}`,
     `APP_ARCHITECTURES=${values.architectures}`,
   ];

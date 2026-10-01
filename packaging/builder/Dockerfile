@@ -1,10 +1,12 @@
-# Builder image for the AppImage pipeline: the Arch toolchain every build job
-# used to install on each run, baked once. Built by .github/workflows/builder.yml
-# and pinned by tag+digest in packaging/builder/pins.json.
+# Builder image for the AppImage pipeline: the Arch base toolchain every build
+# job used to install on each run, baked once and shared by every app. Built by
+# .github/workflows/builder.yml and pinned by tag+digest in
+# packaging/builder/pins.json.
 #
-# Variants (--build-arg VARIANT=):
-#   base   - the shared toolchain
-#   webkit - base plus the webkit2gtk/GTK closure little-genius and cline need
+# One base image serves every app. Pack-time libraries an app needs but the
+# base does not carry (little-genius's webkit2gtk/GTK closure, for example) are
+# declared in the descriptor's `buildPackages` and installed by the build job
+# before the pack stages, so there is no image variant to select.
 #
 # The package list is deliberately small. This pipeline repackages released
 # binaries and never compiles, so build systems (the base-devel meta: gcc,
@@ -22,7 +24,7 @@
 # packaging/scripts/install-anylinux-tools.sh (git-refs manager).
 #
 # Build from the repository root:
-#   docker build -f packaging/builder/Dockerfile --build-arg VARIANT=base .
+#   docker build -f packaging/builder/Dockerfile .
 
 # The base is deliberately pkgforge's archlinux image, not the official
 # archlinux one: quick-sharun and get-debloated-pkgs are developed against it,
@@ -31,7 +33,6 @@
 # for a "minimal" image without re-validating the pkgforge tools against it.
 FROM ghcr.io/pkgforge-dev/archlinux:v2026.09.05@sha256:b2507f1964270cab3cc190aa8df858521f6a7e45e969146a012877891d5dfc9b
 
-ARG VARIANT=base
 # renovate: datasource=npm depName=bun
 ARG BUN_VERSION=1.4.2
 
@@ -51,21 +52,6 @@ RUN pacman-key --init \
       wget \
       xorg-server-xvfb \
       zsync \
- && if [ "${VARIANT}" = "webkit" ]; then \
-      pacman -S --noconfirm \
-        gdk-pixbuf2 \
-        glib-networking \
-        gtk3 \
-        libayatana-appindicator \
-        libxcb \
-        libxcursor \
-        libxi \
-        libxkbcommon \
-        libxkbcommon-x11 \
-        libxrandr \
-        libxtst \
-        webkit2gtk-4.1; \
-    fi \
  && pacman -Scc --noconfirm
 
 # quick-sharun and get-debloated-pkgs, pinned to the commit the script carries.

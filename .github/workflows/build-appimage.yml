@@ -37,7 +37,6 @@ jobs:
       app_cask: ${{ steps.app.outputs.cask }}
       asset_prefix: ${{ steps.app.outputs.asset_prefix }}
       tag_prefix: ${{ steps.app.outputs.tag_prefix }}
-      needs_webkit: ${{ steps.app.outputs.needs_webkit }}
       builder_image: ${{ steps.builder.outputs.builder_image }}
       architectures: ${{ steps.app.outputs.architectures }}
       build_matrix: ${{ steps.matrix.outputs.matrix }}
@@ -72,15 +71,13 @@ jobs:
       - name: Select the builder image
         id: builder
         run: |
-          # The pins live in packaging/builder/pins.json, kept in step by the
+          # The pin lives in packaging/builder/pins.json, kept in step by the
           # builder workflow's pin job; the build job's container reads this
           # output. A malformed file is a config error, not a retry.
-          variant=base
-          if [[ "${NEEDS_WEBKIT}" == "true" ]]; then variant=webkit; fi
-          image="$(jq -r --arg variant "${variant}" '.[$variant]' tap/packaging/builder/pins.json 2>/dev/null || true)"
-          if [[ ! "${image}" =~ ^ghcr\.io/edgarcnp/fbr-builder-(base|webkit):[0-9]{4}\.[0-9]{2}\.[0-9]{2}\.[0-9]+@sha256:[0-9a-f]{64}$ ]]
+          image="$(jq -r '.image' tap/packaging/builder/pins.json 2>/dev/null || true)"
+          if [[ ! "${image}" =~ ^ghcr\.io/edgarcnp/fbr-builder-base:[0-9]{4}\.[0-9]{2}\.[0-9]{2}\.[0-9]+@sha256:[0-9a-f]{64}$ ]]
           then
-            echo "::error::pins.json has no usable ${variant} image ref" >&2
+            echo "::error::pins.json has no usable builder image ref" >&2
             printf '{"code":"DESCRIPTOR_INVALID","message":"builder image pins are missing or malformed"}\n' > "${GITHUB_WORKSPACE}/report-code.json"
             exit 1
           fi
@@ -88,12 +85,12 @@ jobs:
       - name: Plan the build matrix
         id: matrix
         run: |
-          # The pinned builder images are amd64-only; an app that declares
+          # The pinned builder image is amd64-only; an app that declares
           # arm64 must fail here instead of starting a container that cannot
           # run, until a multi-arch builder image exists.
           if jq -e 'index("arm64")' <<<"${APP_ARCHITECTURES}" >/dev/null; then
-            echo "::error::${APP_ID} declares arm64, but the builder images are amd64-only" >&2
-            printf '{"code":"DESCRIPTOR_INVALID","message":"descriptor declares arm64 but the builder images are amd64-only"}\n' > "${GITHUB_WORKSPACE}/report-code.json"
+            echo "::error::${APP_ID} declares arm64, but the builder image is amd64-only" >&2
+            printf '{"code":"DESCRIPTOR_INVALID","message":"descriptor declares arm64 but the builder image is amd64-only"}\n' > "${GITHUB_WORKSPACE}/report-code.json"
             exit 1
           fi
           # Single-arch apps build one AppImage, dual-arch both; the matrix
@@ -337,9 +334,9 @@ jobs:
           bun "${GITHUB_WORKSPACE}/tap/packaging/bin/fbr.ts" descriptor-env --app "${APP}" >> "${GITHUB_ENV}"
       - name: Install app build packages
         run: |
-          # Escape hatch: packages an app still declares in buildPackages, for
-          # libraries the builder image does not carry. The webkit apps moved
-          # their libayatana-appindicator into the webkit image.
+          # Escape hatch: packages an app declares in buildPackages, for
+          # libraries the builder image does not carry. little-genius installs
+          # its webkit2gtk/GTK closure and libayatana-appindicator here.
           if [ -n "${BUILD_PACKAGES}" ]; then
             read -r -a packages <<<"${BUILD_PACKAGES}"
             pacman -S --noconfirm "${packages[@]}"

@@ -18,7 +18,6 @@
   "sourceDir": "packaging/apps/opencode-desktop",
   "buildCommand": "./build.sh",
   "debloatArgs": "--add-common --prefer-nano ffmpeg-mini",
-  "needsWebkit": false,
   "architectures": ["amd64"],
   "binaryTargets": ["opencode-desktop"],
   "oracle": {

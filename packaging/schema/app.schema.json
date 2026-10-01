@@ -16,7 +16,6 @@
     "tagPrefix",
     "releaseRepo",
     "debloatArgs",
-    "needsWebkit",
     "architectures",
     "binaryTargets",
     "oracle",
@@ -75,9 +74,6 @@
     "debloatArgs": {
       "type": "string",
       "minLength": 1
-    },
-    "needsWebkit": {
-      "type": "boolean"
     },
     "buildPackages": {
       "type": "array",

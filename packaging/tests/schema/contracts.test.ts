@@ -46,7 +46,6 @@ const APP_V2_FIELDS = [
   "tagPrefix",
   "releaseRepo",
   "debloatArgs",
-  "needsWebkit",
   "buildPackages",
   "architectures",
   "binaryTargets",

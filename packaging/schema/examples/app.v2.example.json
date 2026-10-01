@@ -16,7 +16,6 @@
   "tagPrefix": "vscode-v",
   "releaseRepo": "edgarcnp/homebrew-tap",
   "debloatArgs": "--add-common --prefer-nano ffmpeg-mini",
-  "needsWebkit": false,
   "architectures": ["amd64"],
   "binaryTargets": ["code"],
   "oracle": {

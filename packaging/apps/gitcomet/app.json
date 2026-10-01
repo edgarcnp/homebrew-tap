@@ -18,7 +18,6 @@
   "sourceDir": "packaging/apps/gitcomet",
   "buildCommand": "./build.sh",
   "debloatArgs": "--add-common",
-  "needsWebkit": false,
   "architectures": ["amd64"],
   "binaryTargets": ["gitcomet"],
   "oracle": {

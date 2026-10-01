@@ -25,8 +25,8 @@ is filled on the first publish, pinning the final AppImage at install.
 - **Payload** — `deb-files`: `usr/bin/gitcomet` is staged into `AppDir/bin`, and
   the 512×512 icon comes from
   `usr/share/icons/hicolor/512x512/apps/gitcomet.png`.
-- **No webkit** — `needsWebkit: false`: GitComet is a GPUI/OpenGL app, not
-  GTK/WebKit. Its deb depends only on `git, libc6, libgcc-s1, libxcb1,
+- **No webkit** — GitComet is a GPUI/OpenGL app, not GTK/WebKit. Its deb
+  depends only on `git, libc6, libgcc-s1, libxcb1,
   libxkbcommon-x11-0, libxkbcommon0, zlib1g`, which sharun reaches through `ldd`
   and bundles, so the host needs none of them. `debloatArgs` is `--add-common`
   alone — the tool's own usage examples show it standalone, it implies
