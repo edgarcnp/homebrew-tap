@@ -154,16 +154,39 @@ jobs:
           fi
           endpoint="https://api.edgarcnp.dev/v1/homebrew/tap/events"
           headers="${RUNNER_TEMP}/delivery-headers.txt"
+          body="${RUNNER_TEMP}/delivery-body.txt"
+          # A rejected record must name which layer answered: the API edge adds
+          # server, cf-ray and cf-mitigated, the API does not. The excerpt is
+          # bounded to 512 bytes and flattened onto one line.
+          header_value() {
+            tr -d '\r' <"${headers}" 2>/dev/null \
+              | awk -F: -v name="$1" 'tolower($1) == name { sub(/^[^:]*:[ ]*/, ""); value=$0 } END { print value }' \
+              || true
+          }
+          log_rejection() {
+            local excerpt
+            excerpt="$(head -c 512 "${body}" 2>/dev/null \
+              | tr '\r\n\t' ' ' \
+              | LC_ALL=C tr -c '[:print:]' '?' || true)"
+            echo "API response body (first 512 bytes): ${excerpt}"
+            echo "API response headers: server=$(header_value server) cf-ray=$(header_value cf-ray) cf-mitigated=$(header_value cf-mitigated) content-type=$(header_value content-type)"
+          }
           # Three attempts total. A 429 is the API's rate limiter, not a
           # verdict: back off for Retry-After (capped, defaulted when absent)
           # and try again instead of dropping the record.
           for attempt in 1 2 3; do
-            status="$(curl --silent --show-error --max-time 10 --output /dev/null \
+            : >"${headers}"
+            : >"${body}"
+            status="$(curl --silent --show-error --max-time 10 --output "${body}" \
               --dump-header "${headers}" --write-out '%{http_code}' \
               -X POST "${endpoint}" \
               -H "Authorization: Bearer ${id_token}" \
               -H "Content-Type: application/json" \
               --data-binary "@${RECORD}" || true)"
+            # 000 is a transport failure with no response to describe.
+            if [[ "${status}" != 2?? && "${status}" != 000 ]]; then
+              log_rejection
+            fi
             case "${status}" in
               2??) echo "run record delivered (HTTP ${status})"; exit 0 ;;
               429)
