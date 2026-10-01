@@ -301,6 +301,7 @@ grouped rules in `renovate.json` for routine bumps:
 | --- | --- | --- |
 | `typescript`, `@types/bun` | `package.json` | npm + bun (exact pins, no `^`) |
 | GitHub Actions | workflow `uses:` | github-actions (SHA re-pinned) |
+| `Homebrew/actions` | workflow `uses:` (SHA plus CalVer comment) | regex custom manager (the built-in manager truncates the four-part CalVer tag) |
 | Container images | workflow `container:`, including the nested matrix image, and the builder Dockerfile's `FROM` | docker (regex for the matrix) |
 | Builder images (`fbr-builder-base`, `fbr-builder-webkit`) | `packaging/builder/pins.json` | pinned by the builder workflow's `pin` job, not Renovate |
 | Runner labels | `runs-on:`, and the labels the build matrix bakes in | github-runners (regex for the matrix) |

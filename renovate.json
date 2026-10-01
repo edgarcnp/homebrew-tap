@@ -111,6 +111,20 @@
       "datasourceTemplate": "github-runners",
       "depNameTemplate": "ubuntu runner",
       "packageNameTemplate": "ubuntu"
+    },
+    {
+      "description": "Homebrew/actions tags are bare CalVer (YYYY.MM.DD.N); the github-actions manager parses only three version components and its versioning rejects the zero-padded tags, so read the full tag from the pin comment",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/.+\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "(?<depName>Homebrew/actions/[\\w-]+)@(?<currentDigest>[0-9a-f]{40})\\s+#\\s+(?<currentValue>\\d{4}\\.\\d{2}\\.\\d{2}\\.\\d+)"
+      ],
+      "datasourceTemplate": "github-tags",
+      "packageNameTemplate": "Homebrew/actions",
+      "versioningTemplate": "regex:^(?<major>\\d{4})\\.(?<minor>\\d{2})\\.(?<patch>\\d{2})\\.(?<build>\\d+)$",
+      "autoReplaceStringTemplate": "{{depName}}@{{newDigest}} # {{newValue}}"
     }
   ],
   "packageRules": [
@@ -138,6 +152,26 @@
       "description": "Actions are SHA-pinned; one PR per digest bump keeps the review small",
       "matchManagers": [
         "github-actions"
+      ],
+      "groupName": "GitHub Actions"
+    },
+    {
+      "description": "Homebrew/actions CalVer pins are extracted by the regex customManager above; the github-actions manager only sees a truncated tag and warns that it cannot determine a digest",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchPackageNames": [
+        "Homebrew/actions"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "Homebrew/actions CalVer pins come from the regex customManager above; keep them in the GitHub Actions PR with the rest of the action updates",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchPackageNames": [
+        "Homebrew/actions"
       ],
       "groupName": "GitHub Actions"
     },
