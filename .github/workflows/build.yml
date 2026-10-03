@@ -99,6 +99,8 @@ jobs:
           REQUEST_ID: ${{ inputs.request_id }}
           RUN_ID: ${{ github.run_id }}
         run: |
+          # The step carries the API's correlation id; never trace it.
+          set +x
           code="$(jq -r '.code // empty' report-code.json 2>/dev/null || true)"
           message="$(jq -r '.message // empty' report-code.json 2>/dev/null || true)"
           if bun packaging/bin/fbr.ts report \
@@ -110,6 +112,7 @@ jobs:
             --run-id "${RUN_ID}" \
             --request-id "${REQUEST_ID}" \
             --event-id "${RUN_ID}:${GITHUB_RUN_ATTEMPT}:${REQUESTED}" \
+            --public-output "${RUNNER_TEMP}/run-report-public.json" \
             --output "${RUNNER_TEMP}/run-report.json"; then
             echo "wrote=true" >> "${GITHUB_OUTPUT}"
           fi
@@ -118,7 +121,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: run-report-${{ inputs.app }}
-          path: ${{ runner.temp }}/run-report.json
+          path: ${{ runner.temp }}/run-report-public.json
           if-no-files-found: error
           retention-days: 7
           overwrite: true

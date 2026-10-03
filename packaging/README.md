@@ -130,10 +130,11 @@ fbr feed-version --app X [--tap T]           newest version the release feed adv
                                              it against resolved_version and cask_version)
 fbr report --app X --stage S --status ST --message M --run-id N
      --event-id ID --output F [--code C] [--request-id ID]
-     [--resolved-version V] [--cask-version V]
-     [--feed-version V] [--evidence k=v]...
+     [--public-output F] [--resolved-version V]
+     [--cask-version V] [--feed-version V] [--evidence k=v]...
                                              write the machine-readable run record the API
-                                             reads from the run-report artifact
+                                             reads; --public-output is the artifact copy
+                                             with request_id redacted
 fbr cask --action read|set-version|check     read, re-pin or check casks
      [--app X] [--tap T] [--version V]       set-version takes --version plus the
      [--sha256-x86-64 H] [--sha256-arm-64 H] checksum of each architecture the
@@ -162,12 +163,13 @@ UNCLASSIFIED.
 
 ## The run record
 
-Each build answers with one JSON document per app, delivered twice from one
-shape: the workflow uploads the same bytes as the `run-report-<app>` artifact
-(the human-readable copy) and POSTs them, OIDC-authenticated, to the API's
-`/v1/homebrew/tap/events` endpoint (`schema: 1`, written by `fbr report`).
-`request_id` is the API's correlation id for the dispatch that caused the run
-(null for manual runs), and `event_id` is required: the deterministic
+Each build answers with one JSON record per app, delivered twice: the workflow
+POSTs the full record, OIDC-authenticated, to the API's
+`/v1/homebrew/tap/events` endpoint (`schema: 1`, written by `fbr report`), and
+uploads a public copy as the `run-report-<app>` artifact. `request_id` is the
+API's correlation id for the dispatch that caused the run (null for manual
+runs); it stays in the POSTed record, is redacted to null in the artifact, and
+is never traced into logs. `event_id` is required: the deterministic
 `${run_id}:${run_attempt}:${app}` id, stable when the same record is re-sent so
 the API dedupes a delivery retry. Retry policy lives in the API that
 dispatches builds, so the record classifies rather than retries:

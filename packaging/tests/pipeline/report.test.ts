@@ -10,6 +10,7 @@ import { listApps } from "../../lib/pipeline/descriptor.ts";
 import {
   buildReport,
   FAILURE_CODES,
+  redactReport,
   REPORT_SCHEMA,
   REPORT_STAGES,
   writeFailureFragment,
@@ -97,6 +98,44 @@ describe("run records", () => {
     });
     assert.equal(report.request_id, "req-01J0Z6B8Y4");
     assert.equal(report.event_id, "42:2:vscode");
+  });
+
+  it("redacts the dispatch correlation id from the public copy", () => {
+    const report = buildReport({
+      app: "vscode",
+      runId: 42,
+      status: "success",
+      stage: "publish",
+      message: "done",
+      requestId: "req-01J0Z6B8Y4",
+      eventId: "42:1:vscode",
+    });
+    const publicReport = redactReport(report);
+    assert.equal(publicReport.request_id, null);
+    assert.equal(publicReport.event_id, "42:1:vscode");
+    // The public copy keeps the record's shape; only the id changes.
+    assert.deepEqual(Object.keys(publicReport).sort(), Object.keys(report).sort());
+    // The POSTed record keeps the id for the API's attempt match.
+    assert.equal(report.request_id, "req-01J0Z6B8Y4");
+  });
+
+  it("does not echo a malformed request id into the error", () => {
+    assert.throws(
+      () =>
+        buildReport({
+          app: "vscode",
+          runId: 42,
+          status: "success",
+          stage: "publish",
+          message: "done",
+          requestId: "req secret",
+          eventId: "42:1:vscode",
+        }),
+      (error: unknown) =>
+        error instanceof Error &&
+        /Invalid report request id/.test(error.message) &&
+        !error.message.includes("req secret"),
+    );
   });
 
   it("rejects correlation ids that are not one safe token", () => {
@@ -409,6 +448,71 @@ describe("fbr report command", () => {
     const record = JSON.parse(fs.readFileSync(output, "utf8")) as Record<string, unknown>;
     assert.equal(record["request_id"], "req-01J0Z6B8Y4");
     assert.equal(record["event_id"], "123456:2:vscode");
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("writes a public copy with request_id redacted", () => {
+    const dir = tempDir();
+    const output = path.join(dir, "report.json");
+    const publicOutput = path.join(dir, "report-public.json");
+    const result = fbr([
+      "report",
+      "--app",
+      "vscode",
+      "--stage",
+      "publish",
+      "--status",
+      "success",
+      "--message",
+      "run completed",
+      "--run-id",
+      "123456",
+      "--request-id",
+      "req-01J0Z6B8Y4",
+      "--event-id",
+      "123456:2:vscode",
+      "--public-output",
+      publicOutput,
+      "--output",
+      output,
+    ]);
+    assert.equal(result.status, 0, result.stderr);
+    const record = JSON.parse(fs.readFileSync(output, "utf8")) as Record<string, unknown>;
+    assert.equal(record["request_id"], "req-01J0Z6B8Y4");
+    const publicRecord = JSON.parse(fs.readFileSync(publicOutput, "utf8")) as Record<
+      string,
+      unknown
+    >;
+    assert.equal(publicRecord["request_id"], null);
+    assert.equal(publicRecord["event_id"], "123456:2:vscode");
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("refuses a public output that would overwrite the delivered record", () => {
+    const dir = tempDir();
+    const output = path.join(dir, "report.json");
+    const result = fbr([
+      "report",
+      "--app",
+      "vscode",
+      "--stage",
+      "detect",
+      "--status",
+      "skipped",
+      "--message",
+      "already at upstream",
+      "--run-id",
+      "1",
+      "--event-id",
+      "1:1:vscode",
+      "--output",
+      output,
+      "--public-output",
+      output,
+    ]);
+    assert.equal(result.status, 2);
+    assert.match(result.stderr, /--public-output must differ from --output/);
+    assert.equal(fs.existsSync(output), false);
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
@@ -766,18 +870,22 @@ describe("record delivery", () => {
   // the per-app report job. Pin it here as one contract — 429 is the rate
   // limiter and retries after Retry-After, every other 4xx stays permanent,
   // three attempts total — and keep the two copies from drifting.
-  function deliveryStep(file: string): string {
+  function step(file: string, name: string): string {
     const lines = fs.readFileSync(path.join(REPO_ROOT, file), "utf8").split("\n");
-    const start = lines.findIndex((line) => line.includes("- name: Deliver the run record to the API"));
-    assert.ok(start >= 0, `${file} has no delivery step`);
-    const step: string[] = [];
+    const start = lines.findIndex((line) => line.includes(`- name: ${name}`));
+    assert.ok(start >= 0, `${file} has no "${name}" step`);
+    const body: string[] = [];
     for (const [index, line] of lines.entries()) {
       if (index < start) continue;
       // A list item at the step indentation or a less-indented job key ends it.
       if (index > start && /^ {0,6}\S/.test(line)) break;
-      step.push(line);
+      body.push(line);
     }
-    return step.join("\n");
+    return body.join("\n");
+  }
+
+  function deliveryStep(file: string): string {
+    return step(file, "Deliver the run record to the API");
   }
 
   const files = [
@@ -792,6 +900,29 @@ describe("record delivery", () => {
     // on its write step's outcome; everything else must match byte for byte.
     const normalize = (step: string): string => step.replace(/^.*if: always\(\).*$/m, "");
     assert.equal(normalize(buildStep), normalize(appimageStep));
+  });
+
+  it("keeps request_id out of the public artifact and the logs", () => {
+    for (const file of files) {
+      const write = step(file, "Write the run record");
+      const text = fs.readFileSync(path.join(REPO_ROOT, file), "utf8");
+      // The write step handles the dispatch correlation id, so xtrace must be
+      // off before it is first touched.
+      const traceOff = write.indexOf("set +x");
+      const correlation = write.indexOf("--request-id");
+      assert.ok(traceOff >= 0, `${file} never disables xtrace in the write step`);
+      assert.ok(traceOff < correlation, `${file} traces request_id before disabling xtrace`);
+      // The API must keep receiving the actual correlation id.
+      assert.match(write, /--request-id "\$\{REQUEST_ID\}"/);
+      // The uploaded copy is the redacted one; delivery still reads the full
+      // record from run-report.json.
+      assert.match(write, /--public-output "\$\{RUNNER_TEMP\}\/run-report-public\.json"/);
+      assert.match(write, /--output "\$\{RUNNER_TEMP\}\/run-report\.json"/);
+      assert.match(deliveryStep(file), /RECORD: \$\{\{ runner\.temp \}\}\/run-report\.json/);
+      // No artifact may point at the full record.
+      assert.doesNotMatch(text, /path:.*run-report\.json/);
+      assert.match(text, /path: \$\{\{ runner\.temp \}\}\/run-report-public\.json/);
+    }
   });
 
   it("retries a 429 after Retry-After and keeps other 4xx permanent", () => {

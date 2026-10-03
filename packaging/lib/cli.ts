@@ -21,6 +21,7 @@ import {
   REPORT_STAGES,
   REPORT_STATUSES,
   writeFailureFragment,
+  writePublicReport,
   writeReport,
   type FailureCode,
   type ReportStage,
@@ -387,7 +388,7 @@ const COMMANDS: Command[] = [
   {
     name: "report",
     summary:
-      "Write the machine-readable run record (--app, --stage, --status, --message, --run-id, --event-id ID, --output, [--code], [--request-id ID], [--resolved-version], [--cask-version], [--feed-version], [--evidence k=v]...)",
+      "Write the machine-readable run record (--app, --stage, --status, --message, --run-id, --event-id ID, --output, [--code], [--request-id ID], [--public-output F], [--resolved-version], [--cask-version], [--feed-version], [--evidence k=v]...)",
     options: {
       app: APP,
       stage: { type: "string" },
@@ -402,6 +403,7 @@ const COMMANDS: Command[] = [
       "feed-version": { type: "string" },
       evidence: { type: "string", multiple: true },
       output: { type: "string" },
+      "public-output": { type: "string" },
     },
     run: (flags) => {
       // Validated here as usage errors: a bad record is a caller bug, and the
@@ -454,6 +456,16 @@ const COMMANDS: Command[] = [
       }
 
       const output = flags.str("output");
+      const publicOutput = flags.optStr("public-output");
+      // Same path would replace the full record the API must receive with the
+      // redacted copy; a caller bug, not a silent demotion.
+      if (
+        publicOutput !== undefined &&
+        publicOutput !== "" &&
+        path.resolve(publicOutput) === path.resolve(output)
+      ) {
+        throw new UsageError("--public-output must differ from --output");
+      }
       const report = buildReport({
         app: flags.str("app"),
         runId,
@@ -469,6 +481,11 @@ const COMMANDS: Command[] = [
         evidence,
       });
       process.stdout.write(`${writeReport(output, report)}\n`);
+      // The artifact copy is what the public sees; it must not carry the
+      // dispatch correlation id. Empty means the caller opted out.
+      if (publicOutput !== undefined && publicOutput !== "") {
+        writePublicReport(publicOutput, report);
+      }
       return 0;
     },
   },

@@ -574,12 +574,13 @@ jobs:
           token: ${{ secrets.HOMEBREW_PAT }}
           gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
 
-  # The machine-readable run record: one JSON document per app, uploaded as
-  # run-report-<app>. The API that dispatches builds reads it to decide
-  # whether a failure is worth re-dispatching; retry policy lives there, not
-  # here. always() so every completed run answers with a record: an absent
-  # record means the run died before this job could start (runner loss,
-  # cancellation), which the API treats as infrastructure.
+  # The machine-readable run record: one JSON document per app, POSTed to the
+  # API that dispatches builds (which reads it to decide whether a failure is
+  # worth re-dispatching) and uploaded as a redacted run-report-<app> artifact
+  # for humans. Retry policy lives in the API, not here. always() so every
+  # completed run answers with a record: an absent record means the run died
+  # before this job could start (runner loss, cancellation), which the API
+  # treats as infrastructure.
   report:
     needs: [detect, build, publish, pin-cask]
     if: always()
@@ -623,6 +624,8 @@ jobs:
           REQUEST_ID: ${{ inputs.request_id }}
           RUN_ID: ${{ github.run_id }}
         run: |
+          # The step carries the API's correlation id; never trace it.
+          set +x
           # The first unsuccessful job in pipeline order names the stage; a
           # cancelled job counts too, so a partially cancelled run still
           # answers instead of leaving the API to guess from silence.
@@ -707,6 +710,7 @@ jobs:
             --resolved-version "${RESOLVED_VERSION}"
             --cask-version "${CASK_VERSION}"
             --feed-version "${FEED_VERSION}"
+            --public-output "${RUNNER_TEMP}/run-report-public.json"
             --output "${RUNNER_TEMP}/run-report.json"
           )
           if [[ -n "${code}" ]]; then
@@ -722,7 +726,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: run-report-${{ inputs.app }}
-          path: ${{ runner.temp }}/run-report.json
+          path: ${{ runner.temp }}/run-report-public.json
           if-no-files-found: error
           retention-days: 7
           overwrite: true

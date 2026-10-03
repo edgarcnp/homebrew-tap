@@ -1,10 +1,10 @@
 // The run record: the tap's machine-readable signal to the API that dispatches
-// builds. One JSON document per app per run, delivered twice from one shape:
-// the workflow uploads the same bytes as the `run-report-<app>` artifact (that
-// copy stays for humans) and POSTs them to the API's
-// `/v1/homebrew/tap/events` endpoint. Retry policy lives in the API; this
-// module only classifies, so a failure site cannot emit prose without a code
-// the API can act on.
+// builds. One JSON document per app per run, delivered twice: the workflow
+// POSTs the full record to the API's `/v1/homebrew/tap/events` endpoint and
+// uploads a world-readable copy as the `run-report-<app>` artifact with the
+// dispatch correlation id redacted (see redactReport). Retry policy lives in
+// the API; this module only classifies, so a failure site cannot emit prose
+// without a code the API can act on.
 //
 // A failure site writes a *fragment* first (writeFailureFragment), which the
 // workflow uploads and the report job merges into the record: code, message,
@@ -96,7 +96,8 @@ export interface RunReport {
   // stable across delivery retries, so the API dedupes a re-sent record.
   event_id: string;
   // The API's correlation id for the dispatch that caused the run; null for
-  // manual runs and any run the API did not start.
+  // manual runs and any run the API did not start. The POSTed record carries
+  // it; the public artifact copy redacts it to null.
   request_id: string | null;
   app: string;
   run_id: number;
@@ -121,12 +122,17 @@ export interface RunReport {
 const CORRELATION_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
 const CORRELATION_ID_MAX_LENGTH = 128;
 
-function assertCorrelationId(value: string, label: string): string {
+// `echoValue` is false for the dispatch correlation id: a malformed value is a
+// caller bug, and the value itself must not reach a public log.
+function assertCorrelationId(value: string, label: string, echoValue = true): string {
   assertSingleLine(value, label);
   if (value.length > CORRELATION_ID_MAX_LENGTH) {
     fail(`${label} is longer than ${CORRELATION_ID_MAX_LENGTH} characters`);
   }
-  return assertMatches(value, CORRELATION_ID_PATTERN, label);
+  if (!CORRELATION_ID_PATTERN.test(value)) {
+    fail(echoValue ? `Invalid ${label}: ${value}` : `Invalid ${label}`);
+  }
+  return value;
 }
 
 export function buildReport(input: ReportInput): RunReport {
@@ -149,7 +155,7 @@ export function buildReport(input: ReportInput): RunReport {
   const requestId =
     input.requestId === undefined || input.requestId === null
       ? null
-      : assertCorrelationId(input.requestId, "report request id");
+      : assertCorrelationId(input.requestId, "report request id", false);
   const eventId = assertCorrelationId(input.eventId, "report event id");
 
   const report: RunReport = {
@@ -191,6 +197,19 @@ export function buildReport(input: ReportInput): RunReport {
 // Writes the record atomically and returns the path it wrote.
 export function writeReport(outputPath: string, report: RunReport): string {
   writeFileAtomic(outputPath, `${JSON.stringify(report, null, 2)}\n`);
+  return outputPath;
+}
+
+// The record as the public artifact carries it. The artifact is world-readable
+// on a public tap, so the dispatch correlation id is redacted to null; the
+// API's match against the live attempt only needs the POSTed body.
+export function redactReport(report: RunReport): RunReport {
+  return { ...report, request_id: null };
+}
+
+// Writes the world-readable copy atomically and returns the path it wrote.
+export function writePublicReport(outputPath: string, report: RunReport): string {
+  writeFileAtomic(outputPath, `${JSON.stringify(redactReport(report), null, 2)}\n`);
   return outputPath;
 }
 
