@@ -387,7 +387,7 @@ const COMMANDS: Command[] = [
   {
     name: "report",
     summary:
-      "Write the machine-readable run record (--app, --stage, --status, --message, --run-id, --output, [--code], [--request-id ID], [--event-id ID], [--resolved-version], [--cask-version], [--feed-version], [--evidence k=v]...)",
+      "Write the machine-readable run record (--app, --stage, --status, --message, --run-id, --event-id ID, --output, [--code], [--request-id ID], [--resolved-version], [--cask-version], [--feed-version], [--evidence k=v]...)",
     options: {
       app: APP,
       stage: { type: "string" },
@@ -430,9 +430,9 @@ const COMMANDS: Command[] = [
         throw new UsageError(`--run-id must be a positive run number, got "${rawRunId}"`);
       }
       // An empty value means "not supplied": a version the caller could not
-      // read stores as null, and an absent event id is derived from the run.
-      // The workflow passes --request-id "${REQUEST_ID}" even for a manual run
-      // with no dispatch id, so an empty request id is a normal input.
+      // read stores as null. The workflow passes --request-id "${REQUEST_ID}"
+      // even for a manual run with no dispatch id, so an empty request id is a
+      // normal input.
       const optional = (value: string | undefined): string | undefined =>
         value === undefined || value === "" ? undefined : value;
       const version = (value: string | undefined): string | null => optional(value) ?? null;
@@ -462,7 +462,7 @@ const COMMANDS: Command[] = [
         code: code as FailureCode | undefined,
         message: flags.str("message"),
         requestId: version(flags.optStr("request-id")),
-        eventId: optional(flags.optStr("event-id")),
+        eventId: flags.str("event-id"),
         resolvedVersion: version(flags.optStr("resolved-version")),
         caskVersion: version(flags.optStr("cask-version")),
         feedVersion: version(flags.optStr("feed-version")),

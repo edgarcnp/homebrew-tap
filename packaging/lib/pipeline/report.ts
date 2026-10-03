@@ -73,10 +73,10 @@ export interface ReportInput {
   // The API's correlation id for the dispatch that caused this run. Absent or
   // null for a manual run, which the record stores as null.
   requestId?: string | null;
-  // Advisory event id; derived as `${runId}:${app}` when absent. The workflow
-  // passes the fuller `${run_id}:${run_attempt}:${app}`. Explicitly
-  // `| undefined` so callers may pass an absent flag straight through.
-  eventId?: string | undefined;
+  // The dispatch's event id: the workflow passes the deterministic
+  // `${run_id}:${run_attempt}:${app}`, so a re-sent record carries the same id
+  // and the API dedupes it instead of creating a second event.
+  eventId: string;
   resolvedVersion?: string | null;
   // The cask pin the gate compared against. Without it the API cannot tell a
   // skip that raced a publish (worth re-dispatching) from one whose cask is
@@ -92,8 +92,8 @@ export interface ReportInput {
 // needs this repository's table.
 export interface RunReport {
   schema: number;
-  // The dispatch's event id: `${run_id}:${run_attempt}:${app}` when the
-  // workflow supplies it, `${run_id}:${app}` when the CLI has no attempt.
+  // The dispatch's event id, `${run_id}:${run_attempt}:${app}`: required and
+  // stable across delivery retries, so the API dedupes a re-sent record.
   event_id: string;
   // The API's correlation id for the dispatch that caused the run; null for
   // manual runs and any run the API did not start.
@@ -150,10 +150,7 @@ export function buildReport(input: ReportInput): RunReport {
     input.requestId === undefined || input.requestId === null
       ? null
       : assertCorrelationId(input.requestId, "report request id");
-  const eventId = assertCorrelationId(
-    input.eventId ?? `${input.runId}:${app}`,
-    "report event id",
-  );
+  const eventId = assertCorrelationId(input.eventId, "report event id");
 
   const report: RunReport = {
     schema: REPORT_SCHEMA,

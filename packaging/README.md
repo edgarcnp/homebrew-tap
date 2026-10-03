@@ -129,7 +129,7 @@ fbr feed-version --app X [--tap T]           newest version the release feed adv
                                              as feed_version= (advisory: the API compares
                                              it against resolved_version and cask_version)
 fbr report --app X --stage S --status ST --message M --run-id N
-     --output F [--code C] [--request-id ID] [--event-id ID]
+     --event-id ID --output F [--code C] [--request-id ID]
      [--resolved-version V] [--cask-version V]
      [--feed-version V] [--evidence k=v]...
                                              write the machine-readable run record the API
@@ -167,8 +167,9 @@ shape: the workflow uploads the same bytes as the `run-report-<app>` artifact
 (the human-readable copy) and POSTs them, OIDC-authenticated, to the API's
 `/v1/homebrew/tap/events` endpoint (`schema: 1`, written by `fbr report`).
 `request_id` is the API's correlation id for the dispatch that caused the run
-(null for manual runs) and `event_id` is the advisory
-`${run_id}:${run_attempt}:${app}` id. Retry policy lives in the API that
+(null for manual runs), and `event_id` is required: the deterministic
+`${run_id}:${run_attempt}:${app}` id, stable when the same record is re-sent so
+the API dedupes a delivery retry. Retry policy lives in the API that
 dispatches builds, so the record classifies rather than retries:
 
 - `status`/`stage`/`code` — what happened, where, and why. `code` carries its

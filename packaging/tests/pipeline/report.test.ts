@@ -41,6 +41,7 @@ describe("run records", () => {
         stage: "detect",
         code,
         message: `boom: ${code}`,
+        eventId: "42:1:vscode",
       });
       const spec: FailureCodeSpec = FAILURE_CODES[code];
       assert.equal(report.schema, REPORT_SCHEMA);
@@ -60,6 +61,7 @@ describe("run records", () => {
       message: "already up to date",
       resolvedVersion: "1.0.0",
       feedVersion: null,
+      eventId: "42:1:vscode",
     });
     assert.equal(report.code, undefined);
     assert.equal(report.class, undefined);
@@ -69,16 +71,17 @@ describe("run records", () => {
     assert.equal(report.feed_version, null);
   });
 
-  it("derives the event id and leaves request_id null when the caller supplied none", () => {
+  it("carries the caller's event id and leaves request_id null when none was supplied", () => {
     const report = buildReport({
       app: "vscode",
       runId: 42,
       status: "skipped",
       stage: "detect",
       message: "already up to date",
+      eventId: "42:1:vscode",
     });
     assert.equal(report.request_id, null);
-    assert.equal(report.event_id, "42:vscode");
+    assert.equal(report.event_id, "42:1:vscode");
   });
 
   it("copies the dispatch correlation id and event id through verbatim", () => {
@@ -103,6 +106,7 @@ describe("run records", () => {
       status: "success",
       stage: "publish",
       message: "done",
+      eventId: "42:1:vscode",
     } as const;
     assert.throws(() => buildReport({ ...base, requestId: "two\nlines" }), /newlines or NUL/);
     assert.throws(
@@ -157,6 +161,7 @@ describe("run records", () => {
       status: "skipped",
       stage: "detect",
       message: "already up to date",
+      eventId: "42:1:vscode",
     });
     const optionalKeys = new Set(["code", "class", "retryable", "evidence"]);
     assert.deepEqual(
@@ -167,7 +172,14 @@ describe("run records", () => {
 
   it("rejects a failure with no code and a success with one", () => {
     assert.throws(() =>
-      buildReport({ app: "vscode", runId: 1, status: "failed", stage: "build", message: "boom" }),
+      buildReport({
+        app: "vscode",
+        runId: 1,
+        status: "failed",
+        stage: "build",
+        message: "boom",
+        eventId: "1:1:vscode",
+      }),
     );
     assert.throws(() =>
       buildReport({
@@ -177,12 +189,19 @@ describe("run records", () => {
         stage: "build",
         code: "BUILD_FAILED",
         message: "done",
+        eventId: "1:1:vscode",
       }),
     );
   });
 
   it("rejects an insane app, run id, stage and multi-line message", () => {
-    const base = { runId: 1, status: "failed", stage: "build", code: "BUILD_FAILED" } as const;
+    const base = {
+      runId: 1,
+      status: "failed",
+      stage: "build",
+      code: "BUILD_FAILED",
+      eventId: "1:1:vscode",
+    } as const;
     assert.throws(() => buildReport({ ...base, app: "../etc", message: "x" }));
     assert.throws(() => buildReport({ ...base, app: "vscode", runId: 0, message: "x" }));
     assert.throws(() =>
@@ -200,6 +219,7 @@ describe("run records", () => {
       stage: "build",
       code: "BUILD_FAILED",
       message: "x",
+      eventId: "1:1:vscode",
     } as const;
     for (const app of listApps()) {
       assert.equal(buildReport({ ...base, app }).app, app);
@@ -217,6 +237,7 @@ describe("run records", () => {
       stage: "detect",
       code: "UPSTREAM_UNAVAILABLE",
       message: "boom",
+      eventId: "1:1:vscode",
     });
     assert.equal(bare.evidence, undefined);
 
@@ -227,6 +248,7 @@ describe("run records", () => {
       stage: "detect",
       code: "UPSTREAM_UNAVAILABLE",
       message: "boom",
+      eventId: "1:1:vscode",
       evidence: { http_status: "503" },
       finishedAt: new Date("2026-09-25T00:00:00Z"),
     });
@@ -242,6 +264,7 @@ describe("run records", () => {
       stage: "detect",
       code: "UPSTREAM_UNAVAILABLE",
       message: "boom",
+      eventId: "1:1:vscode",
     } as const;
 
     // Today's emitters fit both bounds.
@@ -293,6 +316,8 @@ describe("fbr report command", () => {
       "appimagetool download failed",
       "--run-id",
       "123456",
+      "--event-id",
+      "123456:2:vscode",
       "--resolved-version",
       "1.139.0",
       "--cask-version",
@@ -311,6 +336,7 @@ describe("fbr report command", () => {
     assert.equal(record["schema"], 1);
     assert.equal(record["app"], "vscode");
     assert.equal(record["run_id"], 123456);
+    assert.equal(record["event_id"], "123456:2:vscode");
     assert.equal(record["stage"], "toolchain");
     assert.equal(record["status"], "failed");
     assert.equal(record["code"], "TOOLCHAIN_DOWNLOAD");
@@ -342,6 +368,8 @@ describe("fbr report command", () => {
       "already at upstream",
       "--run-id",
       "1",
+      "--event-id",
+      "1:1:vscode",
       "--output",
       output,
     ]);
@@ -384,7 +412,7 @@ describe("fbr report command", () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  it("treats an empty --request-id as absent and derives the event id", () => {
+  it("treats an empty --request-id as absent and keeps the event id explicit", () => {
     const dir = tempDir();
     const output = path.join(dir, "report.json");
     const result = fbr([
@@ -401,19 +429,58 @@ describe("fbr report command", () => {
       "1",
       "--request-id",
       "",
+      "--event-id",
+      "1:1:vscode",
       "--output",
       output,
     ]);
     assert.equal(result.status, 0, result.stderr);
     const record = JSON.parse(fs.readFileSync(output, "utf8")) as Record<string, unknown>;
     assert.equal(record["request_id"], null);
-    assert.equal(record["event_id"], "1:vscode");
+    assert.equal(record["event_id"], "1:1:vscode");
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("requires --event-id", () => {
+    const dir = tempDir();
+    const output = path.join(dir, "report.json");
+    const base = [
+      "report",
+      "--app",
+      "vscode",
+      "--stage",
+      "detect",
+      "--status",
+      "skipped",
+      "--message",
+      "already at upstream",
+      "--run-id",
+      "1",
+      "--output",
+      output,
+    ];
+    for (const args of [base, [...base, "--event-id", ""]]) {
+      const result = fbr(args);
+      assert.equal(result.status, 2);
+      assert.match(result.stderr, /Missing required flag --event-id/);
+    }
+    assert.equal(fs.existsSync(output), false);
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
   it("refuses records the API could not act on", () => {
     const output = path.join(tempDir(), "report.json");
-    const base = ["report", "--app", "vscode", "--message", "boom", "--output", output];
+    const base = [
+      "report",
+      "--app",
+      "vscode",
+      "--message",
+      "boom",
+      "--event-id",
+      "1:1:vscode",
+      "--output",
+      output,
+    ];
 
     const noCode = fbr([...base, "--stage", "detect", "--status", "failed"]);
     assert.equal(noCode.status, 2);
@@ -501,6 +568,8 @@ describe("fbr report command", () => {
       "x",
       "--run-id",
       "1",
+      "--event-id",
+      "1:1:vscode",
       "--output",
       output,
     ]);
