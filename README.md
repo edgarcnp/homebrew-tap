@@ -52,9 +52,11 @@ them differs from a classic AppImage in a few ways you may notice:
 - **They do not update themselves.** There is no built-in updater and nothing
   runs in the background. Homebrew pins each version, and
   `brew upgrade --cask <cask>` is how you update.
-- **They are smaller.** They are packed with a newer compression format
-  (DWARFS), so the same app usually downloads in fewer bytes than the classic
-  format.
+- **The download includes more than the app.** The application files are
+  compressed with a modern format (DWARFS), but these files also carry the
+  libraries the app runs on, so the download can be larger than a classic
+  AppImage of the same app — one that expects your computer to provide those
+  libraries.
 - **A one-time sandbox check.** On launch the AppImages check that
   unprivileged user namespaces are available — the feature browsers, Electron
   apps and other sandboxed software rely on. Most distributions allow it; a
