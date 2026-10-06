@@ -237,7 +237,10 @@ toolchain. Pack-time libraries an app needs beyond it are declared in the
 descriptor's `buildPackages` and installed by the build job. The builder
 workflow rebuilds the image and its `pin` job commits the new tag+digest into
 `packaging/builder/pins.json`, which the build job reads for its container, so
-the reference cannot drift from the image.
+the reference cannot drift from the image. The build job then upgrades the
+container (`pacman -Syu`) before installing anything: the image's package
+database is frozen at build time while mirrors keep only the current package
+files, so dependency resolution follows the live repos between image rebuilds.
 `linuxdeploy` was retired:
 `quick-sharun` bundles the app's dynamic-linker closure **including glibc and
 ld-linux**, so the AppImages have no host-libc dependency and run on musl,

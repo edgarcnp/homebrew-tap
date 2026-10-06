@@ -332,6 +332,19 @@ jobs:
         run: |
           # The tap is the source of truth for the build flags.
           bun "${GITHUB_WORKSPACE}/tap/packaging/bin/fbr.ts" descriptor-env --app "${APP}" >> "${GITHUB_ENV}"
+      - name: Upgrade the container
+        run: |
+          # The pinned builder image freezes its pacman database at image
+          # build time, while Arch keeps moving and mirrors keep only the
+          # current package files. Without this upgrade a dependency that moved
+          # since the image was built resolves to a pruned file and the install
+          # steps 404 -- and a re-dispatch cannot clear that, because it runs
+          # the same image.
+          if ! pacman -Syu --noconfirm; then
+            echo "::error::pacman -Syu failed" >&2
+            printf '{"code":"TOOLCHAIN_DOWNLOAD","message":"pacman -Syu failed","stage":"toolchain"}\n' > "${GITHUB_WORKSPACE}/report-code.json"
+            exit 1
+          fi
       - name: Install app build packages
         run: |
           # Escape hatch: packages an app declares in buildPackages, for
@@ -349,7 +362,8 @@ jobs:
           if ! get-debloated-pkgs "${flags[@]}"; then
             echo "::error::get-debloated-pkgs failed" >&2
             # Names the stage itself: with the toolchain baked into the builder
-            # image, this download is the one toolchain step left in the job.
+            # image, this download and the upgrade above are the toolchain
+            # network steps left in the job.
             printf '{"code":"TOOLCHAIN_DOWNLOAD","message":"get-debloated-pkgs failed","stage":"toolchain"}\n' > "${GITHUB_WORKSPACE}/report-code.json"
             exit 1
           fi

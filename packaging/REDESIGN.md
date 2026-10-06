@@ -201,12 +201,16 @@ published by a workflow on changes and on a weekly schedule.
 - Pinned by tag+digest in `packaging/builder/pins.json`, which the build job
   reads for its container; the builder workflow's `pin` job commits the new
   reference after every rebuild, so Renovate does not manage these two images.
-  Arch freshness is a scheduled rebuild, not a per-run `-Syu`.
-- Result: for the current apps, no pacman and no tool downloads in a build job
-  (the per-app `get-debloated-pkgs` fetch remains); a failed image pull is one
-  classified toolchain failure instead of four network steps. An app that needs
-  an extra package extends the image (preferred) or exercises the
-  `buildPackages` escape hatch and pays the install cost deliberately.
+  Arch freshness is the scheduled rebuild plus a per-run `pacman -Syu` before
+  the install steps: the image's database freezes at build time and mirrors
+  keep only the current package files, so without the upgrade a dependency that
+  moved since the rebuild resolves to a pruned file (a re-dispatch runs the
+  same stale image and cannot clear it).
+- Result: for the current apps, the per-run network is that upgrade delta plus
+  the per-app `get-debloated-pkgs` fetch; a failed image pull is one classified
+  toolchain failure instead of four network steps. An app that needs an extra
+  package extends the image (preferred) or exercises the `buildPackages`
+  escape hatch and pays the install cost deliberately.
 
 ### Workflows
 
