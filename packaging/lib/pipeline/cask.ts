@@ -2,6 +2,7 @@
 // each cask to its app descriptor, so the publish pipeline and CI agree.
 
 import * as fs from "node:fs";
+import * as path from "node:path";
 import { APPIMAGE_ARCH, BREW_ARCH, resolveBrewArch } from "../core/architecture.ts";
 import { assertSha256Hex, fail } from "../core/guards.ts";
 import { writeFileAtomic } from "../core/http.ts";
@@ -15,6 +16,14 @@ const DEPENDS_ARCH = /depends_on arch: :(x86_64|arm64)/g;
 
 function isDualArch(architectures: readonly Architecture[]): boolean {
   return architectures.length === 2 && architectures.includes("amd64") && architectures.includes("arm64");
+}
+
+// The installed icon keeps the payload icon's extension: a WxH icon is a
+// raster file, a scalable one an SVG. A dotless source keeps the historical
+// png name.
+function iconExtension(descriptor: AppDescriptor): string {
+  const extension = path.extname(descriptor.icon.source);
+  return extension === "" ? ".png" : extension;
 }
 
 function singleArch(architectures: readonly Architecture[]): Architecture {
@@ -219,7 +228,7 @@ export function checkCask(descriptor: AppDescriptor, source: string): string[] {
   require(source.includes("auto_updates false"), "missing auto_updates false");
   require(source.includes("postflight_steps do"), "missing postflight_steps");
 
-  const iconTarget = `.local/share/icons/hicolor/${descriptor.icon.size}/apps/${descriptor.cask}.png`;
+  const iconTarget = `.local/share/icons/hicolor/${descriptor.icon.size}/apps/${descriptor.cask}${iconExtension(descriptor)}`;
   const desktopTarget = `.local/share/applications/${descriptor.cask}.desktop`;
   require(source.includes(iconTarget), `postflight does not install the icon to ${iconTarget}`);
   require(source.includes(desktopTarget), `postflight does not write ${desktopTarget}`);

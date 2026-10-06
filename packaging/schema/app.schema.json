@@ -153,7 +153,8 @@
         },
         "size": {
           "type": "string",
-          "pattern": "^[0-9]+x[0-9]+$"
+          "pattern": "^(?:[0-9]+x[0-9]+|scalable)$",
+          "description": "Hicolor directory: a WxH size, or scalable for an SVG icon."
         }
       }
     },

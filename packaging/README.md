@@ -90,7 +90,7 @@ record whose `app` does not — `fbr report` refuses such a record first.
 | `binaryTargets` | Names the cask must expose on `PATH` (checked by `fbr cask --action check`). |
 | `oracle` | Where the version and payload come from. |
 | `payload` | How the upstream package is staged into `AppDir/bin`. |
-| `icon` | Icon path in the payload plus its hicolor size directory. |
+| `icon` | Icon path in the payload plus its hicolor directory: a `WxH` size for a raster icon, or `scalable` for an SVG. The staged icon keeps the payload file's extension. |
 | `desktopTemplate` | Desktop entry template, relative to the app dir. |
 | `updater` | Updater neutralization: JSON key removal, endpoint patch, feed removal, `.env`, runtime hook, residual scan. |
 | `quickSharun` | quick-sharun knobs: `hooks` (`ADD_HOOKS`), `env`, and `libraries` — absolute paths of libraries the app only `dlopen`s at runtime, passed to quick-sharun as deploy targets (an `ldd` scan never surfaces those, so nothing else would bundle them). |

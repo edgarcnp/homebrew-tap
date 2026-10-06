@@ -166,4 +166,15 @@ describe("checkCask", () => {
     const commentDrift = checkCask({ ...descriptor, comment: "Other comment" }, source);
     assert.match(commentDrift.join("; "), /desktop entry Comment does not match/);
   });
+
+  it("checks an svg icon at its scalable hicolor path", () => {
+    const descriptor = loadDescriptor("vscode");
+    const source = fs.readFileSync(caskPath(descriptor.cask), "utf8");
+    const svgIcon = {
+      ...descriptor,
+      icon: { source: "usr/share/icons/hicolor/scalable/apps/vscode.svg", size: "scalable" },
+    };
+    const problems = checkCask(svgIcon, source);
+    assert.match(problems.join("; "), /scalable\/apps\/vscode\.svg/);
+  });
 });

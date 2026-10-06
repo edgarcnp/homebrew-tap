@@ -832,6 +832,19 @@ describe("descriptor validation", () => {
     );
   });
 
+  it("accepts a scalable svg icon", () => {
+    const descriptor = validateDescriptor(
+      mutated("vscode", (copy) => {
+        const icon = nested(copy, "icon");
+        icon["source"] = "usr/share/icons/hicolor/scalable/apps/vscode.svg";
+        icon["size"] = "scalable";
+      }),
+      "vscode",
+    );
+    assert.equal(descriptor.icon.size, "scalable");
+    assert.equal(descriptor.icon.source, "usr/share/icons/hicolor/scalable/apps/vscode.svg");
+  });
+
   it("defaults to dual-arch and rejects bad architecture lists", () => {
     const without = mutated("vscode", (copy) => { delete copy["architectures"]; });
     assert.deepEqual(validateDescriptor(without, "vscode").architectures, ["amd64", "arm64"]);

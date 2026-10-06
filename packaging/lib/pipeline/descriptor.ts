@@ -491,7 +491,10 @@ function validateIcon(raw: unknown, label: string): IconConfig {
   const source = asObject(raw, label);
   rejectUnknownKeys(source, ["source", "size"], label);
   const size = str(source, "size", label);
-  if (!/^\d+x\d+$/.test(size)) fail(`${label}.size must look like 512x512`);
+  // A raster icon declares its hicolor WxH directory; an SVG the scalable one.
+  if (!/^\d+x\d+$/.test(size) && size !== "scalable") {
+    fail(`${label}.size must look like 512x512, or be "scalable" for an SVG`);
+  }
   return {
     source: relativePath(str(source, "source", label), `${label}.source`),
     size,

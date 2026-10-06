@@ -241,12 +241,21 @@ pipeline_render_desktop() {
 }
 
 pipeline_install_icon() {
-  local size upstream_icon
+  local size upstream_icon name extension
   size="$(descriptor_field '.icon.size')"
   upstream_icon="${PAYLOAD_ROOT}/$(descriptor_field '.icon.source')"
   ensure_file_exists "${upstream_icon}" "upstream icon"
-  cp -- "${upstream_icon}" "${APPDIR}/${PACKAGE_NAME}.png"
-  cp -- "${APPDIR}/${PACKAGE_NAME}.png" "${APPDIR}/share/icons/hicolor/${size}/apps/${PACKAGE_NAME}.png"
+  # Keep the payload icon's own extension: a raster icon lands in its WxH
+  # hicolor directory, an SVG in the scalable one. A dotless basename keeps
+  # the historical .png name.
+  name="${upstream_icon##*/}"
+  extension="${name##*.}"
+  if [[ "${extension}" = "${name}" ]]
+  then
+    extension="png"
+  fi
+  cp -- "${upstream_icon}" "${APPDIR}/${PACKAGE_NAME}.${extension}"
+  cp -- "${upstream_icon}" "${APPDIR}/share/icons/hicolor/${size}/apps/${PACKAGE_NAME}.${extension}"
 }
 
 # quick-sharun hardlinks sharun over every nested bin/ executable whose basename

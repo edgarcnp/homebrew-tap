@@ -206,7 +206,7 @@ export interface QuickSharunConfig {
 export interface IconConfig {
   // Path to the icon inside the extracted payload.
   source: string;
-  // hicolor size directory, e.g. 512x512.
+  // hicolor directory: a WxH size, e.g. 512x512, or "scalable" for an SVG.
   size: string;
 }
 
