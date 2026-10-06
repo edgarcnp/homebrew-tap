@@ -23,6 +23,7 @@ brew install --cask <cask>
 | `gitcomet` | [GitComet](https://gitcomet.dev/) | |
 | `little-genius` | [Little Genius](https://lg.avakot.org/) | Soulframe companion |
 | `opencode-desktop` | [OpenCode Desktop](https://opencode.ai/) | |
+| `spotifast` | [Spotifast](https://github.com/crmne/spotifast) | Native Spotify client |
 | `vscode` | [Visual Studio Code](https://code.visualstudio.com/) | |
 | `wfhelper` | [WFHelper](https://github.com/WFHelper/WFHelper) | Warframe companion |
 

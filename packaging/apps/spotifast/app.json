@@ -1,0 +1,55 @@
+{
+  "id": "spotifast",
+  "appName": "Spotifast",
+  "displayName": "Spotifast",
+  "comment": "Native Spotify client",
+  "cask": "spotifast",
+  "watch": {
+    "feedUrl": "https://github.com/crmne/spotifast/releases.atom",
+    "format": "atom",
+    "versionPattern": "^Spotifast v(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
+    "skipPattern": "^Spotifast v\\d+\\.\\d+\\.\\d+-(?:rc|beta|alpha)\\d*$",
+    "repo": "crmne/spotifast"
+  },
+  "assetPrefix": "spotifast",
+  "tagPrefix": "spotifast-v",
+  "sourceRepo": "edgarcnp/homebrew-tap",
+  "sourceOwner": "edgarcnp",
+  "sourceDir": "packaging/apps/spotifast",
+  "buildCommand": "./build.sh",
+  "debloatArgs": "--add-common",
+  "buildPackages": ["alsa-lib", "libpulse"],
+  "architectures": ["amd64"],
+  "binaryTargets": ["spotifast"],
+  "oracle": {
+    "kind": "github-release",
+    "repository": "https://api.github.com/repos/crmne/spotifast",
+    "packageName": "spotifast",
+    "tagPrefix": "v",
+    "assetNameTemplate": "spotifast_{version}_{arch}.deb"
+  },
+  "payload": {
+    "kind": "deb-files",
+    "files": ["usr/bin/spotifast"]
+  },
+  "icon": {
+    "source": "usr/share/icons/hicolor/scalable/apps/spotifast.svg",
+    "size": "scalable"
+  },
+  "desktopTemplate": "templates/spotifast.desktop",
+  "updater": {
+    "patchEndpoint": {
+      "from": "api.github.com",
+      "textReplacement": "update.invalid",
+      "binaryReplacement": "update.invalid",
+      "targets": ["bin/spotifast"]
+    },
+    "residualScan": {
+      "patterns": ["api.github.com"],
+      "severity": "error"
+    }
+  },
+  "quickSharun": {
+    "hooks": ["fix-namespaces.hook"]
+  }
+}
