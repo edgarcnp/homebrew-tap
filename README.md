@@ -34,14 +34,40 @@ brew install --cask <cask>
 > `depends_on arch: :x86_64`. On an arm64 host `brew install --cask` refuses
 > up front instead of fetching an amd64 build.
 
+## How these AppImages differ
+
+These are the official upstream releases repackaged, so they are still
+ordinary AppImages — one self-contained file per app. The packaging around
+them differs from a classic AppImage in a few ways you may notice:
+
+- **They carry their own basic libraries.** A classic AppImage relies on the
+  C library and other basics already installed on your computer, and can
+  refuse to start on older or less common systems, complaining that a library
+  is missing or too old. Ours pack those libraries in, so they run where a
+  classic build would not.
+- **FUSE is optional.** AppImages normally mount themselves like a small
+  disk, which needs FUSE3. Ours use FUSE3 when it is available, and otherwise
+  quietly unpack into a temporary folder and run from there — no setup either
+  way.
+- **They do not update themselves.** There is no built-in updater and nothing
+  runs in the background. Homebrew pins each version, and
+  `brew upgrade --cask <cask>` is how you update.
+- **They are smaller.** They are packed with a newer compression format
+  (DWARFS), so the same app usually downloads in fewer bytes than the classic
+  format.
+- **A one-time sandbox check.** On launch the AppImages check that
+  unprivileged user namespaces are available — the feature browsers, Electron
+  apps and other sandboxed software rely on. Most distributions allow it; a
+  few (Ubuntu 24.04 and newer, secureblue) restrict it, and the first launch
+  there explains the situation and offers to lift the restriction for you.
+
+The app code itself is the same official release the project publishes; only
+the packaging around it differs.
+
 ## Requirements
 
 - Linux with Homebrew. Mainly supported on Fedora, including the Atomic flavor,
   but runs on any distro.
-- The bundled sandbox needs unprivileged user namespaces (on by default on
-  Fedora). On a distro that restricts them (Ubuntu 24.04+, secureblue) the
-  AppImage offers to lift the restriction; without FUSE3 it just extracts and
-  runs instead of mounting.
 - Wayland and X11 both work — nothing forces a backend.
 
 ## What a cask installs
