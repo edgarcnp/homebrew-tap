@@ -1,6 +1,6 @@
 cask "spotifast" do
   version "0.12.0"
-  sha256 "0000000000000000000000000000000000000000000000000000000000000000"
+  sha256 "3985734e89e1b21297cc5b5637def9dc0292c01e2dcb2676e02b6a7f35b370df"
 
   url "https://github.com/edgarcnp/homebrew-tap/releases/download/spotifast-v#{version}/spotifast-#{version}-x86_64.AppImage"
   name "Spotifast"
