@@ -23,11 +23,11 @@ brew install --cask <cask>
 | --- | --- | --- |
 | `firefox` | [Firefox](https://www.mozilla.org/firefox/) | en-US build; [hardware decoding notes](packaging/apps/firefox/README.md) |
 | `gitcomet` | [GitComet](https://gitcomet.dev/) | |
-| `little-genius` | [Little Genius](https://lg.avakot.org/) | Soulframe companion |
+| `little-genius` | [Little Genius](https://lg.avakot.org/) | |
 | `opencode-desktop` | [OpenCode Desktop](https://opencode.ai/) | |
-| `spotifast` | [Spotifast](https://github.com/crmne/spotifast) | Native Spotify client |
+| `spotifast` | [Spotifast](https://github.com/crmne/spotifast) | |
 | `vscode` | [Visual Studio Code](https://code.visualstudio.com/) | |
-| `wfhelper` | [WFHelper](https://github.com/WFHelper/WFHelper) | Warframe companion |
+| `wfhelper` | [WFHelper](https://github.com/WFHelper/WFHelper) | |
 
 > [!NOTE]
 > Every app here is amd64-only. On an arm64 machine, `brew install --cask`
