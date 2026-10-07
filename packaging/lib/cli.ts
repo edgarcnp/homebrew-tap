@@ -27,6 +27,7 @@ import {
   type ReportStage,
   type ReportStatus,
 } from "./pipeline/report.ts";
+import { readRetryPlan, RETRY_CONCLUSIONS, type RetryConclusion } from "./pipeline/retry.ts";
 import { fetchFeedVersion } from "./pipeline/watch.ts";
 import { readMetadataField } from "./core/metadata.ts";
 import {
@@ -490,6 +491,34 @@ const COMMANDS: Command[] = [
     },
   },
   {
+    name: "retry-plan",
+    summary:
+      "Decide whether a completed run's reports are worth a re-run (--reports-dir, --attempt N, --conclusion S); prints the plan JSON",
+    options: {
+      "reports-dir": { type: "string" },
+      attempt: { type: "string" },
+      conclusion: { type: "string" },
+    },
+    run: (flags) => {
+      const rawAttempt = flags.str("attempt");
+      const attempt = Number(rawAttempt);
+      if (!Number.isSafeInteger(attempt) || attempt <= 0) {
+        throw new UsageError(`--attempt must be a positive attempt number, got "${rawAttempt}"`);
+      }
+      const conclusion = flags.str("conclusion");
+      if (!(RETRY_CONCLUSIONS as readonly string[]).includes(conclusion)) {
+        throw new UsageError(`--conclusion must be one of ${RETRY_CONCLUSIONS.join(", ")}`);
+      }
+      const plan = readRetryPlan(
+        flags.str("reports-dir"),
+        attempt,
+        conclusion as RetryConclusion,
+      );
+      process.stdout.write(`${JSON.stringify(plan, null, 2)}\n`);
+      return 0;
+    },
+  },
+  {
     name: "release-check",
     summary:
       "Compare downloaded release assets to the cask pin (--app, --asset-dir, [--tap]); prints true|false, or nothing when it could not compare",
@@ -657,7 +686,7 @@ export function usage(): string {
 // run-record fragment the workflow uploads (--failure-out) and exits with a code
 // that says "this one was classified", so the workflow passes it through
 // unchanged. Every other error stays exit 1 — the record reports those as
-// UNCLASSIFIED, which retries under the API's global budget.
+// UNCLASSIFIED, which the retry workflow re-runs within its attempt cap.
 interface FailureVerdict {
   readonly code: FailureCode;
   readonly exitCode: number;

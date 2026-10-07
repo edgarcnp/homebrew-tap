@@ -1,0 +1,200 @@
+name: Retry builds
+
+# The API dispatches at most once per version, so a completed run's own record
+# decides what happens next: re-run the failed jobs of a failure the record
+# calls retryable, or the whole run of a skip whose recorded feed proves the
+# resolve lagged its own publish; leave a terminal failure for a human and open
+# an issue. Watches the two entry points: a manual Build AppImages run and the
+# API's Dispatch build.
+
+on:
+  workflow_run:
+    workflows: [Build AppImages, Dispatch build]
+    types: [completed]
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash -xeuo pipefail {0}
+
+concurrency:
+  # One decision per run; a re-run fires this workflow again for the attempt it
+  # starts.
+  group: build-retry-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+
+jobs:
+  retry:
+    # Only a run that can need a decision: a failure, a timeout, or a success
+    # (a raced skip concludes success). A cancelled run was deliberate or
+    # superseded.
+    if: >-
+      contains(fromJSON('["failure", "timed_out", "success"]'),
+      github.event.workflow_run.conclusion)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: write
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.2
+      - name: Count the run's report artifacts
+        id: artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          # The artifact list is the authority on whether the run left a
+          # record: an empty one on a failed run means it died before the
+          # report job could upload, which the plan reads as infrastructure.
+          gh api --paginate --slurp \
+            "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/artifacts?per_page=100" \
+            > run-artifacts.json
+          count="$(jq '
+            [.[] | .artifacts[] | select(.expired == false) | .name]
+            | unique
+            | map(select(startswith("run-report-")))
+            | length
+          ' run-artifacts.json)"
+          echo "count=${count}" >> "${GITHUB_OUTPUT}"
+      - name: Download the run reports
+        if: steps.artifacts.outputs.count != '0'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: run-report-*
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+          path: reports
+      - name: Plan the retry
+        id: plan
+        env:
+          ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+        run: |
+          mkdir -p reports
+          bun packaging/bin/fbr.ts retry-plan \
+            --reports-dir reports --attempt "${ATTEMPT}" --conclusion "${CONCLUSION}" \
+            | tee retry-plan.json
+          {
+            echo "retry=$(jq -r '.retry' retry-plan.json)"
+            echo "action=$(jq -r '.action // ""' retry-plan.json)"
+            echo "reason=$(jq -r '.reason' retry-plan.json)"
+            echo "delay_seconds=$(jq -r '.delay_seconds' retry-plan.json)"
+            echo "items=$(jq -r '.items | length' retry-plan.json)"
+          } >> "${GITHUB_OUTPUT}"
+      # The re-run the API no longer performs: the failed jobs for a failure,
+      # the whole run for a timed-out run or a raced skip (neither leaves a
+      # failed job to re-run).
+      - name: Re-run the run
+        if: steps.plan.outputs.retry == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          ACTION: ${{ steps.plan.outputs.action }}
+          DELAY: ${{ steps.plan.outputs.delay_seconds }}
+        run: |
+          # A rate-limited or still-recovering upstream asked for a delay; the
+          # plan already capped it. A skip race has no delay to honor.
+          if ((DELAY > 0)); then
+            echo "waiting ${DELAY}s before the next attempt"
+            sleep "${DELAY}"
+          fi
+          case "${ACTION}" in
+            rerun-failed-jobs | rerun)
+              gh api --method POST \
+                "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/${ACTION}"
+              echo "::notice::re-running ${ACTION} for run ${RUN_ID}"
+              ;;
+            *)
+              echo "::error::refusing unknown retry action: ${ACTION}" >&2
+              exit 1
+              ;;
+          esac
+      # A run nobody should re-run still has to reach a human: one issue per
+      # actionable app, titled deterministically so a repeated failure of the
+      # same app and version does not pile up.
+      - name: Open an issue for runs that wait for a human
+        if: success() && steps.plan.outputs.retry != 'true' && steps.plan.outputs.items != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          REASON: ${{ steps.plan.outputs.reason }}
+        run: |
+          gh issue list --repo "${GITHUB_REPOSITORY}" --state open --limit 200 \
+            --json title --jq '.[].title' > "${RUNNER_TEMP}/open-issue-titles.txt"
+          while IFS= read -r item
+          do
+            app="$(jq -r '.app' <<<"${item}")"
+            version="$(jq -r '
+              if .kind == "skip" then (.feed_version // .resolved_version // "unknown")
+              else (.resolved_version // "unknown")
+              end
+            ' <<<"${item}")"
+            title="[build] ${app} ${version}: $(jq -r '.code' <<<"${item}")"
+            if grep -Fxq -- "${title}" "${RUNNER_TEMP}/open-issue-titles.txt"; then
+              echo "an open issue already covers: ${title}"
+              continue
+            fi
+            jq -r --arg url "${RUN_URL}" --arg reason "${REASON}" --arg attempt "${RUN_ATTEMPT}" '
+              [
+                "The API dispatches each version once. The tap retry workflow left this run for a human.",
+                "",
+                "- **app**: `\(.app)`",
+                "- **status**: `\(.kind)`",
+                "- **code**: `\(.code)`",
+                "- **class**: \(.class // "none")",
+                "- **stage**: `\(.stage)`",
+                "- **retryable**: `\(.retryable)`",
+                "- **resolved version**: `\(.resolved_version // "unknown")`",
+                "- **cask version**: `\(.cask_version // "unknown")`",
+                "- **feed version**: `\(.feed_version // "unknown")`",
+                "- **attempt**: \($attempt)",
+                "- **reason for no re-run**: `\($reason)`",
+                "- **run**: \($url)",
+                "",
+                "**Message**: \(.message)",
+                "",
+                "Fix the cause, then re-run the failed jobs from the run page."
+              ] | join("\n")
+            ' <<<"${item}" > "${RUNNER_TEMP}/issue-body.md"
+            gh issue create \
+              --repo "${GITHUB_REPOSITORY}" \
+              --title "${title}" \
+              --body-file "${RUNNER_TEMP}/issue-body.md" < /dev/null
+            echo "${title}" >> "${RUNNER_TEMP}/open-issue-titles.txt"
+          done < <(jq -c '.items[]' retry-plan.json)
+      - name: Summarize the decision
+        if: always()
+        run: |
+          if [ ! -s retry-plan.json ] || ! jq -e . retry-plan.json >/dev/null 2>&1; then
+            {
+              echo "## Build retry"
+              echo
+              echo "The retry plan was not written; see the failed step above."
+            } >> "${GITHUB_STEP_SUMMARY}"
+            exit 0
+          fi
+          {
+            echo "## Build retry"
+            echo
+            echo "- **decision**: retry=$(jq -r '.retry' retry-plan.json), reason=$(jq -r '.reason' retry-plan.json)"
+            echo "- **attempt**: $(jq -r '.attempt' retry-plan.json) of $(jq -r '.max_attempts' retry-plan.json)"
+            echo "- **action**: $(jq -r '.action // "none"' retry-plan.json)"
+            echo "- **delay before re-run**: $(jq -r '.delay_seconds' retry-plan.json)s"
+            echo
+            if [ "$(jq -r '.items | length' retry-plan.json)" -gt 0 ]; then
+              echo "| app | status | code | class | retryable |"
+              echo "| --- | --- | --- | --- | --- |"
+              jq -r '.items[] | "| `\(.app)` | `\(.kind)` | `\(.code)` | \(.class // "none") | \(.retryable) |"' retry-plan.json
+            else
+              echo "No actionable records."
+            fi
+          } >> "${GITHUB_STEP_SUMMARY}"

@@ -133,7 +133,7 @@ smoke_test_appimage() {
   if grep -Eq 'symbol lookup error|undefined symbol|error while loading shared libraries|cannot open shared object|Cannot mount AppImage|AppRun not found|Failed to execute dwarfsextract' <<<"${output}"
   then
     # The artifact is broken, not the runner: permanent, so the record must not
-    # invite a re-dispatch of the same build.
+    # invite a re-run of the same build.
     classify_failure SMOKE_FAILED "smoke test: loader errors"
     error "$(printf 'Smoke test failed: loader errors in %s\n%s' "${appimage}" "${output}")"
   fi

@@ -187,7 +187,7 @@ export function neutralizeUpdater(descriptor: AppDescriptor, appDirPath: string)
       const detail = report.survivors.map((entry) => `${entry.file} (${entry.pattern})`).join(", ");
       if (severity === "error") {
         // The artifact still talks to its own updater: permanent, so the run
-        // record must not invite a re-dispatch.
+        // record must not invite a re-run.
         throw new UpdaterResidualError(`updater neutralization incomplete: ${detail}`);
       }
       report.warnings.push(`updater neutralization incomplete: ${detail}`);

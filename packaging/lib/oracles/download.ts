@@ -79,8 +79,8 @@ export async function fetchVerified(
 
 // Verifies against whatever the caller could pin, checking size → SHA-256 →
 // SHA-512 so the cheapest failing expectation reports first. A mismatch is
-// permanent: the record must not invite a re-dispatch that downloads the same
-// bytes again.
+// permanent: the record must not invite a re-run that downloads the same bytes
+// again.
 export function verifyPayload(bytes: Buffer, expected: PayloadExpectation, label: string): void {
   if (expected.size !== undefined && bytes.length !== expected.size) {
     throw new ChecksumMismatchError(

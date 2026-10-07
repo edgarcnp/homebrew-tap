@@ -30,7 +30,7 @@ for name in "${TOOLS[@]}"
 do
   dest="${tmp_dir}/${name}"
   info "Downloading ${name} from pinned commit ${PINNED_COMMIT}"
-  # Single attempt: retries belong to the caller that re-dispatches CI runs.
+  # Single attempt: retries belong to the CI that re-runs the failed jobs.
   curl -fL -o "${dest}" "${BASE_URL}/${name}.sh" ||
     error "Failed to download ${name}"
   test -s "${dest}" ||

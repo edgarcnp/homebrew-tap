@@ -94,7 +94,7 @@ describe("fetchOnce", () => {
     delayMs = 300;
     try {
       await assert.rejects(fetchOnce(`${baseUrl}/empty`, { timeoutMs: 30 }), (error: unknown) => {
-        // Classified, not just thrown: the API's budget needs to know this was
+        // Classified, not just thrown: the retry plan needs to know this was
         // the transport giving up rather than a bad response.
         assert.ok(error instanceof UpstreamUnavailableError);
         assert.equal(error.evidence["reason"], "timeout");
@@ -152,7 +152,7 @@ describe("httpFailure", () => {
 
   it("leaves a plain 4xx unclassified", () => {
     // A 404 is a descriptor problem, not a busy upstream: dressing it up as
-    // transient would invite a re-dispatch that cannot succeed.
+    // transient would invite a re-run that cannot succeed.
     const missing = httpFailure(new Response("", { status: 404 }), "boom (404)");
     assert.equal(missing instanceof UpstreamUnavailableError, false);
     assert.equal(missing.message, "boom (404)");

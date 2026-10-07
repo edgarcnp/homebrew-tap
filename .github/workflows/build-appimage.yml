@@ -133,9 +133,9 @@ jobs:
           # their own schedules (opencode's update manifest lagged its own
           # release feed by ~1min on 2.0.14, and that run gated on the stale
           # read and skipped). Read the feed once and record what it advertises:
-          # nothing waits here -- the caller re-dispatches a skip only when the
-          # feed is newer than both the resolved version and the cask pin, which
-          # is exactly the signature of a raced publish.
+          # nothing waits here -- the retry workflow re-runs the whole run when
+          # the feed is newer than both the resolved version and the cask pin,
+          # which is exactly the signature of a raced publish.
           version=""
           upstream_sha256_amd64=""
           upstream_sha256_arm64=""
@@ -338,8 +338,8 @@ jobs:
           # build time, while Arch keeps moving and mirrors keep only the
           # current package files. Without this upgrade a dependency that moved
           # since the image was built resolves to a pruned file and the install
-          # steps 404 -- and a re-dispatch cannot clear that, because it runs
-          # the same image.
+          # steps 404 -- and a re-run cannot clear that, because it runs the
+          # same image.
           if ! pacman -Syu --noconfirm; then
             echo "::error::pacman -Syu failed" >&2
             printf '{"code":"TOOLCHAIN_DOWNLOAD","message":"pacman -Syu failed","stage":"toolchain"}\n' > "${GITHUB_WORKSPACE}/report-code.json"
@@ -357,7 +357,8 @@ jobs:
       - name: Install debloated packages
         run: |
           # Debloated Arch packages shrink the AppImage; flags are per app.
-          # One attempt; a flaked download is re-dispatched, not slept on.
+          # One attempt; a flaked download fails the run as TOOLCHAIN_DOWNLOAD,
+          # and the retry workflow re-runs it.
           read -r -a flags <<<"${DEBLOAT_ARGS}"
           if ! get-debloated-pkgs "${flags[@]}"; then
             echo "::error::get-debloated-pkgs failed" >&2
@@ -525,9 +526,9 @@ jobs:
 
       # A half-published release blocks the next dispatch (the gate would see
       # the tag and skip), so a failure in this job removes the release it
-      # created; the caller's re-dispatch then rebuilds from scratch. A release
-      # that predates this run is not ours to delete. pin-cask runs separately
-      # and keeps its tag: a pin failure repairs cheaply.
+      # created; the retry workflow's re-run then rebuilds from scratch. A
+      # release that predates this run is not ours to delete. pin-cask runs
+      # separately and keeps its tag: a pin failure repairs cheaply.
       - name: Remove the partial release
         if: failure() || cancelled()
         env:
@@ -589,12 +590,12 @@ jobs:
           gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
 
   # The machine-readable run record: one JSON document per app, POSTed to the
-  # API that dispatches builds (which reads it to decide whether a failure is
-  # worth re-dispatching) and uploaded as a redacted run-report-<app> artifact
-  # for humans. Retry policy lives in the API, not here. always() so every
-  # completed run answers with a record: an absent record means the run died
-  # before this job could start (runner loss, cancellation), which the API
-  # treats as infrastructure.
+  # API that dispatched the run (which stores it as evidence) and uploaded as a
+  # redacted run-report-<app> artifact for humans. Retry policy lives in the CI,
+  # not here: retry.yml reads the artifact copy and re-runs the run or opens an
+  # issue. always() so every completed run answers with a record: an absent
+  # record means the run died before this job could start (runner loss,
+  # cancellation), which the retry plan treats as infrastructure.
   report:
     needs: [detect, build, publish, pin-cask]
     if: always()
@@ -690,7 +691,8 @@ jobs:
             else
               # No classified site: publish and pin failures are still precise
               # at job granularity, and everything else is UNCLASSIFIED, which
-              # retries under the API's global budget rather than being dropped.
+              # the retry workflow re-runs within its attempt cap rather than
+              # being dropped.
               case "${job_stage}" in
                 publish) code="PUBLISH_FAILED" ;;
                 pin-cask) code="PIN_CASK_FAILED" ;;

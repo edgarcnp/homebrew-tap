@@ -131,6 +131,12 @@ memory or habit.
   `api.edgarcnp.dev`). There is no shared secret to set or rotate. The delivery
   step is best-effort (`continue-on-error`) on purpose: it must never fail a
   run. Do not remove the grants or the step.
+- **Build retries** — `retry.yml` owns them now: the API dispatches each
+  version once, and this workflow re-runs a completed run's failed jobs (or the
+  whole run after a raced skip) when the run record's verdict says so, opening
+  an issue when it does not. The budget lives in
+  `packaging/lib/pipeline/retry.ts`; do not add a second retry path or move the
+  budget into another workflow.
 
 ## CI map
 
@@ -139,6 +145,7 @@ memory or habit.
 | `tests.yml` (`brew test-bot`) | PR gate: typecheck, tests, cask check, shellcheck, actionlint, `brew style`/`audit`, tap syntax |
 | `build.yml` | build one app or all of them; the app list comes from the descriptors |
 | `build-appimage.yml` | the reusable per-app build (container, toolchain, pack, smoke test) |
+| `retry.yml` | on completion of a build run, re-runs it when the run record says a failure is retryable or a skip raced the feed; opens an issue otherwise |
 | `builder.yml` | rebuilds the `fbr-builder-base` image on Dockerfile changes and weekly, then pins it |
 | `dispatch.yml` | entry point for programmatic builds (a manual or API-triggered run) |
 | `cask-smoke.yml` | installs and smoke-tests the casks on push to `main` and weekly |

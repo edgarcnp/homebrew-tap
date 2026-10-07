@@ -135,6 +135,10 @@ fbr report --app X --stage S --status ST --message M --run-id N
                                              write the machine-readable run record the API
                                              reads; --public-output is the artifact copy
                                              with request_id redacted
+fbr retry-plan --reports-dir D --attempt N
+     --conclusion S                          decide from a completed run's report copies
+                                             whether the CI re-runs it; prints the plan
+                                             JSON the retry workflow executes
 fbr cask --action read|set-version|check     read, re-pin or check casks
      [--app X] [--tap T] [--version V]       set-version takes --version plus the
      [--sha256-x86-64 H] [--sha256-arm-64 H] checksum of each architecture the
@@ -171,27 +175,33 @@ API's correlation id for the dispatch that caused the run (null for manual
 runs); it stays in the POSTed record, is redacted to null in the artifact, and
 is never traced into logs. `event_id` is required: the deterministic
 `${run_id}:${run_attempt}:${app}` id, stable when the same record is re-sent so
-the API dedupes a delivery retry. Retry policy lives in the API that
-dispatches builds, so the record classifies rather than retries:
+the API dedupes a delivery retry, and distinct per attempt so a CI re-run is a
+new event. The API dispatches at most once per version and treats the record as
+evidence, so retries belong to the CI: `retry.yml` consumes the public copy and
+`fbr retry-plan` decides, from the record's own verdict, between a re-run and
+an issue for a human:
 
 - `status`/`stage`/`code` — what happened, where, and why. `code` carries its
-  own verdict (`class`, `retryable`, `retry_after_seconds`), so a reader needs
-  no table from this repository.
+  own verdict (`class`, `retryable`, `retry_after_seconds`), so the retry plan
+  needs no table from this repository.
 - `evidence` — what the transport said, e.g. `http_status`,
   `retry_after_seconds`, `reason`, `rate_limited` on a transient failure. A
   value is one line of at most 1 KiB, and the serialized map at most 4096
   bytes; the API rejects a record beyond either bound, so `fbr report` and the
   failure-fragment writer refuse it first.
-- `resolved_version` / `cask_version` / `feed_version` — the three versions a
-  caller needs to judge a *skip*: re-dispatch only when the feed is newer than
-  both the resolved version and the cask pin, which is the signature of a skip
-  that raced the feed's own publish.
+- `resolved_version` / `cask_version` / `feed_version` — the three versions the
+  retry plan compares: a skipped report is worth re-running when the feed is
+  newer than both the resolved version and the cask pin, the signature of a
+  skip that raced the feed's own publish.
 
 A failure site writes a fragment (`{"code","message","stage"?,"evidence"?}`)
 before exiting; the report job uploads the fragments and prefers the site's
 verdict over its job-level fallback. An absent record means the run died before
 the report job could start (runner loss, cancellation), which is
-infrastructure, not a verdict.
+infrastructure, not a verdict — and the one failure `retry.yml` re-runs without
+a classification. The retry budget is `MAX_ATTEMPTS` in `lib/pipeline/retry.ts`
+(initial run plus one re-run), and a record's `retry_after_seconds` paces the
+next attempt, capped.
 
 ## Verification model
 
@@ -332,8 +342,8 @@ on 6.x and `@types/bun` on the CI's Bun minor, both via `renovate.json` rules.
 dependencies): dpkg ordering, deb822/InRelease parsing and freshness, HTTP
 timeout/cap/atomic write, guards and metadata validation, descriptor validation,
 cask read/update/consistency, the gate table, updater neutralization, desktop
-rendering, run records, the oracle parsers, and the descriptor v2/manifest
-schema contracts.
+rendering, run records, retry plans, the oracle parsers, and the descriptor
+v2/manifest schema contracts.
 
 `bun run typecheck` runs `tsc --noEmit` (strict). `bun run style` runs
 `brew style edgarcnp/tap` on its own — RuboCop plus shellcheck, shfmt and

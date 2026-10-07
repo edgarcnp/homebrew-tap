@@ -1,10 +1,12 @@
 // The run record: the tap's machine-readable signal to the API that dispatches
-// builds. One JSON document per app per run, delivered twice: the workflow
-// POSTs the full record to the API's `/v1/homebrew/tap/events` endpoint and
-// uploads a world-readable copy as the `run-report-<app>` artifact with the
-// dispatch correlation id redacted (see redactReport). Retry policy lives in
-// the API; this module only classifies, so a failure site cannot emit prose
-// without a code the API can act on.
+// builds, and the input the CI's own retry decision reads. One JSON document
+// per app per run, delivered twice: the workflow POSTs the full record to the
+// API's `/v1/homebrew/tap/events` endpoint and uploads a world-readable copy
+// as the `run-report-<app>` artifact with the dispatch correlation id redacted
+// (see redactReport). The API dispatches at most once per version, so retries
+// belong to the CI: this module classifies, and retry.ts turns the verdict
+// into a re-run or an issue, so a failure site cannot emit prose without a
+// code the retry plan can act on.
 //
 // A failure site writes a *fragment* first (writeFailureFragment), which the
 // workflow uploads and the report job merges into the record: code, message,
@@ -28,19 +30,19 @@ export type FailureClass = "transient" | "permanent" | "config" | "infra";
 export interface FailureCodeSpec {
   readonly class: FailureClass;
   readonly retryable: boolean;
-  // Present only when the API should wait before re-dispatching.
+  // Present only when the CI retry should wait before re-running.
   readonly retryAfterSeconds?: number;
 }
 
-// The classification contract. The API reads these verdicts straight off the
-// record, so a new failure site must land here (with its verdict) rather than
-// inventing a code the workflow alone knows. `UNCLASSIFIED` is the deliberate
-// fallback: unknown failures retry under the API's global budget instead of
-// being silently dropped.
+// The classification contract. The retry plan reads these verdicts straight off
+// the record, so a new failure site must land here (with its verdict) rather
+// than inventing a code the workflow alone knows. `UNCLASSIFIED` is the
+// deliberate fallback: unknown failures are re-run within the CI's attempt cap
+// instead of being silently dropped.
 //
 // Evidence conventions: a transient upstream failure reports what the transport
-// said (http_status, retry_after_seconds, reason, rate_limited), so the API can
-// wait out a rate limit instead of guessing.
+// said (http_status, retry_after_seconds, reason, rate_limited), so the retry
+// plan can wait out a rate limit instead of guessing.
 export const FAILURE_CODES = {
   UPSTREAM_UNAVAILABLE: { class: "transient", retryable: true },
   UPSTREAM_CONFLICT: { class: "transient", retryable: true, retryAfterSeconds: 60 },
@@ -78,9 +80,10 @@ export interface ReportInput {
   // and the API dedupes it instead of creating a second event.
   eventId: string;
   resolvedVersion?: string | null;
-  // The cask pin the gate compared against. Without it the API cannot tell a
-  // skip that raced a publish (worth re-dispatching) from one whose cask is
-  // already ahead of the oracle (re-dispatching changes nothing).
+  // The cask pin the gate compared against. Together with the resolved and
+  // feed versions it lets the retry plan tell a skip that raced a publish
+  // (worth re-running) from one whose cask is already ahead of the oracle
+  // (re-running changes nothing).
   caskVersion?: string | null;
   feedVersion?: string | null;
   evidence?: Record<string, string>;
