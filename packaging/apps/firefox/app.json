@@ -17,7 +17,7 @@
   "sourceOwner": "edgarcnp",
   "sourceDir": "packaging/apps/firefox",
   "buildCommand": "./build.sh",
-  "debloatArgs": "--add-common --prefer-nano ffmpeg-mini intel-media-driver-mini",
+  "debloatArgs": "--add-common --prefer-nano ffmpeg-mini intel-media-driver-mini gdk-pixbuf2-mini",
   "buildPackages": ["libcanberra", "libxss", "speech-dispatcher"],
   "architectures": ["amd64"],
   "binaryTargets": ["firefox"],

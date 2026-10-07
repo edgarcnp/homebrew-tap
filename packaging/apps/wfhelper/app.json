@@ -16,7 +16,7 @@
   "sourceOwner": "edgarcnp",
   "sourceDir": "packaging/apps/wfhelper",
   "buildCommand": "./build.sh",
-  "debloatArgs": "--add-common --prefer-nano ffmpeg-mini",
+  "debloatArgs": "--add-common --prefer-nano ffmpeg-mini gdk-pixbuf2-mini",
   "architectures": ["amd64"],
   "binaryTargets": ["wfhelper"],
   "oracle": {

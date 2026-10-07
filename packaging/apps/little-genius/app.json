@@ -16,7 +16,7 @@
   "sourceOwner": "edgarcnp",
   "sourceDir": "packaging/apps/little-genius",
   "buildCommand": "./build.sh",
-  "debloatArgs": "--add-common --prefer-nano webkit2gtk-4.1-mini",
+  "debloatArgs": "--add-common --prefer-nano webkit2gtk-4.1-mini gdk-pixbuf2-mini",
   "buildPackages": ["libayatana-appindicator"],
   "architectures": ["amd64"],
   "binaryTargets": ["little-genius", "lg-linux-compat"],

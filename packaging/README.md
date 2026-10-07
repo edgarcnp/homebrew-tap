@@ -288,7 +288,14 @@ non-FHS and old distros.
 - Pack-time-only libraries come from `buildPackages`: little-genius installs
   the webkit2gtk/GTK closure (+ X11 libs, mirroring upstream
   `webkit2gtk4-demo-appimage.sh`) plus `libayatana-appindicator`, then debloats
-  with `--add-common --prefer-nano webkit2gtk-4.1-mini`.
+  with `--add-common --prefer-nano webkit2gtk-4.1-mini gdk-pixbuf2-mini`.
+- Apps whose AppImage bundles the GTK stack (Electron, Firefox and WebKitGTK)
+  request the debloated `gdk-pixbuf2-mini` alongside `--add-common`: the
+  debloated `glycin-mini` asset is glycin-ng, which lags Arch's `gdk-pixbuf2`
+  (the 2.44.8 build calls glycin 2.2 API that glycin-ng lacks, and the packed
+  AppImage then fails the smoke gate with `undefined symbol:
+  gly_pixel_density_new`). The mini gdk-pixbuf is built without glycin and
+  decodes through its built-in loaders.
 
 `scripts/install-anylinux-tools.sh` fetches `quick-sharun` and
 `get-debloated-pkgs` from a URL addressed by a commit digest of

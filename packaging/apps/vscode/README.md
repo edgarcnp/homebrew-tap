@@ -19,6 +19,12 @@ applies.
   (e.g. `1.133.0`), not the build-epoch suffix (`1.133.0-1786487972`), which
   differs per architecture.
 - **Payload** — `deb-tree`: the `usr/share/code` tree is staged into `AppDir/bin`.
+- **Debloated GTK pairing** — `gdk-pixbuf2-mini` is requested alongside
+  `--add-common` on purpose. The debloated `glycin-mini` ships glycin-ng, which
+  lacks the glycin 2.2 symbols (`gly_pixel_density_new`) that Arch's current
+  `gdk-pixbuf2` calls; the debloated `gdk-pixbuf2-mini` is built without glycin
+  and uses its built-in loaders, so the pair cannot drift apart when Arch bumps
+  either side.
 
 ## Updater neutralization
 

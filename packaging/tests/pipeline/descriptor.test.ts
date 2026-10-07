@@ -217,7 +217,7 @@ describe("descriptor contents (regression against the previous per-app scripts)"
     assert.equal(descriptor.icon.size, "128x128");
     assert.equal(
       descriptor.debloatArgs,
-      "--add-common --prefer-nano ffmpeg-mini intel-media-driver-mini",
+      "--add-common --prefer-nano ffmpeg-mini intel-media-driver-mini gdk-pixbuf2-mini",
     );
     assert.deepEqual(descriptor.buildPackages, ["libcanberra", "libxss", "speech-dispatcher"]);
     // The update service endpoint lives in application.ini, firefox-bin and
@@ -1107,7 +1107,7 @@ describe("descriptor env and output lines", () => {
     assert.equal(env.get("TAG_PREFIX"), "little-genius-v");
     assert.equal(env.get("SOURCE_DIR"), "packaging/apps/little-genius");
     assert.equal(env.get("BUILD_COMMAND"), "./build.sh");
-    assert.equal(env.get("DEBLOAT_ARGS"), "--add-common --prefer-nano webkit2gtk-4.1-mini");
+    assert.equal(env.get("DEBLOAT_ARGS"), "--add-common --prefer-nano webkit2gtk-4.1-mini gdk-pixbuf2-mini");
     assert.equal(env.get("APP_ARCHITECTURES"), '["amd64"]');
     // The webkit closure and tray indicator are build-time-only packages.
     assert.equal(env.get("BUILD_PACKAGES"), "libayatana-appindicator");
