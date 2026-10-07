@@ -293,7 +293,7 @@ jobs:
       - name: Upload the failure code
         if: failure()
         continue-on-error: true
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: report-code-${{ inputs.app }}-detect
           path: report-code.json
@@ -403,7 +403,7 @@ jobs:
             printf '{"code":"ARTIFACT_MISSING","message":"the build produced no AppImage at %s"}\n' "${appimage}" > "${FBR_FAILURE_OUT}"
             exit 1
           fi
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ needs.detect.outputs.asset_prefix }}-${{ matrix.appimage_arch }}
           path: source/dist/${{ needs.detect.outputs.asset_prefix }}-${{ needs.detect.outputs.version }}-${{ matrix.appimage_arch }}.AppImage
@@ -418,7 +418,7 @@ jobs:
       - name: Upload the failure code
         if: failure()
         continue-on-error: true
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: report-code-${{ inputs.app }}-build-${{ matrix.architecture }}
           path: report-code.json
@@ -445,7 +445,7 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.2
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: ${{ needs.detect.outputs.asset_prefix }}-*
           merge-multiple: true
@@ -615,7 +615,7 @@ jobs:
       # per-job name. continue-on-error covers the normal case: nothing to
       # classify, or a failure the site itself did not recognize.
       - name: Download the failure codes
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: report-code-${{ inputs.app }}-*
           path: report-codes
@@ -737,7 +737,7 @@ jobs:
           fi
           bun packaging/bin/fbr.ts "${args[@]}"
       - name: Upload the run record
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: run-report-${{ inputs.app }}
           path: ${{ runner.temp }}/run-report-public.json
