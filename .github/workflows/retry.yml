@@ -64,6 +64,10 @@ jobs:
             | length
           ' run-artifacts.json)"
           echo "count=${count}" >> "${GITHUB_OUTPUT}"
+      # The reports are untrusted input from the triggering run: extract them
+      # under the runner's temp directory, never the workspace, so a poisoned
+      # artifact cannot overwrite checked-out files; fbr validates every
+      # record as data before the plan acts on it.
       - name: Download the run reports
         if: steps.artifacts.outputs.count != '0'
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -71,16 +75,17 @@ jobs:
           pattern: run-report-*
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ github.token }}
-          path: reports
+          path: ${{ runner.temp }}/run-reports
       - name: Plan the retry
         id: plan
         env:
           ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
           CONCLUSION: ${{ github.event.workflow_run.conclusion }}
         run: |
-          mkdir -p reports
+          mkdir -p "${RUNNER_TEMP}/run-reports"
           bun packaging/bin/fbr.ts retry-plan \
-            --reports-dir reports --attempt "${ATTEMPT}" --conclusion "${CONCLUSION}" \
+            --reports-dir "${RUNNER_TEMP}/run-reports" \
+            --attempt "${ATTEMPT}" --conclusion "${CONCLUSION}" \
             | tee retry-plan.json
           {
             echo "retry=$(jq -r '.retry' retry-plan.json)"
