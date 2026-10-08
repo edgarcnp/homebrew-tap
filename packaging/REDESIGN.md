@@ -12,7 +12,7 @@ behavior and the API event contract stay as they are.
 - **Goals** — cut pipeline complexity, make adding an app cheap, and cut build
   time and flakiness. The roster grows modestly (roughly a dozen apps), all
   built by repackaging upstream releases.
-- **Fixed** — GitHub-hosted runners and the Arch container; Bun/TypeScript for
+- **Fixed** — GitHub-hosted runners and the Arch container; Node/TypeScript for
   the toolchain (no runtime dependencies, no build step); GitHub Releases as the
   artifact store; the run-record contract (`schema: 1`,
   `POST /v1/homebrew/tap/events`, OIDC delivery).
@@ -144,7 +144,7 @@ does not change).
     "image": "ghcr.io/edgarcnp/fbr-builder-base:<tag>@sha256:...",
     "quick_sharun": "<commit>",
     "appimagetool": "0.5.2",
-    "bun": "1.4.2"
+    "node": "24.17.0"
   },
   "build": { "commit": "<tap sha>", "started_at": "...", "finished_at": "...", "smoke": "passed" }
 }
@@ -195,7 +195,7 @@ published by a workflow on changes and on a weekly schedule.
   from each descriptor's `buildPackages` (little-genius's webkit2gtk/GTK
   closure and `libayatana-appindicator`).
 - Baked: pacman packages, `quick-sharun`/`get-debloated-pkgs` (via the existing
-  pinned `install-anylinux-tools.sh`), `appimagetool`, Bun.
+  pinned `install-anylinux-tools.sh`), `appimagetool`, Node.
 - Not baked: the orchestrator itself — it always comes from the checkout, so it
   can never lag the commit under test.
 - Pinned by tag+digest in `packaging/builder/pins.json`, which the build job
@@ -262,7 +262,7 @@ pipeline is still the only build path, so phases 2–5 are not started.
 
 | Phase | Lands | Exit check |
 | --- | --- | --- |
-| 0 Contracts | `app.schema.json`, manifest schema, descriptor v2 example, schema tests. No behavior change. | `bun test`, `bun run typecheck`; docs mark this file as the plan of record. |
+| 0 Contracts | `app.schema.json`, manifest schema, descriptor v2 example, schema tests. No behavior change. | `pnpm test`, `pnpm run typecheck`; docs mark this file as the plan of record. |
 | 1 Builder image | `packaging/builder/Dockerfile`, publish workflow, build jobs switch container. | A dispatch builds with identical facts; no pacman/tool downloads in the job log; digest pinned. |
 | 2 Descriptor v2 + plan/report | Migrate the six descriptors (`sourceRepo` → `releaseRepo`, add the `homebrew` block, drop the rest), strict loader, `fbr plan`, `fbr report compose`, `fbr report deliver`, `fbr check` (schema + doctor). The source checkout goes; the build runs from the tap checkout. | Real dispatches for one skip, one build and one repair match today's plan outputs and record key set; delivery semantics covered by a local HTTP fixture; the old shell build still runs from the tap path. |
 | 3 Build stages | Port resolve → extract → stage → neutralize → render/icon → pack → verify, simplest first. Dual-run old and new per app and compare tree digests and manifest facts; switch an app's CI path once it passes, leaving the shell pipeline untouched until the last app. | Every app dual-runs green (facts match, smoke passes) and builds through the new program; the shell pipeline has no remaining CI callers. |

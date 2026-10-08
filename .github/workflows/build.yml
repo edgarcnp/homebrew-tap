@@ -60,9 +60,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          bun-version: 1.4.2
+          node-version: 24.17.0
       # The API binds a dispatched attempt to this run from the `accepted`
       # report, so it goes out before any planning can fail. A manual run has
       # no request id and stays out of the API's inbox.
@@ -76,7 +76,7 @@ jobs:
         run: |
           # The step carries the API's correlation id; never trace it.
           set +x
-          bun packaging/bin/fbr.ts report \
+          node packaging/bin/fbr.ts report \
             --app "${REQUESTED_APP}" \
             --phase accepted \
             --stage plan \
@@ -96,7 +96,7 @@ jobs:
         env:
           REQUESTED: ${{ inputs.app }}
         run: |
-          all="$(bun packaging/bin/fbr.ts list-apps --json)"
+          all="$(node packaging/bin/fbr.ts list-apps --json)"
           [[ -n "${REQUESTED}" ]] || { echo "::error::no app requested" >&2; exit 1; }
           if [[ "${REQUESTED}" = "all" ]]; then
             echo "apps=${all}" >> "${GITHUB_OUTPUT}"
@@ -107,7 +107,7 @@ jobs:
             # id === cask), so resolve-app is one lookup and fails loudly when
             # the name matches no app.
             resolved_rc=0
-            resolved="$(bun packaging/bin/fbr.ts resolve-app --name "${REQUESTED}")" || resolved_rc=$?
+            resolved="$(node packaging/bin/fbr.ts resolve-app --name "${REQUESTED}")" || resolved_rc=$?
             if [ "${resolved_rc}" -ne 0 ]; then
               # A namable request gets a classified fragment; the run-record
               # step below turns it into UNKNOWN_APP, so the retry workflow
@@ -140,7 +140,7 @@ jobs:
           set +x
           code="$(jq -r '.code // empty' report-code.json 2>/dev/null || true)"
           message="$(jq -r '.message // empty' report-code.json 2>/dev/null || true)"
-          if bun packaging/bin/fbr.ts report \
+          if node packaging/bin/fbr.ts report \
             --app "${REQUESTED}" \
             --phase failed \
             --stage plan \

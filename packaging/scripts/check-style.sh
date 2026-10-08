@@ -20,20 +20,20 @@ echo "shellcheck: OK"
 echo "=== packaging dev dependencies ==="
 if [[ ! -d node_modules ]]
 then
-  bun install --frozen-lockfile --ignore-scripts
+  pnpm install --frozen-lockfile --ignore-scripts
 fi
 echo "dev dependencies: OK"
 
 echo "=== typecheck ==="
-bun run typecheck
+pnpm run typecheck
 echo "typecheck: OK"
 
 echo "=== unit tests ==="
-bun test
+pnpm test
 echo "unit tests: OK"
 
 echo "=== cask vs app descriptor ==="
-bun packaging/bin/fbr.ts cask --action check
+node packaging/bin/fbr.ts cask --action check
 echo "cask check: OK"
 
 echo "=== brew style ==="

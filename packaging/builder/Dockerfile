@@ -20,7 +20,7 @@
 #   - the rest is download, extract, verify and packing tooling.
 #
 # Renovate owns the pins: the FROM digest (docker manager), the appimagetool
-# version in the URL below (regex manager), the Bun ARG (regex manager), and
+# version in the URL below (regex manager), the Node ARG (regex manager), and
 # packaging/scripts/install-anylinux-tools.sh (git-refs manager).
 #
 # Build from the repository root:
@@ -33,8 +33,8 @@
 # for a "minimal" image without re-validating the pkgforge tools against it.
 FROM ghcr.io/pkgforge-dev/archlinux:v2026.09.05@sha256:b2507f1964270cab3cc190aa8df858521f6a7e45e969146a012877891d5dfc9b
 
-# renovate: datasource=npm depName=bun
-ARG BUN_VERSION=1.4.2
+# renovate: datasource=node-version depName=node
+ARG NODE_VERSION=24.17.0
 
 RUN pacman-key --init \
  && pacman -Syy --noconfirm archlinux-keyring \
@@ -64,12 +64,12 @@ RUN curl -fL -o /usr/local/bin/appimagetool \
       "https://github.com/pkgforge-dev/appimagetool/releases/download/0.5.2/appimagetool-x86_64-linux" \
  && chmod 0755 /usr/local/bin/appimagetool
 
-# Bun, the orchestrator runtime, pinned to the same version CI sets up. The
-# versioned release archive is used instead of bun.sh/install, whose body
-# changes in place; x64 is the builder image's platform.
-RUN curl -fsSL -o /tmp/bun.zip \
-      "https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}/bun-linux-x64.zip" \
- && unzip -q /tmp/bun.zip -d /tmp/bun \
- && install -m 0755 /tmp/bun/bun-linux-x64/bun /usr/local/bin/bun \
- && rm -rf /tmp/bun /tmp/bun.zip \
- && /usr/local/bin/bun --version
+# Node.js, the orchestrator runtime, pinned to the same version CI sets up.
+# The official static build from nodejs.org is used instead of pacman's rolling
+# nodejs, and a versioned directory instead of a moving URL; x64 is the
+# builder image's platform.
+RUN curl -fsSL -o /tmp/node.tar.gz \
+      "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.gz" \
+ && tar -xzf /tmp/node.tar.gz -C /usr/local --strip-components=1 \
+ && rm /tmp/node.tar.gz \
+ && /usr/local/bin/node --version

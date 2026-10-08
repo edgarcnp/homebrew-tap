@@ -62,16 +62,16 @@
       "depNameTemplate": "pkgforge-dev/appimagetool"
     },
     {
-      "description": "Bun version baked into the builder Dockerfile, kept in step with the runtime pin",
+      "description": "Node version baked into the builder Dockerfile, kept in step with the runtime pin",
       "customType": "regex",
       "managerFilePatterns": [
         "/^packaging\\/builder\\/Dockerfile$/"
       ],
       "matchStrings": [
-        "ARG BUN_VERSION=(?<currentValue>\\d+\\.\\d+\\.\\d+)"
+        "ARG NODE_VERSION=(?<currentValue>\\d+\\.\\d+\\.\\d+)"
       ],
-      "datasourceTemplate": "npm",
-      "depNameTemplate": "bun"
+      "datasourceTemplate": "node-version",
+      "depNameTemplate": "node"
     },
     {
       "description": "quick-sharun and get-debloated-pkgs, pinned to a commit of Anylinux-AppImages",
@@ -139,14 +139,14 @@
       "allowedVersions": ">=6.0.3 <7"
     },
     {
-      "description": "@types/bun describes the Bun the CI runs, so it moves with the bun runtime rule, not ahead of it",
+      "description": "@types/node describes the Node the CI runs, so it stays on the runtime's major line",
       "matchDatasources": [
         "npm"
       ],
       "matchPackageNames": [
-        "@types/bun"
+        "@types/node"
       ],
-      "allowedVersions": ">=1.4 <1.5"
+      "allowedVersions": ">=24 <25"
     },
     {
       "description": "Actions are SHA-pinned; one PR per digest bump keeps the review small",
@@ -186,14 +186,28 @@
       "groupName": "GitHub Actions"
     },
     {
-      "description": "The Bun pin gates engines, @types/bun and the toolchain runtime, so it is reviewed on its own",
+      "description": "The Node runtime pins (engines, setup-node, the builder Dockerfile) and @types/node are reviewed on their own",
+      "matchDatasources": [
+        "node-version",
+        "github-releases",
+        "npm"
+      ],
+      "matchPackageNames": [
+        "node",
+        "actions/node-versions",
+        "@types/node"
+      ],
+      "groupName": "node runtime"
+    },
+    {
+      "description": "pnpm is pinned in packageManager and the workflow action, so both move in one PR",
       "matchDatasources": [
         "npm"
       ],
       "matchPackageNames": [
-        "bun"
+        "pnpm"
       ],
-      "groupName": "bun runtime"
+      "groupName": "pnpm"
     },
     {
       "description": "The builder image is pinned by the builder workflow's pin job, not Renovate",

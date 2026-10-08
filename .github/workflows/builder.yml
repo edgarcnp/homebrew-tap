@@ -1,7 +1,7 @@
 name: Builder image
 
 # Builds the pinned Arch image every AppImage build job runs in: the shared
-# base toolchain (pacman packages, quick-sharun, appimagetool, Bun) baked once
+# base toolchain (pacman packages, quick-sharun, appimagetool, Node) baked once
 # instead of reinstalled per run. Per-app pack-time packages stay in the
 # descriptor's buildPackages.
 #
@@ -67,10 +67,10 @@ jobs:
         run: |
           # Single-quoted on purpose: the script runs inside the container.
           docker run --rm "${IMAGE_REF}" bash -euc '
-            for tool in quick-sharun get-debloated-pkgs appimagetool bun; do
+            for tool in quick-sharun get-debloated-pkgs appimagetool node; do
               command -v "${tool}"
             done
-            bun --version
+            node --version
             pacman -Qq dpkg gnupg jq patchelf >/dev/null
           '
       - name: Log in to GHCR

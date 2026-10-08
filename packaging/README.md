@@ -4,8 +4,9 @@ Build tooling for this tap's AppImage casks. One pipeline serves every app:
 what differs between apps is **data** (`apps/<app>/app.json`), not a forked
 script.
 
-The TypeScript runs directly on Bun — no build step, no runtime dependencies.
-`typescript` and `@types/bun` are dev-only (for `tsc --noEmit` and editors).
+The TypeScript runs directly on Node — native type stripping, no build step,
+no runtime dependencies. `typescript` and `@types/node` are dev-only (for
+`tsc --noEmit` and editors).
 
 The redesign of this toolchain is [`REDESIGN.md`](REDESIGN.md): phases 0–1
 (the v2 and manifest schemas, the pinned builder image) are live, while the
@@ -33,7 +34,7 @@ packaging/
   lib/schema/              JSON Schema subset validator (descriptor v2, manifest)
   lib/shell/               the bash pipeline
   schema/                  descriptor v2 and manifest JSON Schemas, with examples
-  tests/                   unit suite, mirrors lib/  (bun test)
+  tests/                   unit suite, mirrors lib/  (node --test)
   scripts/                 repo tooling (tool installer, local style gate)
 ```
 
@@ -333,7 +334,7 @@ TARGET_ARCH=amd64 PACKAGE_VERSION=1.137.0 packaging/apps/vscode/build.sh
 `PACKAGE_VERSION` is optional: unset, it comes from the resolved metadata; set,
 the build fails if the resolved version differs (CI always sets it). Requires an
 Arch Linux system — the builder image (`packaging/builder/Dockerfile`) is the
-supported one — plus `bun` ≥ 1.4, `jq`, the app's own tooling (`dpkg-deb`,
+supported one — plus `node` ≥ 24.17, `jq`, the app's own tooling (`dpkg-deb`,
 `gpg`/`gpgv`), `quick-sharun` in `PATH` and `APPIMAGETOOL` pointing at the
 uruntime `appimagetool`. Output lands in `<tap>/dist/`.
 
@@ -344,13 +345,14 @@ grouped rules in `renovate.json` for routine bumps:
 
 | Dependency | Declared in | Manager |
 | --- | --- | --- |
-| `typescript`, `@types/bun` | `package.json` | npm + bun (exact pins, no `^`) |
+| `typescript`, `@types/node` | `package.json` | npm (exact pins, no `^`) |
 | GitHub Actions | workflow `uses:` | github-actions (SHA re-pinned) |
 | `Homebrew/actions` | workflow `uses:` (SHA plus CalVer comment) | regex custom manager (the built-in manager truncates the four-part CalVer tag) |
 | Container images | workflow `container:`, including the nested matrix image, and the builder Dockerfile's `FROM` | docker (regex for the matrix) |
 | Builder image (`fbr-builder-base`) | `packaging/builder/pins.json` | pinned by the builder workflow's `pin` job, not Renovate |
 | Runner labels | `runs-on:`, and the labels the build matrix bakes in | github-runners (regex for the matrix) |
-| Bun version | `bun-version:`, the builder Dockerfile | uses-with, regex custom manager |
+| Node version | `engines.node`, `node-version:`, the builder Dockerfile | npm, github-actions, regex custom manager |
+| pnpm version | `packageManager`, `version:` in pnpm/action-setup | npm, github-actions |
 | actionlint, pkgforge `appimagetool` | workflow (actionlint), builder Dockerfile (appimagetool) | regex custom managers |
 | `quick-sharun`, `get-debloated-pkgs` | `install-anylinux-tools.sh` | git-refs custom manager |
 
@@ -362,18 +364,19 @@ pkgforge `appimagetool` are downloaded from a URL addressed by the version
 Renovate bumps, so a version PR needs no hand-edited pin — both trust whatever
 GitHub serves over HTTPS (pkgforge publishes only b3sum sidecars, served from
 the same release as the binary, so they would add no trust). `typescript` stays
-on 6.x and `@types/bun` on the CI's Bun minor, both via `renovate.json` rules.
+on 6.x and `@types/node` on the runtime's major line, both via `renovate.json`
+rules.
 
 ## Tests and gates
 
-`bun test` runs the unit suite (Bun's runner over `node:test`; no test
-dependencies): dpkg ordering, deb822/InRelease parsing and freshness, HTTP
+`pnpm test` runs the unit suite (Node's built-in runner over `node:test`; no
+test dependencies): dpkg ordering, deb822/InRelease parsing and freshness, HTTP
 timeout/cap/atomic write, guards and metadata validation, descriptor validation,
 cask read/update/consistency, the gate table, updater neutralization, desktop
 rendering, run records, retry plans, the oracle parsers, and the descriptor
 v2/manifest schema contracts.
 
-`bun run typecheck` runs `tsc --noEmit` (strict). `bun run style` runs
+`pnpm run typecheck` runs `tsc --noEmit` (strict). `pnpm run style` runs
 `brew style edgarcnp/tap` on its own — RuboCop plus shellcheck, shfmt and
 actionlint — the fast subset to run before every commit and push.
 `scripts/check-style.sh` runs the full local gate — shellcheck, typecheck,

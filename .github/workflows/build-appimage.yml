@@ -61,9 +61,9 @@ jobs:
         with:
           path: tap
           persist-credentials: false
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          bun-version: 1.4.2
+          node-version: 24.17.0
       - name: Load app descriptor
         id: app
         env:
@@ -71,8 +71,8 @@ jobs:
         run: |
           # descriptor-env emits the pipeline's variables: uppercase to
           # $GITHUB_ENV, lowercase to $GITHUB_OUTPUT (which cannot read env).
-          bun tap/packaging/bin/fbr.ts descriptor-env --app "${APP}" >> "${GITHUB_ENV}"
-          bun tap/packaging/bin/fbr.ts descriptor-env --app "${APP}" --format output >> "${GITHUB_OUTPUT}"
+          node tap/packaging/bin/fbr.ts descriptor-env --app "${APP}" >> "${GITHUB_ENV}"
+          node tap/packaging/bin/fbr.ts descriptor-env --app "${APP}" --format output >> "${GITHUB_OUTPUT}"
       - name: Select the builder image
         id: builder
         run: |
@@ -130,7 +130,7 @@ jobs:
           REQUESTED_VERSION: ${{ inputs.requested_version }}
         run: |
           # Only the apt resolver verifies a signed index with gpg.
-          if [[ "$(bun source/packaging/bin/fbr.ts descriptor --app "${APP_ID}" --field oracle.kind)" == "apt" ]]; then
+          if [[ "$(node source/packaging/bin/fbr.ts descriptor --app "${APP_ID}" --field oracle.kind)" == "apt" ]]; then
             sudo apt-get update
             sudo apt-get install -y gnupg
           fi
@@ -152,7 +152,7 @@ jobs:
             # --failure-out: fbr classifies its own failure (a transient upstream
             # outage, a guard violation, a checksum mismatch) and writes the
             # fragment, so this loop never has to guess from an exit code.
-            bun packaging/bin/fbr.ts resolve \
+            node packaging/bin/fbr.ts resolve \
               --app "${APP_ID}" --arch "${arch}" --metadata-only \
               --output-dir upstream --metadata "${file}" \
               --failure-out "${GITHUB_WORKSPACE}/report-code.json" || resolve_rc=$?
@@ -205,7 +205,7 @@ jobs:
 
           feed_version=""
           feed_rc=0
-          feed_report="$(bun "${GITHUB_WORKSPACE}/tap/packaging/bin/fbr.ts" feed-version \
+          feed_report="$(node "${GITHUB_WORKSPACE}/tap/packaging/bin/fbr.ts" feed-version \
             --app "${APP_ID}" --tap "${GITHUB_WORKSPACE}/tap")" || feed_rc=$?
           if [ "${feed_rc}" -eq 2 ]; then
             # A usage error is our own bug: fail rather than gate blind.
@@ -231,7 +231,7 @@ jobs:
           # The gate decision is a unit-tested pure function; the rest of this
           # step gathers its inputs (cask pin, release existence, and whether
           # the published assets still match the cask pin).
-          cask_json="$(bun tap/packaging/bin/fbr.ts cask --action read --app "${APP_ID}" --tap "${GITHUB_WORKSPACE}/tap")"
+          cask_json="$(node tap/packaging/bin/fbr.ts cask --action read --app "${APP_ID}" --tap "${GITHUB_WORKSPACE}/tap")"
           cask_version="$(jq -r '.version' <<<"${cask_json}")"
 
           # Distinguish "no such release" (404) from a failed lookup. Reading a
@@ -266,7 +266,7 @@ jobs:
               --pattern "${ASSET_PREFIX}-*.AppImage" \
               --dir "${tmp_dir}" --clobber
             then
-              matches="$(bun tap/packaging/bin/fbr.ts release-check \
+              matches="$(node tap/packaging/bin/fbr.ts release-check \
                 --app "${APP_ID}" --tap "${GITHUB_WORKSPACE}/tap" --asset-dir "${tmp_dir}")"
             else
               echo "failed to download release ${TAG_PREFIX}${version}" >&2
@@ -279,7 +279,7 @@ jobs:
             # branch; re-read the cask from origin/main before deciding.
             if git -C tap fetch --quiet origin main; then
               git -C tap reset --hard --quiet FETCH_HEAD
-              cask_version="$(bun tap/packaging/bin/fbr.ts cask --action read --app "${APP_ID}" --tap "${GITHUB_WORKSPACE}/tap" | jq -r '.version')"
+              cask_version="$(node tap/packaging/bin/fbr.ts cask --action read --app "${APP_ID}" --tap "${GITHUB_WORKSPACE}/tap" | jq -r '.version')"
             fi
           fi
 
@@ -295,7 +295,7 @@ jobs:
           if [[ -n "${matches}" ]]; then
             gate_args+=(--release-matches-cask "${matches}")
           fi
-          bun tap/packaging/bin/fbr.ts gate "${gate_args[@]}" | tee -a "${GITHUB_OUTPUT}"
+          node tap/packaging/bin/fbr.ts gate "${gate_args[@]}" | tee -a "${GITHUB_OUTPUT}"
 
       # A step above classified its own failure in report-code.json; publish it
       # so the report job can prefer the precise verdict over the stage fallback.
@@ -340,7 +340,7 @@ jobs:
           APP: ${{ inputs.app }}
         run: |
           # The tap is the source of truth for the build flags.
-          bun "${GITHUB_WORKSPACE}/tap/packaging/bin/fbr.ts" descriptor-env --app "${APP}" >> "${GITHUB_ENV}"
+          node "${GITHUB_WORKSPACE}/tap/packaging/bin/fbr.ts" descriptor-env --app "${APP}" >> "${GITHUB_ENV}"
       - name: Upgrade the container
         run: |
           # The pinned builder image freezes its pacman database at image
@@ -452,9 +452,9 @@ jobs:
         with:
           path: tap
           persist-credentials: false
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          bun-version: 1.4.2
+          node-version: 24.17.0
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: ${{ needs.detect.outputs.asset_prefix }}-*
@@ -474,7 +474,7 @@ jobs:
           if [ -n "${UPSTREAM_SHA_ARM64}" ]; then
             upstream_args+=(--upstream "arm64=${UPSTREAM_SHA_ARM64}=${UPSTREAM_URL_ARM64}")
           fi
-          bun tap/packaging/bin/fbr.ts release-notes \
+          node tap/packaging/bin/fbr.ts release-notes \
             --app "${APP_ID}" \
             --asset-dir assets \
             "${upstream_args[@]}" \
@@ -521,7 +521,7 @@ jobs:
             --jq '.[].tagName')"
           mapfile -t tag_list <<< "${tags}"
 
-          stale="$(bun tap/packaging/bin/fbr.ts release-prune \
+          stale="$(node tap/packaging/bin/fbr.ts release-prune \
             --prefix "${TAG_PREFIX}" --keep 3 "${tag_list[@]}")"
           if [ -z "${stale}" ]; then
             echo "retaining all releases; nothing stale"
@@ -585,9 +585,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          bun-version: 1.4.2
+          node-version: 24.17.0
       - name: Pin cask to published release
         uses: ./.github/actions/update-cask
         with:
@@ -619,9 +619,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          bun-version: 1.4.2
+          node-version: 24.17.0
       # Failure sites that classified themselves upload report-code.json under a
       # per-job name. continue-on-error covers the normal case: nothing to
       # classify, or a failure the site itself did not recognize.
@@ -759,7 +759,7 @@ jobs:
           if [[ -n "${code}" && ${#fragment_evidence[@]} -gt 0 ]]; then
             args+=("${fragment_evidence[@]}")
           fi
-          bun packaging/bin/fbr.ts "${args[@]}"
+          node packaging/bin/fbr.ts "${args[@]}"
       - name: Upload the run record
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

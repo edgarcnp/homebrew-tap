@@ -23,9 +23,9 @@ is **data** (`packaging/apps/<app>/app.json`), never a forked script.
   `assetPrefix`, and `Casks/<app>.rb`.
 - Every cask is amd64-only: one `x86_64` AppImage each, and
   `depends_on arch: :x86_64` refuses the install on arm64 up front.
-- TypeScript runs directly on Bun — no build step, no runtime dependencies.
-  `typescript` and `@types/bun` are dev-only; adding a dependency is a decision,
-  not a convenience.
+- TypeScript runs directly on Node — native type stripping, no build step, no
+  runtime dependencies. `typescript` and `@types/node` are dev-only; adding a
+  dependency is a decision, not a convenience.
 - `packaging/lib/` is a library with no import-time side effects;
   `packaging/bin/fbr.ts` is the only entry point and `lib/cli.ts` composes it.
 - Cask versions and checksums are produced by this pipeline, never by hand.
@@ -47,9 +47,9 @@ is **data** (`packaging/apps/<app>/app.json`), never a forked script.
 
 ## Prerequisites
 
-- `bun` 1.4 (the version CI pins), `shellcheck`, and a Homebrew install for
-  `brew style` and `brew audit`.
-- JS dev dependencies: `bun install --frozen-lockfile --ignore-scripts`.
+- `node` 24.17 and `pnpm` 12.10 (the versions CI pins), `shellcheck`, and a
+  Homebrew install for `brew style` and `brew audit`.
+- JS dev dependencies: `pnpm install --frozen-lockfile --ignore-scripts`.
 - A *local AppImage build* additionally needs an Arch Linux system or the
   pkgforge container, plus `jq`, `dpkg-deb`, `gpg`/`gpgv`, `quick-sharun` on
   `PATH` and `APPIMAGETOOL` pointing at the uruntime `appimagetool`. See "Local
@@ -62,11 +62,11 @@ Run these before committing. CI runs the same set on every PR
 failure to CI.
 
 ```sh
-bun install --frozen-lockfile --ignore-scripts   # once
-bun run typecheck                                # tsc --noEmit, strict
-bun test                                         # unit suite
-bun packaging/bin/fbr.ts cask --action check     # each cask matches its descriptor
-bun run style                                    # brew style: rubocop, shellcheck, shfmt, actionlint
+pnpm install --frozen-lockfile --ignore-scripts  # once
+pnpm run typecheck                               # tsc --noEmit, strict
+pnpm test                                        # unit suite
+node packaging/bin/fbr.ts cask --action check    # each cask matches its descriptor
+pnpm run style                                   # brew style: rubocop, shellcheck, shfmt, actionlint
 packaging/scripts/check-style.sh                 # everything above plus brew audit per cask
 ```
 
@@ -94,10 +94,10 @@ memory or habit.
 
 - Strict `tsc --noEmit`; the CLI rejects unknown or duplicate flags with exit 2
   rather than ignoring them.
-- Tests use Bun's built-in runner, live in `packaging/tests/` beside the group
-  they cover, and must stay deterministic: the HTTP suites bind a local
-  `127.0.0.1` server and every other URL in the tests is a string fixture. Do
-  not add a test that reaches the real network.
+- Tests use Node's built-in runner (`node --test`), live in `packaging/tests/`
+  beside the group they cover, and must stay deterministic: the HTTP suites
+  bind a local `127.0.0.1` server and every other URL in the tests is a string
+  fixture. Do not add a test that reaches the real network.
 - Cover the failure path, not only the happy path. Classified failures exit 3
   (upstream unavailable), 4 (guard), 5 (checksum), 6 (updater residue) and
   write a `--failure-out` fragment; everything else exits 1 / UNCLASSIFIED. A
@@ -124,7 +124,7 @@ memory or habit.
 - **CI pins** — workflow `uses:` SHAs, container digests, the actionlint and
   `appimagetool` versions, and the digests in `install-anylinux-tools.sh` are
   Renovate's. Do not re-pin or tidy them.
-- **`bun.lock`** — changes only alongside a deliberate dependency change.
+- **`pnpm-lock.yaml`** — changes only alongside a deliberate dependency change.
 - **Run-record delivery over OIDC** — a dispatched run posts `accepted` (from
   the `plan` job in `build.yml`), then one final `succeeded`/`failed`/`skipped`
   (from the `report` job in `build-appimage.yml`), to

@@ -110,7 +110,7 @@
         "image",
         "quick_sharun",
         "appimagetool",
-        "bun"
+        "node"
       ],
       "properties": {
         "image": {
@@ -125,7 +125,7 @@
           "type": "string",
           "minLength": 1
         },
-        "bun": {
+        "node": {
           "type": "string",
           "minLength": 1
         }
