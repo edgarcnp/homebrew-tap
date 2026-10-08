@@ -62,7 +62,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 24.17.0
+          node-version: 24.21.0
       # The API binds a dispatched attempt to this run from the `accepted`
       # report, so it goes out before any planning can fail. A manual run has
       # no request id and stays out of the API's inbox.
