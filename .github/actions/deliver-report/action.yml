@@ -1,0 +1,118 @@
+name: Deliver a run report to the API
+description: >-
+  POST one run report to the API's tap-events endpoint, authenticated with a
+  GitHub OIDC token (audience api.edgarcnp.dev) fetched fresh for every attempt.
+  Best-effort by design: a permanent rejection is logged and the step succeeds,
+  and a retryable failure is retried with the same body, so the event_id stays
+  stable and the API's inbox dedupes it.
+
+inputs:
+  body:
+    description: Path to the JSON report body to deliver
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Deliver the report
+      shell: bash
+      env:
+        REPORT_BODY: ${{ inputs.body }}
+        EVENTS_URL: https://api.edgarcnp.dev/v1/homebrew/tap/events
+      run: |
+        set -euo pipefail
+        # The workflow's default -x would trace the JWT into the log, so
+        # xtrace is off before the first read of the token.
+        set +x
+        if [[ ! -f "${REPORT_BODY}" ]]; then
+          echo "::warning::no report to deliver at ${REPORT_BODY}"
+          exit 0
+        fi
+        if [[ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" || -z "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]]; then
+          echo "::warning::no OIDC request endpoint; skipping delivery"
+          exit 0
+        fi
+        headers="${RUNNER_TEMP}/delivery-headers.txt"
+        body="${RUNNER_TEMP}/delivery-body.txt"
+        # A rejected report must name which layer answered: the API edge adds
+        # server, cf-ray and cf-mitigated, the API does not. The excerpt is
+        # bounded to 512 bytes and flattened onto one line.
+        header_value() {
+          tr -d '\r' <"${headers}" 2>/dev/null \
+            | awk -F: -v name="$1" 'tolower($1) == name { sub(/^[^:]*:[ ]*/, ""); value=$0 } END { print value }' \
+            || true
+        }
+        log_rejection() {
+          local excerpt
+          excerpt="$(head -c 512 "${body}" 2>/dev/null \
+            | tr '\r\n\t' ' ' \
+            | LC_ALL=C tr -c '[:print:]' '?' || true)"
+          echo "API response body (first 512 bytes): ${excerpt}"
+          echo "API response headers: server=$(header_value server) cf-ray=$(header_value cf-ray) cf-mitigated=$(header_value cf-mitigated) content-type=$(header_value content-type)"
+        }
+        # Three attempts total, each with a fresh OIDC token: a token may
+        # deliver exactly one body, and an iat older than 10 minutes is
+        # rejected. The body file is unchanged across attempts, so the same
+        # event_id is re-sent and the inbox dedupes.
+        for attempt in 1 2 3; do
+          id_token="$(
+            curl --fail --silent --show-error --max-time 10 \
+              -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+              "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=api.edgarcnp.dev" \
+              | jq -r '.value'
+          )" || id_token=""
+          if [[ -z "${id_token}" || "${id_token}" == "null" ]]; then
+            echo "::warning::could not obtain an OIDC token; skipping delivery"
+            exit 0
+          fi
+          : >"${headers}"
+          : >"${body}"
+          status="$(curl --silent --show-error --max-time 10 --output "${body}" \
+            --dump-header "${headers}" --write-out '%{http_code}' \
+            -X POST "${EVENTS_URL}" \
+            -H "Authorization: Bearer ${id_token}" \
+            -H "Content-Type: application/json" \
+            --data-binary "@${REPORT_BODY}" || true)"
+          # 000 is a transport failure with no response to describe.
+          if [[ "${status}" != 2?? && "${status}" != 000 ]]; then
+            log_rejection
+          fi
+          case "${status}" in
+            2??) echo "run report delivered (HTTP ${status})"; exit 0 ;;
+            401)
+              # Auth was rejected: a retry of the same token is forbidden, and
+              # a fresh token carries the same claims, so stop.
+              echo "::warning::API rejected the OIDC token (HTTP 401); not retrying"
+              exit 0
+              ;;
+            413|415|422)
+              echo "::warning::API rejected the run report (HTTP ${status}); the report needs fixing"
+              exit 0
+              ;;
+            429)
+              retry_after="$(
+                tr -d '\r' <"${headers}" \
+                  | awk -F: 'tolower($1) == "retry-after" { print $2 }' \
+                  | tail -n 1 \
+                  | tr -d '[:space:]'
+              )"
+              if [[ ! "${retry_after}" =~ ^[0-9]+$ ]]; then
+                # No parsable Retry-After: the API's usual window.
+                retry_after=60
+              fi
+              if ((retry_after > 120)); then
+                retry_after=120
+              fi
+              echo "::warning::API rate-limited the run report (HTTP 429); retrying in ${retry_after}s"
+              sleep "${retry_after}"
+              continue
+              ;;
+            4??)
+              echo "::warning::API rejected the run report (HTTP ${status}); not retrying"
+              exit 0
+              ;;
+          esac
+          # 000 and 5xx: the API or the transport failed; retry with backoff.
+          sleep $((attempt * 5))
+        done
+        echo "::warning::run report delivery failed; the API will reconcile the run"

@@ -1,11 +1,10 @@
 name: Retry builds
 
-# The API dispatches at most once per version, so a completed run's own record
-# decides what happens next: re-run the failed jobs of a failure the record
-# calls retryable, or the whole run of a skip whose recorded feed proves the
-# resolve lagged its own publish; leave a terminal failure for a human and open
-# an issue. Watches the two entry points: a manual Build AppImages run and the
-# API's Dispatch build.
+# A completed run's own record decides what happens next: re-run the failed
+# jobs of a failure the record calls retryable, or leave a terminal failure for
+# a human and open an issue. The API owns readiness and re-asks after a
+# not-ready skip, so a successful run needs no decision here. Watches the two
+# entry points: a manual Build AppImages run and the API's Dispatch build.
 
 on:
   workflow_run:
@@ -26,11 +25,11 @@ concurrency:
 
 jobs:
   retry:
-    # Only a run that can need a decision: a failure, a timeout, or a success
-    # (a raced skip concludes success). A cancelled run was deliberate or
+    # Only a failed or timed-out run can need a decision; the API owns the
+    # re-ask after a not-ready skip. A cancelled run was deliberate or
     # superseded.
     if: >-
-      contains(fromJSON('["failure", "timed_out", "success"]'),
+      contains(fromJSON('["failure", "timed_out"]'),
       github.event.workflow_run.conclusion)
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -95,8 +94,8 @@ jobs:
             echo "items=$(jq -r '.items | length' retry-plan.json)"
           } >> "${GITHUB_OUTPUT}"
       # The re-run the API no longer performs: the failed jobs for a failure,
-      # the whole run for a timed-out run or a raced skip (neither leaves a
-      # failed job to re-run).
+      # the whole run for a timed-out run (which leaves no failed job to
+      # re-run).
       - name: Re-run the run
         if: steps.plan.outputs.retry == 'true'
         env:
@@ -138,11 +137,7 @@ jobs:
           while IFS= read -r item
           do
             app="$(jq -r '.app' <<<"${item}")"
-            version="$(jq -r '
-              if .kind == "skip" then (.feed_version // .resolved_version // "unknown")
-              else (.resolved_version // "unknown")
-              end
-            ' <<<"${item}")"
+            version="$(jq -r '.resolved_version // "unknown"' <<<"${item}")"
             title="[build] ${app} ${version}: $(jq -r '.code' <<<"${item}")"
             if grep -Fxq -- "${title}" "${RUNNER_TEMP}/open-issue-titles.txt"; then
               echo "an open issue already covers: ${title}"
@@ -150,10 +145,9 @@ jobs:
             fi
             jq -r --arg url "${RUN_URL}" --arg reason "${REASON}" --arg attempt "${RUN_ATTEMPT}" '
               [
-                "The API dispatches each version once. The tap retry workflow left this run for a human.",
+                "The tap retry workflow left this failure for a human instead of re-running it.",
                 "",
                 "- **app**: `\(.app)`",
-                "- **status**: `\(.kind)`",
                 "- **code**: `\(.code)`",
                 "- **class**: \(.class // "none")",
                 "- **stage**: `\(.stage)`",
@@ -196,9 +190,9 @@ jobs:
             echo "- **delay before re-run**: $(jq -r '.delay_seconds' retry-plan.json)s"
             echo
             if [ "$(jq -r '.items | length' retry-plan.json)" -gt 0 ]; then
-              echo "| app | status | code | class | retryable |"
-              echo "| --- | --- | --- | --- | --- |"
-              jq -r '.items[] | "| `\(.app)` | `\(.kind)` | `\(.code)` | \(.class // "none") | \(.retryable) |"' retry-plan.json
+              echo "| app | code | class | retryable |"
+              echo "| --- | --- | --- | --- |"
+              jq -r '.items[] | "| `\(.app)` | `\(.code)` | \(.class // "none") | \(.retryable) |"' retry-plan.json
             else
               echo "No actionable records."
             fi

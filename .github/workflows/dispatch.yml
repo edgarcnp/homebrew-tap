@@ -1,29 +1,26 @@
 name: Dispatch build
 
 # Entry point for programmatic builds: a workflow_dispatch run names the app
-# to build by app id or cask token (or "all"). It is the API's path — it
-# returns a run id (return_run_details), so the caller polls this one run.
+# and feed version the API decided to build, plus the request id it minted.
+# The API does not need the dispatch response's run id: the run itself posts an
+# `accepted` report, and that is how the API binds the attempt to this run.
 # Routing lives in the build workflow's plan job, so an unknown or missing app
 # fails loudly instead of matching no job at all.
 
 on:
   workflow_dispatch:
     inputs:
+      request_id:
+        description: UUID minted by the API for this build request
+        required: true
+        type: string
       app:
-        description: App id or cask token to build, or "all"
+        description: Tap descriptor id (a directory under packaging/apps)
         required: true
         type: string
       version:
-        description: Informational; the pipeline resolves the upstream version itself
-        required: false
-        type: string
-      trigger_repo:
-        description: Informational; the repo requesting the build
-        required: false
-        type: string
-      request_id:
-        description: The API's correlation id for the dispatch requesting this run
-        required: false
+        description: Feed version the API decided to build
+        required: true
         type: string
 
 permissions: {}
@@ -37,5 +34,6 @@ jobs:
     uses: ./.github/workflows/build.yml
     secrets: inherit
     with:
-      app: ${{ github.event.inputs.app }}
-      request_id: ${{ github.event.inputs.request_id }}
+      app: ${{ inputs.app }}
+      request_id: ${{ inputs.request_id }}
+      requested_version: ${{ inputs.version }}

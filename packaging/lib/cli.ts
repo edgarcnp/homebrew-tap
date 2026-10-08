@@ -18,14 +18,16 @@ import {
   buildReport,
   EVIDENCE_KEY_PATTERN,
   FAILURE_CODES,
+  REPORT_PHASES,
+  REPORT_SKIP_REASONS,
   REPORT_STAGES,
-  REPORT_STATUSES,
   writeFailureFragment,
   writePublicReport,
   writeReport,
   type FailureCode,
+  type ReportPhase,
+  type ReportSkipReason,
   type ReportStage,
-  type ReportStatus,
 } from "./pipeline/report.ts";
 import { readRetryPlan, RETRY_CONCLUSIONS, type RetryConclusion } from "./pipeline/retry.ts";
 import { fetchFeedVersion } from "./pipeline/watch.ts";
@@ -339,11 +341,12 @@ const COMMANDS: Command[] = [
   {
     name: "gate",
     summary:
-      "Print the cask gate decision (--app, --upstream-version, [--release-exists], [--release-matches-cask true|false], [--tap])",
+      "Print the cask gate decision (--app, --upstream-version, [--requested-version V], [--release-exists], [--release-matches-cask true|false], [--tap])",
     options: {
       app: APP,
       tap: TAP,
       "upstream-version": { type: "string" },
+      "requested-version": { type: "string" },
       "release-exists": { type: "boolean" },
       "release-matches-cask": { type: "string" },
     },
@@ -353,6 +356,7 @@ const COMMANDS: Command[] = [
       const decision = planGate({
         cask,
         upstreamVersion: flags.str("upstream-version"),
+        requestedVersion: flags.optStr("requested-version"),
         releaseExists: flags.bool("release-exists"),
         releaseMatchesCask: parseReleaseMatch(flags.optStr("release-matches-cask")),
       });
@@ -361,6 +365,7 @@ const COMMANDS: Command[] = [
         `cask_version=${cask.version}`,
         `action=${decision.action}`,
         `reason=${decision.reason}`,
+        `not_ready=${decision.reasonCode === "not-ready"}`,
         `skipped=${decision.action === "skip"}`,
         `repair_cask=${decision.action === "repair-cask"}`,
       ]) {
@@ -389,16 +394,18 @@ const COMMANDS: Command[] = [
   {
     name: "report",
     summary:
-      "Write the machine-readable run record (--app, --stage, --status, --message, --run-id, --event-id ID, --output, [--code], [--request-id ID], [--public-output F], [--resolved-version], [--cask-version], [--feed-version], [--evidence k=v]...)",
+      "Write the machine-readable run record (--app, --phase, --stage, --message, --run-id, --run-attempt, --output, [--code], [--reason], [--event-id ID], [--request-id ID], [--public-output F], [--resolved-version], [--cask-version], [--feed-version], [--evidence k=v]...)",
     options: {
       app: APP,
+      phase: { type: "string" },
       stage: { type: "string" },
-      status: { type: "string" },
       code: { type: "string" },
+      reason: { type: "string" },
       "request-id": { type: "string" },
       "event-id": { type: "string" },
       message: { type: "string" },
       "run-id": { type: "string" },
+      "run-attempt": { type: "string" },
       "resolved-version": { type: "string" },
       "cask-version": { type: "string" },
       "feed-version": { type: "string" },
@@ -409,28 +416,40 @@ const COMMANDS: Command[] = [
     run: (flags) => {
       // Validated here as usage errors: a bad record is a caller bug, and the
       // API must never receive a document this repository could not classify.
+      const phase = flags.str("phase");
+      if (!(REPORT_PHASES as readonly string[]).includes(phase)) {
+        throw new UsageError(`--phase must be one of ${REPORT_PHASES.join(", ")}`);
+      }
       const stage = flags.str("stage");
       if (!(REPORT_STAGES as readonly string[]).includes(stage)) {
         throw new UsageError(`--stage must be one of ${REPORT_STAGES.join(", ")}`);
-      }
-      const status = flags.str("status");
-      if (!(REPORT_STATUSES as readonly string[]).includes(status)) {
-        throw new UsageError(`--status must be one of ${REPORT_STATUSES.join(", ")}`);
       }
       const code = flags.optStr("code");
       if (code !== undefined && !Object.hasOwn(FAILURE_CODES, code)) {
         throw new UsageError(`--code must be one of ${Object.keys(FAILURE_CODES).join(", ")}`);
       }
-      if (status === "failed" && code === undefined) {
-        throw new UsageError("--status failed needs --code");
+      if (phase === "failed" && code === undefined) {
+        throw new UsageError("--phase failed needs --code");
       }
-      if (status !== "failed" && code !== undefined) {
-        throw new UsageError(`--status ${status} carries no --code`);
+      if (phase !== "failed" && code !== undefined) {
+        throw new UsageError(`--phase ${phase} carries no --code`);
+      }
+      const reason = flags.optStr("reason");
+      if (reason !== undefined && !(REPORT_SKIP_REASONS as readonly string[]).includes(reason)) {
+        throw new UsageError(`--reason must be one of ${REPORT_SKIP_REASONS.join(", ")}`);
+      }
+      if (reason !== undefined && phase !== "skipped") {
+        throw new UsageError(`--phase ${phase} carries no --reason`);
       }
       const rawRunId = flags.str("run-id");
       const runId = Number(rawRunId);
       if (!Number.isSafeInteger(runId) || runId <= 0) {
         throw new UsageError(`--run-id must be a positive run number, got "${rawRunId}"`);
+      }
+      const rawRunAttempt = flags.str("run-attempt");
+      const runAttempt = Number(rawRunAttempt);
+      if (!Number.isSafeInteger(runAttempt) || runAttempt <= 0) {
+        throw new UsageError(`--run-attempt must be a positive attempt number, got "${rawRunAttempt}"`);
       }
       // An empty value means "not supplied": a version the caller could not
       // read stores as null. The workflow passes --request-id "${REQUEST_ID}"
@@ -470,12 +489,14 @@ const COMMANDS: Command[] = [
       const report = buildReport({
         app: flags.str("app"),
         runId,
-        status: status as ReportStatus,
+        runAttempt,
+        phase: phase as ReportPhase,
         stage: stage as ReportStage,
         code: code as FailureCode | undefined,
+        reason: reason as ReportSkipReason | undefined,
         message: flags.str("message"),
         requestId: version(flags.optStr("request-id")),
-        eventId: flags.str("event-id"),
+        eventId: optional(flags.optStr("event-id")),
         resolvedVersion: version(flags.optStr("resolved-version")),
         caskVersion: version(flags.optStr("cask-version")),
         feedVersion: version(flags.optStr("feed-version")),

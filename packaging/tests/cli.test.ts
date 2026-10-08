@@ -64,6 +64,7 @@ describe("fbr CLI contract", () => {
     const matching = fbr([...base, "--release-matches-cask", "true"]);
     assert.equal(matching.status, 0, matching.stderr);
     assert.match(matching.stdout, /^skipped=true$/m);
+    assert.match(matching.stdout, /^not_ready=false$/m);
 
     const differing = fbr([...base, "--release-matches-cask", "false"]);
     assert.equal(differing.status, 0, differing.stderr);
@@ -75,6 +76,14 @@ describe("fbr CLI contract", () => {
     assert.equal(unknown.status, 0, unknown.stderr);
     assert.match(unknown.stdout, /^repair_cask=true$/m);
     assert.match(unknown.stdout, /could not be compared/);
+
+    // The API's decided version is provably newer than what upstream
+    // publishes: the gate answers not-ready so the API can ask again later.
+    const notReady = fbr([...base, "--requested-version", "9.9.9"]);
+    assert.equal(notReady.status, 0, notReady.stderr);
+    assert.match(notReady.stdout, /^skipped=true$/m);
+    assert.match(notReady.stdout, /^not_ready=true$/m);
+    assert.match(notReady.stdout, /^reason=not-ready: upstream publishes .*; requested 9\.9\.9$/m);
   });
 
   it("rejects an unparseable release match instead of guessing", () => {

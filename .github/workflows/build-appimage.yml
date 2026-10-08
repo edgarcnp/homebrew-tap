@@ -14,6 +14,10 @@ on:
         description: The API's correlation id for the dispatch requesting this run
         required: false
         type: string
+      requested_version:
+        description: Feed version the API decided to build; empty for manual runs
+        required: false
+        type: string
 
 defaults:
   run:
@@ -44,6 +48,7 @@ jobs:
       skipped: ${{ steps.resolve.outputs.skipped }}
       repair_cask: ${{ steps.resolve.outputs.repair_cask }}
       reason: ${{ steps.resolve.outputs.reason }}
+      not_ready: ${{ steps.resolve.outputs.not_ready }}
       cask_version: ${{ steps.resolve.outputs.cask_version }}
       feed_version: ${{ steps.resolve.outputs.feed_version }}
       source: ${{ steps.source.outputs.repo }}
@@ -122,6 +127,7 @@ jobs:
         id: resolve
         env:
           GH_TOKEN: ${{ github.token }}
+          REQUESTED_VERSION: ${{ inputs.requested_version }}
         run: |
           # Only the apt resolver verifies a signed index with gpg.
           if [[ "$(bun source/packaging/bin/fbr.ts descriptor --app "${APP_ID}" --field oracle.kind)" == "apt" ]]; then
@@ -132,10 +138,8 @@ jobs:
           # The descriptor's watch feed and the oracle resolve asks publish on
           # their own schedules (opencode's update manifest lagged its own
           # release feed by ~1min on 2.0.14, and that run gated on the stale
-          # read and skipped). Read the feed once and record what it advertises:
-          # nothing waits here -- the retry workflow re-runs the whole run when
-          # the feed is newer than both the resolved version and the cask pin,
-          # which is exactly the signature of a raced publish.
+          # read and skipped). Read the feed once and record what it advertises;
+          # nothing waits here, and the API re-asks after a not-ready skip.
           version=""
           upstream_sha256_amd64=""
           upstream_sha256_arm64=""
@@ -280,6 +284,11 @@ jobs:
           fi
 
           gate_args=(--app "${APP_ID}" --tap "${GITHUB_WORKSPACE}/tap" --upstream-version "${version}")
+          # The API's decided version: the gate vetoes a build when upstream has
+          # not published it yet and answers not-ready instead.
+          if [[ -n "${REQUESTED_VERSION}" ]]; then
+            gate_args+=(--requested-version "${REQUESTED_VERSION}")
+          fi
           if [[ "${release_exists}" = "true" ]]; then
             gate_args+=(--release-exists)
           fi
@@ -589,13 +598,14 @@ jobs:
           token: ${{ secrets.HOMEBREW_PAT }}
           gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
 
-  # The machine-readable run record: one JSON document per app, POSTed to the
-  # API that dispatched the run (which stores it as evidence) and uploaded as a
-  # redacted run-report-<app> artifact for humans. Retry policy lives in the CI,
-  # not here: retry.yml reads the artifact copy and re-runs the run or opens an
-  # issue. always() so every completed run answers with a record: an absent
-  # record means the run died before this job could start (runner loss,
-  # cancellation), which the retry plan treats as infrastructure.
+  # The machine-readable run record: one JSON document per app and phase,
+  # POSTed to the API that dispatched the run and uploaded as a redacted
+  # run-report-<app> artifact for humans. Retry policy lives in the CI, not
+  # here: retry.yml reads the artifact copy and re-runs a retryable failure or
+  # opens an issue; the API owns re-asking after a not-ready skip. always() so
+  # every completed run answers with a record: an absent record means the run
+  # died before this job could start (runner loss, cancellation), which the
+  # retry plan treats as infrastructure.
   report:
     needs: [detect, build, publish, pin-cask]
     if: always()
@@ -631,6 +641,7 @@ jobs:
           SKIPPED: ${{ needs.detect.outputs.skipped }}
           REPAIR_CASK: ${{ needs.detect.outputs.repair_cask }}
           REASON: ${{ needs.detect.outputs.reason }}
+          NOT_READY: ${{ needs.detect.outputs.not_ready }}
           RESOLVED_VERSION: ${{ needs.detect.outputs.version }}
           CASK_VERSION: ${{ needs.detect.outputs.cask_version }}
           FEED_VERSION: ${{ needs.detect.outputs.feed_version }}
@@ -638,6 +649,7 @@ jobs:
           REQUESTED_APP: ${{ inputs.app }}
           REQUEST_ID: ${{ inputs.request_id }}
           RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
         run: |
           # The step carries the API's correlation id; never trace it.
           set +x
@@ -682,8 +694,9 @@ jobs:
 
           stage=""
           code=""
+          skip_reason=""
           if [[ -n "${job_stage}" ]]; then
-            status="failed"
+            phase="failed"
             stage="${fragment_stage:-${job_stage}}"
             if [[ -n "${fragment_code}" ]]; then
               code="${fragment_code}"
@@ -701,15 +714,21 @@ jobs:
               message="${job_stage} job ${job_result}; see the run log"
             fi
           elif [[ "${SKIPPED}" == "true" ]]; then
-            status="skipped"
+            phase="skipped"
             stage="detect"
             message="${REASON:-already at upstream}"
+            # The typed reason is what the API waits on; the message stays the
+            # human-readable explanation.
+            if [[ "${NOT_READY}" == "true" ]]; then
+              skip_reason="not-ready"
+            fi
           elif [[ "${REPAIR_CASK}" == "true" ]]; then
-            status="repair-cask"
+            # A cask-only repair is a success: the pin is the API's truth.
+            phase="succeeded"
             stage="pin-cask"
             message="${REASON:-cask pin caught up to the published release}"
           else
-            status="success"
+            phase="succeeded"
             stage="publish"
             message="${REASON:-run completed}"
           fi
@@ -717,12 +736,12 @@ jobs:
           args=(
             report
             --app "${app}"
+            --phase "${phase}"
             --stage "${stage}"
-            --status "${status}"
             --message "${message}"
             --run-id "${RUN_ID}"
+            --run-attempt "${RUN_ATTEMPT}"
             --request-id "${REQUEST_ID}"
-            --event-id "${RUN_ID}:${GITHUB_RUN_ATTEMPT}:${app}"
             --resolved-version "${RESOLVED_VERSION}"
             --cask-version "${CASK_VERSION}"
             --feed-version "${FEED_VERSION}"
@@ -732,8 +751,11 @@ jobs:
           if [[ -n "${code}" ]]; then
             args+=(--code "${code}")
           fi
+          if [[ -n "${skip_reason}" ]]; then
+            args+=(--reason "${skip_reason}")
+          fi
           # Only a classified failure carries evidence; the CLI rejects it on
-          # any other status.
+          # any other phase.
           if [[ -n "${code}" && ${#fragment_evidence[@]} -gt 0 ]]; then
             args+=("${fragment_evidence[@]}")
           fi
@@ -747,92 +769,12 @@ jobs:
           retention-days: 7
           overwrite: true
       # The API consumes the record as an event; the artifact above stays for
-      # humans. Auth is GitHub OIDC: a fresh ~5-minute JWT per delivery, bound to
-      # this run; there is no shared secret. Best-effort by design — a delivery
-      # failure must never fail the run, and the API reconciles a lost report
-      # from the run id it dispatched with. A bad/expired token, an unknown cask
-      # or an invalid body is permanent 4xx and is reported once; 429 is the rate
-      # limiter, retried after Retry-After; 000/5xx are retried.
-      # The workflow's default -x would trace the JWT into the log, so this
-      # step turns xtrace off before touching it.
+      # humans. Delivery is a shared action: GitHub OIDC, a fresh token per
+      # attempt, best-effort so a delivery failure never fails the run. Manual
+      # runs have no request id and stay out of the API's inbox.
       - name: Deliver the run record to the API
-        if: always() && steps.write_report.outcome == 'success'
+        if: always() && inputs.request_id != '' && steps.write_report.outcome == 'success'
         continue-on-error: true
-        env:
-          RECORD: ${{ runner.temp }}/run-report.json
-        run: |
-          set +x
-          if [[ ! -f "${RECORD}" ]]; then
-            echo "::warning::no run record to deliver"
-            exit 0
-          fi
-          id_token="$(
-            curl --fail --silent --show-error --max-time 10 \
-              -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
-              "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=api.edgarcnp.dev" \
-              | jq -r '.value'
-          )" || id_token=""
-          if [[ -z "${id_token}" || "${id_token}" == "null" ]]; then
-            echo "::warning::could not obtain an OIDC token; skipping delivery"
-            exit 0
-          fi
-          endpoint="https://api.edgarcnp.dev/v1/homebrew/tap/events"
-          headers="${RUNNER_TEMP}/delivery-headers.txt"
-          body="${RUNNER_TEMP}/delivery-body.txt"
-          # A rejected record must name which layer answered: the API edge adds
-          # server, cf-ray and cf-mitigated, the API does not. The excerpt is
-          # bounded to 512 bytes and flattened onto one line.
-          header_value() {
-            tr -d '\r' <"${headers}" 2>/dev/null \
-              | awk -F: -v name="$1" 'tolower($1) == name { sub(/^[^:]*:[ ]*/, ""); value=$0 } END { print value }' \
-              || true
-          }
-          log_rejection() {
-            local excerpt
-            excerpt="$(head -c 512 "${body}" 2>/dev/null \
-              | tr '\r\n\t' ' ' \
-              | LC_ALL=C tr -c '[:print:]' '?' || true)"
-            echo "API response body (first 512 bytes): ${excerpt}"
-            echo "API response headers: server=$(header_value server) cf-ray=$(header_value cf-ray) cf-mitigated=$(header_value cf-mitigated) content-type=$(header_value content-type)"
-          }
-          # Three attempts total. A 429 is the API's rate limiter, not a
-          # verdict: back off for Retry-After (capped, defaulted when absent)
-          # and try again instead of dropping the record.
-          for attempt in 1 2 3; do
-            : >"${headers}"
-            : >"${body}"
-            status="$(curl --silent --show-error --max-time 10 --output "${body}" \
-              --dump-header "${headers}" --write-out '%{http_code}' \
-              -X POST "${endpoint}" \
-              -H "Authorization: Bearer ${id_token}" \
-              -H "Content-Type: application/json" \
-              --data-binary "@${RECORD}" || true)"
-            # 000 is a transport failure with no response to describe.
-            if [[ "${status}" != 2?? && "${status}" != 000 ]]; then
-              log_rejection
-            fi
-            case "${status}" in
-              2??) echo "run record delivered (HTTP ${status})"; exit 0 ;;
-              429)
-                retry_after="$(
-                  tr -d '\r' <"${headers}" \
-                    | awk -F: 'tolower($1) == "retry-after" { print $2 }' \
-                    | tail -n 1 \
-                    | tr -d '[:space:]'
-                )"
-                if [[ ! "${retry_after}" =~ ^[0-9]+$ ]]; then
-                  # No parsable Retry-After: the API's usual window.
-                  retry_after=60
-                fi
-                if ((retry_after > 120)); then
-                  retry_after=120
-                fi
-                echo "::warning::API rate-limited the run record (HTTP 429); retrying in ${retry_after}s"
-                sleep "${retry_after}"
-                continue
-                ;;
-              4??) echo "::warning::API rejected the run record (HTTP ${status})"; exit 0 ;;
-            esac
-            sleep $((attempt * 5))
-          done
-          echo "::warning::run record delivery failed; the API will reconcile the run"
+        uses: ./.github/actions/deliver-report
+        with:
+          body: ${{ runner.temp }}/run-report.json

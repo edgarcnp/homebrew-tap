@@ -229,7 +229,8 @@ export interface WatchConfig {
   versionPattern: string;
   // Entries whose title matches are skipped, e.g. GitComet's "-rc" releases.
   skipPattern?: string;
-  // Upstream repo (owner/repo), carried as the informational trigger_repo.
+  // Upstream repo (owner/repo) the watch feed belongs to; informational for
+  // the API's watcher.
   repo?: string;
   // Feed format: "atom" parses releases.atom entry titles, "json" reads a
   // single version string at `versionField` (e.g. avakot's manifest). The
@@ -316,9 +317,17 @@ export interface GateInput {
   releaseExists: boolean;
   // null when there is no release to compare against.
   releaseMatchesCask: boolean | null;
+  // The feed version the API decided to build; absent for a manual run. When
+  // it is provably newer than what upstream publishes, the artifact is not
+  // ready and the gate skips rather than builds an older version.
+  requestedVersion?: string | undefined;
 }
 
 export interface GateDecision {
   action: GateAction;
   reason: string;
+  // A typed readiness signal for the run record: present only when the API's
+  // requested version is not published upstream yet, so the API can wait and
+  // ask again instead of matching on the human `reason`.
+  reasonCode?: "not-ready" | undefined;
 }

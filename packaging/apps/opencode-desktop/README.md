@@ -18,8 +18,7 @@ version and each asset's SHA-256 and size.
 - **Release watch** — the same manifest, declared with `format: "json"` and
   `versionField: "version"`, so the dispatch signal and the oracle's resolve
   read one source instead of the pre-v2 GitHub releases feed (which still
-  publishes 1.x tags). `repo` stays `anomalyco/opencode` as the informational
-  `trigger_repo`.
+  publishes 1.x tags). `repo` stays `anomalyco/opencode` for the API's watcher.
 - **Payload** — `deb-tree`: the whole `opt/OpenCode` tree is staged into
   `AppDir/bin`; the build asserts the `.deb` `Architecture` matches the request.
 - **Updater** — `resources/app-update.yml` is removed (`required: true`, since

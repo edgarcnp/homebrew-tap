@@ -121,22 +121,26 @@ fbr resolve --app X --arch A --output-dir D --metadata F
      [--metadata-only] [--failure-out F]     resolve upstream metadata; a classified
                                              failure writes its verdict to F
 fbr metadata --file F --field version|sha256|url|path
-fbr gate --app X --upstream-version V [--release-exists]
-     [--release-matches-cask true|false] [--tap T]
+fbr gate --app X --upstream-version V [--requested-version V]
+     [--release-exists] [--release-matches-cask true|false] [--tap T]
                                              cask gate decision; omit the match flag when
-                                             the asset comparison could not run
+                                             the asset comparison could not run; a
+                                             requested version newer than upstream is a
+                                             not-ready skip
 fbr feed-version --app X [--tap T]           newest version the release feed advertises,
-                                             as feed_version= (advisory: the API compares
-                                             it against resolved_version and cask_version)
-fbr report --app X --stage S --status ST --message M --run-id N
-     --event-id ID --output F [--code C] [--request-id ID]
-     [--public-output F] [--resolved-version V]
-     [--cask-version V] [--feed-version V] [--evidence k=v]...
-                                             write the machine-readable run record the API
-                                             reads; --public-output is the artifact copy
-                                             with request_id redacted
+                                             as feed_version= (advisory; recorded in the
+                                             run record, nothing waits on it)
+fbr report --app X --phase P --stage S --message M --run-id N
+     --run-attempt A --output F [--code C] [--reason not-ready]
+     [--event-id UUID] [--request-id ID] [--public-output F]
+     [--resolved-version V] [--cask-version V] [--feed-version V]
+     [--evidence k=v]...                     write the machine-readable run record the API
+                                             reads; --phase is accepted|succeeded|failed|
+                                             skipped, --event-id defaults to a fresh UUID,
+                                             and --public-output is the artifact copy with
+                                             request_id redacted
 fbr retry-plan --reports-dir D --attempt N
-     --conclusion S                          decide from a completed run's report copies
+     --conclusion S                          decide from a completed run's failed records
                                              whether the CI re-runs it; prints the plan
                                              JSON the retry workflow executes
 fbr cask --action read|set-version|check     read, re-pin or check casks
@@ -167,32 +171,49 @@ UNCLASSIFIED.
 
 ## The run record
 
-Each build answers with one JSON record per app, delivered twice: the workflow
-POSTs the full record, OIDC-authenticated, to the API's
-`/v1/homebrew/tap/events` endpoint (`schema: 1`, written by `fbr report`), and
-uploads a public copy as the `run-report-<app>` artifact. `request_id` is the
-API's correlation id for the dispatch that caused the run (null for manual
-runs); it stays in the POSTed record, is redacted to null in the artifact, and
-is never traced into logs. `event_id` is required: the deterministic
-`${run_id}:${run_attempt}:${app}` id, stable when the same record is re-sent so
-the API dedupes a delivery retry, and distinct per attempt so a CI re-run is a
-new event. The API dispatches at most once per version and treats the record as
-evidence, so retries belong to the CI: `retry.yml` consumes the public copy and
-`fbr retry-plan` decides, from the record's own verdict, between a re-run and
-an issue for a human:
+Each build answers with one JSON record per app and phase. The workflow POSTs
+the full record, OIDC-authenticated, to the API's `/v1/homebrew/tap/events`
+endpoint (written by `fbr report`); the concluding `succeeded`/`failed`/
+`skipped` record is also uploaded as a public `run-report-<app>` artifact, the
+input `retry.yml` reads. The phases are the API's contract: `accepted` goes out
+from the plan job before planning can fail (this is how the API binds the
+attempt to the run), and `succeeded`/`failed`/`skipped` conclude it from the
+report job. A cask-only repair reports `succeeded`: the API treats the observed
+cask pin as the truth. The record also carries `run_attempt`, `stage`, `class`,
+`retryable` and `retry_after_seconds` for the CI's own retry decision; the API
+ignores them. There is no `schema` field.
 
-- `status`/`stage`/`code` — what happened, where, and why. `code` carries its
+`request_id` is the API's correlation id for the dispatch that caused the run
+(null for manual runs); it stays in the POSTed record, is redacted to null in
+the artifact, and is never traced into logs. `event_id` is a UUID, fresh per
+report and stable across delivery retries: delivery lives in
+`.github/actions/deliver-report`, which fetches a fresh GitHub OIDC token
+(audience `api.edgarcnp.dev`) for every attempt — a token may deliver one body
+— and retries 429/5xx with the same body while 401, 413, 415 and 422 are
+permanent. The API accepts tokens only from `refs/heads/main`,
+`workflow_dispatch` runs of `dispatch.yml`, `build.yml` or `build-appimage.yml`.
+
+A manual run has no request id, so it uploads its artifact but stays out of the
+API's inbox. A dispatched run resolves the version the API asked for; when the
+upstream has not published that artifact yet, the gate reports a `skipped`
+record with typed `reason: not-ready` (the human `message` also names it), and
+the API asks again later. The tap does not re-run skips: `retry.yml` consumes
+the public copy and `fbr retry-plan` decides only on failed records, from the
+record's own verdict:
+
+- `phase`/`stage`/`code` — what happened, where, and why. `code` carries its
   own verdict (`class`, `retryable`, `retry_after_seconds`), so the retry plan
-  needs no table from this repository.
+  needs no table from this repository. A `skipped` record may carry the typed
+  `reason: not-ready`; the API reads that field to wait and ask again, never the
+  human message.
 - `evidence` — what the transport said, e.g. `http_status`,
   `retry_after_seconds`, `reason`, `rate_limited` on a transient failure. A
-  value is one line of at most 1 KiB, and the serialized map at most 4096
+  value is one line of at most 256 bytes, and the serialized map at most 4096
   bytes; the API rejects a record beyond either bound, so `fbr report` and the
-  failure-fragment writer refuse it first.
+  failure-fragment writer refuse it first. The message is capped at 2 KiB and
+  the whole body at 64 KiB.
 - `resolved_version` / `cask_version` / `feed_version` — the three versions the
-  retry plan compares: a skipped report is worth re-running when the feed is
-  newer than both the resolved version and the cask pin, the signature of a
-  skip that raced the feed's own publish.
+  record reports; a not-ready skip names what resolve actually saw.
 
 A failure site writes a fragment (`{"code","message","stage"?,"evidence"?}`)
 before exiting; the report job uploads the fragments and prefers the site's

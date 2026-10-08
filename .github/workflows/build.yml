@@ -17,6 +17,10 @@ on:
         description: The API's correlation id for the dispatch requesting this run
         required: false
         type: string
+      requested_version:
+        description: Feed version the API decided to build; empty for manual runs
+        required: false
+        type: string
   workflow_call:
     inputs:
       app:
@@ -25,6 +29,10 @@ on:
         type: string
       request_id:
         description: The API's correlation id for the dispatch requesting this run
+        required: false
+        type: string
+      requested_version:
+        description: Feed version the API decided to build
         required: false
         type: string
 
@@ -55,6 +63,34 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.2
+      # The API binds a dispatched attempt to this run from the `accepted`
+      # report, so it goes out before any planning can fail. A manual run has
+      # no request id and stays out of the API's inbox.
+      - name: Report accepted
+        if: inputs.request_id != '' && inputs.app != 'all'
+        env:
+          REQUEST_ID: ${{ inputs.request_id }}
+          REQUESTED_APP: ${{ inputs.app }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          # The step carries the API's correlation id; never trace it.
+          set +x
+          bun packaging/bin/fbr.ts report \
+            --app "${REQUESTED_APP}" \
+            --phase accepted \
+            --stage plan \
+            --message "build accepted" \
+            --run-id "${RUN_ID}" \
+            --run-attempt "${RUN_ATTEMPT}" \
+            --request-id "${REQUEST_ID}" \
+            --output "${RUNNER_TEMP}/accepted-report.json"
+      - name: Deliver the accepted report to the API
+        if: inputs.request_id != '' && inputs.app != 'all'
+        continue-on-error: true
+        uses: ./.github/actions/deliver-report
+        with:
+          body: ${{ runner.temp }}/accepted-report.json
       - name: Plan the app matrix
         id: plan
         env:
@@ -98,6 +134,7 @@ jobs:
           REQUESTED: ${{ inputs.app }}
           REQUEST_ID: ${{ inputs.request_id }}
           RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
         run: |
           # The step carries the API's correlation id; never trace it.
           set +x
@@ -105,13 +142,13 @@ jobs:
           message="$(jq -r '.message // empty' report-code.json 2>/dev/null || true)"
           if bun packaging/bin/fbr.ts report \
             --app "${REQUESTED}" \
+            --phase failed \
             --stage plan \
-            --status failed \
             --code "${code:-UNCLASSIFIED}" \
             --message "${message:-the build plan failed; see the run log}" \
             --run-id "${RUN_ID}" \
+            --run-attempt "${RUN_ATTEMPT}" \
             --request-id "${REQUEST_ID}" \
-            --event-id "${RUN_ID}:${GITHUB_RUN_ATTEMPT}:${REQUESTED}" \
             --public-output "${RUNNER_TEMP}/run-report-public.json" \
             --output "${RUNNER_TEMP}/run-report.json"; then
             echo "wrote=true" >> "${GITHUB_OUTPUT}"
@@ -126,95 +163,15 @@ jobs:
           retention-days: 7
           overwrite: true
       # The API consumes the record as an event; the artifact above stays for
-      # humans. Auth is GitHub OIDC: a fresh ~5-minute JWT per delivery, bound to
-      # this run; there is no shared secret. Best-effort by design — a delivery
-      # failure must never fail the run, and the API reconciles a lost report
-      # from the run id it dispatched with. A bad/expired token, an unknown cask
-      # or an invalid body is permanent 4xx and is reported once; 429 is the rate
-      # limiter, retried after Retry-After; 000/5xx are retried.
-      # The workflow's default -x would trace the JWT into the log, so this
-      # step turns xtrace off before touching it.
+      # humans. Delivery is a shared action: GitHub OIDC, a fresh token per
+      # attempt, best-effort so a delivery failure never fails the run. Manual
+      # runs have no request id and stay out of the API's inbox.
       - name: Deliver the run record to the API
-        if: always() && steps.plan_report.outputs.wrote == 'true'
+        if: always() && inputs.request_id != '' && steps.plan_report.outputs.wrote == 'true'
         continue-on-error: true
-        env:
-          RECORD: ${{ runner.temp }}/run-report.json
-        run: |
-          set +x
-          if [[ ! -f "${RECORD}" ]]; then
-            echo "::warning::no run record to deliver"
-            exit 0
-          fi
-          id_token="$(
-            curl --fail --silent --show-error --max-time 10 \
-              -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
-              "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=api.edgarcnp.dev" \
-              | jq -r '.value'
-          )" || id_token=""
-          if [[ -z "${id_token}" || "${id_token}" == "null" ]]; then
-            echo "::warning::could not obtain an OIDC token; skipping delivery"
-            exit 0
-          fi
-          endpoint="https://api.edgarcnp.dev/v1/homebrew/tap/events"
-          headers="${RUNNER_TEMP}/delivery-headers.txt"
-          body="${RUNNER_TEMP}/delivery-body.txt"
-          # A rejected record must name which layer answered: the API edge adds
-          # server, cf-ray and cf-mitigated, the API does not. The excerpt is
-          # bounded to 512 bytes and flattened onto one line.
-          header_value() {
-            tr -d '\r' <"${headers}" 2>/dev/null \
-              | awk -F: -v name="$1" 'tolower($1) == name { sub(/^[^:]*:[ ]*/, ""); value=$0 } END { print value }' \
-              || true
-          }
-          log_rejection() {
-            local excerpt
-            excerpt="$(head -c 512 "${body}" 2>/dev/null \
-              | tr '\r\n\t' ' ' \
-              | LC_ALL=C tr -c '[:print:]' '?' || true)"
-            echo "API response body (first 512 bytes): ${excerpt}"
-            echo "API response headers: server=$(header_value server) cf-ray=$(header_value cf-ray) cf-mitigated=$(header_value cf-mitigated) content-type=$(header_value content-type)"
-          }
-          # Three attempts total. A 429 is the API's rate limiter, not a
-          # verdict: back off for Retry-After (capped, defaulted when absent)
-          # and try again instead of dropping the record.
-          for attempt in 1 2 3; do
-            : >"${headers}"
-            : >"${body}"
-            status="$(curl --silent --show-error --max-time 10 --output "${body}" \
-              --dump-header "${headers}" --write-out '%{http_code}' \
-              -X POST "${endpoint}" \
-              -H "Authorization: Bearer ${id_token}" \
-              -H "Content-Type: application/json" \
-              --data-binary "@${RECORD}" || true)"
-            # 000 is a transport failure with no response to describe.
-            if [[ "${status}" != 2?? && "${status}" != 000 ]]; then
-              log_rejection
-            fi
-            case "${status}" in
-              2??) echo "run record delivered (HTTP ${status})"; exit 0 ;;
-              429)
-                retry_after="$(
-                  tr -d '\r' <"${headers}" \
-                    | awk -F: 'tolower($1) == "retry-after" { print $2 }' \
-                    | tail -n 1 \
-                    | tr -d '[:space:]'
-                )"
-                if [[ ! "${retry_after}" =~ ^[0-9]+$ ]]; then
-                  # No parsable Retry-After: the API's usual window.
-                  retry_after=60
-                fi
-                if ((retry_after > 120)); then
-                  retry_after=120
-                fi
-                echo "::warning::API rate-limited the run record (HTTP 429); retrying in ${retry_after}s"
-                sleep "${retry_after}"
-                continue
-                ;;
-              4??) echo "::warning::API rejected the run record (HTTP ${status})"; exit 0 ;;
-            esac
-            sleep $((attempt * 5))
-          done
-          echo "::warning::run record delivery failed; the API will reconcile the run"
+        uses: ./.github/actions/deliver-report
+        with:
+          body: ${{ runner.temp }}/run-report.json
 
   build:
     needs: plan
@@ -231,3 +188,4 @@ jobs:
     with:
       app: ${{ matrix.app }}
       request_id: ${{ inputs.request_id }}
+      requested_version: ${{ inputs.requested_version }}

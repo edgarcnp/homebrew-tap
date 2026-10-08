@@ -9,12 +9,15 @@ import {
   MAX_ATTEMPTS,
   readRetryPlan,
   RETRY_DELAY_CAP_SECONDS,
-  STALE_SKIP_CODE,
   type RetryConclusion,
   type RetryPlan,
 } from "../../lib/pipeline/retry.ts";
 
 const FBR = path.join(REPO_ROOT, "packaging", "bin", "fbr.ts");
+
+// A syntactically valid report id; the retry plan never parses it, it orders
+// records by run_attempt.
+const EVENT_ID = "3f2504e0-4f89-41d3-9a0c-0305e82c3301";
 
 function tempDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "fbr-retry-"));
@@ -22,7 +25,7 @@ function tempDir(): string {
 
 interface RecordOverrides {
   app?: string;
-  status?: "failed" | "skipped" | "success" | "repair-cask";
+  phase?: "accepted" | "succeeded" | "failed" | "skipped";
   attempt?: number;
   code?: string;
   class?: string;
@@ -38,26 +41,26 @@ interface RecordOverrides {
 
 function writeRecord(dir: string, subdir: string, overrides: RecordOverrides = {}): string {
   const app = overrides.app ?? "vscode";
-  const status = overrides.status ?? "failed";
+  const phase = overrides.phase ?? "failed";
   const record: Record<string, unknown> = {
-    schema: 1,
-    event_id: `42:${overrides.attempt ?? 1}:${app}`,
+    event_id: EVENT_ID,
     request_id: null,
     app,
+    phase,
     run_id: 42,
-    status,
+    run_attempt: overrides.attempt ?? 1,
     stage: overrides.stage ?? "detect",
     message: overrides.message ?? "boom",
     resolved_version: overrides.resolved === undefined ? "1.0.0" : overrides.resolved,
     cask_version: overrides.cask === undefined ? "1.0.0" : overrides.cask,
     feed_version: overrides.feed === undefined ? "1.0.0" : overrides.feed,
-    retry_after_seconds: overrides.retryAfter ?? null,
     finished_at: "2026-10-07T00:00:00.000Z",
   };
-  if (status === "failed") {
+  if (phase === "failed") {
     record.code = overrides.code ?? "UNCLASSIFIED";
     record.class = overrides.class ?? "infra";
     record.retryable = overrides.retryable ?? true;
+    record.retry_after_seconds = overrides.retryAfter ?? null;
   }
   if (overrides.evidence !== undefined) record.evidence = overrides.evidence;
   const file = path.join(dir, subdir, "run-report-public.json");
@@ -99,7 +102,6 @@ describe("retry plans", () => {
     assert.equal(plan.attempt, 1);
     assert.equal(plan.max_attempts, MAX_ATTEMPTS);
     assert.equal(plan.items.length, 1);
-    assert.equal(plan.items[0]?.kind, "failure");
     assert.equal(plan.items[0]?.code, "UPSTREAM_UNAVAILABLE");
   });
 
@@ -187,68 +189,20 @@ describe("retry plans", () => {
     assert.equal(plan.reason, "budget");
   });
 
-  it("re-runs a whole run when a skip raced the feed", () => {
+  it("acts only on failed records, leaving skips and successes to the API", () => {
     const dir = tempDir();
-    writeRecord(dir, "run-report-vscode", {
-      status: "skipped",
-      resolved: "1.0.0",
-      cask: "1.0.0",
-      feed: "1.1.0",
-      message: "Cask 1.0.0 already at upstream 1.0.0; skipping",
+    writeRecord(dir, "run-report-vscode", { phase: "succeeded" });
+    writeRecord(dir, "run-report-firefox", {
+      app: "firefox",
+      phase: "skipped",
+      message: "not-ready: upstream publishes 1.0.0; requested 1.1.0",
     });
-    const plan = readPlan(dir, 1, "success");
+    writeRecord(dir, "run-report-gitcomet", { app: "gitcomet", retryable: true });
+    const plan = readPlan(dir);
     assert.equal(plan.retry, true);
-    assert.equal(plan.action, "rerun");
-    assert.equal(plan.reason, "skip-race");
+    assert.equal(plan.reason, "retryable");
     assert.equal(plan.items.length, 1);
-    assert.equal(plan.items[0]?.kind, "skip");
-    assert.equal(plan.items[0]?.code, STALE_SKIP_CODE);
-    assert.equal(plan.items[0]?.class, null);
-  });
-
-  it("does not re-run a skip that did not race the feed", () => {
-    const cases: RecordOverrides[] = [
-      // Already caught up: the feed has not moved past the pin.
-      { resolved: "1.1.0", cask: "1.1.0", feed: "1.1.0" },
-      // Cask ahead: a feed regression is not a race.
-      { resolved: "1.0.0", cask: "1.1.0", feed: "1.0.0" },
-      // An unorderable feed is not proof of anything.
-      { resolved: "1.0.0", cask: "1.0.0", feed: "banana" },
-      // A missing side cannot prove a race.
-      { resolved: null, cask: "1.0.0", feed: "1.1.0" },
-    ];
-    for (const overrides of cases) {
-      const dir = tempDir();
-      writeRecord(dir, "run-report-vscode", { status: "skipped", ...overrides });
-      const plan = readPlan(dir, 1, "success");
-      assert.equal(plan.retry, false, JSON.stringify(overrides));
-      assert.equal(plan.reason, "nothing", JSON.stringify(overrides));
-      assert.deepEqual(plan.items, [], JSON.stringify(overrides));
-    }
-  });
-
-  it("stops a raced skip when the attempt cap is spent", () => {
-    const dir = tempDir();
-    writeRecord(dir, "run-report-vscode", {
-      status: "skipped",
-      resolved: "1.0.0",
-      cask: "1.0.0",
-      feed: "1.1.0",
-    });
-    const plan = readPlan(dir, 2, "success");
-    assert.equal(plan.retry, false);
-    assert.equal(plan.reason, "budget");
-  });
-
-  it("does nothing when a successful run's records are not actionable", () => {
-    const dir = tempDir();
-    writeRecord(dir, "run-report-vscode", { status: "success" });
-    writeRecord(dir, "run-report-firefox", { app: "firefox", status: "repair-cask" });
-    const plan = readPlan(dir, 1, "success");
-    assert.equal(plan.retry, false);
-    assert.equal(plan.action, null);
-    assert.equal(plan.reason, "nothing");
-    assert.deepEqual(plan.items, []);
+    assert.equal(plan.items[0]?.app, "gitcomet");
   });
 
   it("honors the largest Retry-After and caps it", () => {
@@ -304,6 +258,13 @@ describe("retry plans", () => {
     delete record["retryable"];
     fs.writeFileSync(file, JSON.stringify(record));
     assert.throws(() => readPlan(missing), /boolean retryable/);
+
+    const unknownPhase = tempDir();
+    const phaseFile = writeRecord(unknownPhase, "run-report-vscode", { retryable: true });
+    const phaseRecord = JSON.parse(fs.readFileSync(phaseFile, "utf8")) as Record<string, unknown>;
+    phaseRecord["phase"] = "finished";
+    fs.writeFileSync(phaseFile, JSON.stringify(phaseRecord));
+    assert.throws(() => readPlan(unknownPhase), /unknown report phase finished/);
   });
 
   it("prints the plan as JSON for the workflow", () => {
@@ -327,10 +288,13 @@ describe("retry plans", () => {
 
   it("rejects an unknown conclusion and a bad attempt as usage errors", () => {
     const dir = tempDir();
-    assert.equal(
-      fbr(["retry-plan", "--reports-dir", dir, "--attempt", "1", "--conclusion", "cancelled"]).status,
-      2,
-    );
+    for (const conclusion of ["cancelled", "success"]) {
+      assert.equal(
+        fbr(["retry-plan", "--reports-dir", dir, "--attempt", "1", "--conclusion", conclusion]).status,
+        2,
+        `conclusion ${conclusion}`,
+      );
+    }
     assert.equal(
       fbr(["retry-plan", "--reports-dir", dir, "--attempt", "0", "--conclusion", "failure"]).status,
       2,

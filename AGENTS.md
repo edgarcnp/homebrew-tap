@@ -125,16 +125,24 @@ memory or habit.
   `appimagetool` versions, and the digests in `install-anylinux-tools.sh` are
   Renovate's. Do not re-pin or tidy them.
 - **`bun.lock`** — changes only alongside a deliberate dependency change.
-- **Run-record delivery over OIDC** — the `plan` job in `build.yml` and the
-  `report` job in `build-appimage.yml` grant `id-token: write` and POST the run
-  record to `api.edgarcnp.dev` with a short-lived GitHub OIDC token (audience
-  `api.edgarcnp.dev`). There is no shared secret to set or rotate. The delivery
-  step is best-effort (`continue-on-error`) on purpose: it must never fail a
-  run. Do not remove the grants or the step.
-- **Build retries** — `retry.yml` owns them now: the API dispatches each
-  version once, and this workflow re-runs a completed run's failed jobs (or the
-  whole run after a raced skip) when the run record's verdict says so, opening
-  an issue when it does not. The budget lives in
+- **Run-record delivery over OIDC** — a dispatched run posts `accepted` (from
+  the `plan` job in `build.yml`), then one final `succeeded`/`failed`/`skipped`
+  (from the `report` job in `build-appimage.yml`), to
+  `api.edgarcnp.dev/v1/homebrew/tap/events` through
+  `.github/actions/deliver-report`. Every attempt fetches a fresh GitHub OIDC
+  token (audience `api.edgarcnp.dev`) from
+  `ACTIONS_ID_TOKEN_REQUEST_URL`/`ACTIONS_ID_TOKEN_REQUEST_TOKEN`; a token may
+  deliver one body, so a retry reuses the body and its `event_id` with a new
+  token. The API accepts tokens only from `refs/heads/main`, `workflow_dispatch`
+  runs whose workflow file is `dispatch.yml`, `build.yml` or
+  `build-appimage.yml`: a new workflow that posts events needs the API's
+  allowlist extended first. There is no shared secret to set or rotate. The
+  delivery is best-effort (`continue-on-error`) on purpose: it must never fail
+  a run. Do not remove the grants or the action.
+- **Build retries** — `retry.yml` owns failures: it re-runs a completed run's
+  failed jobs when the run record's verdict says the failure is retryable, and
+  opens an issue when it is terminal. The API owns readiness and re-asks after
+  a not-ready skip, so the tap does not re-run skips. The budget lives in
   `packaging/lib/pipeline/retry.ts`; do not add a second retry path or move the
   budget into another workflow.
 
@@ -145,9 +153,9 @@ memory or habit.
 | `tests.yml` (`brew test-bot`) | PR gate: typecheck, tests, cask check, shellcheck, actionlint, `brew style`/`audit`, tap syntax |
 | `build.yml` | build one app or all of them; the app list comes from the descriptors |
 | `build-appimage.yml` | the reusable per-app build (container, toolchain, pack, smoke test) |
-| `retry.yml` | on completion of a build run, re-runs it when the run record says a failure is retryable or a skip raced the feed; opens an issue otherwise |
+| `retry.yml` | on completion of a build run, re-runs it when the run record says a failure is retryable; opens an issue otherwise |
 | `builder.yml` | rebuilds the `fbr-builder-base` image on Dockerfile changes and weekly, then pins it |
-| `dispatch.yml` | entry point for programmatic builds (a manual or API-triggered run) |
+| `dispatch.yml` | entry point for API-dispatched builds (`request_id`, `app`, `version`); the run posts its own `accepted` report |
 | `cask-smoke.yml` | installs and smoke-tests the casks on push to `main` and weekly |
 | `publish.yml` (`brew pr-pull`) | pulls and publishes a named PR |
 | `autobump.yml` (`brew bump`) | Homebrew's autobump, triggered only when the workflow file itself changes; inert on a cask-only tap |

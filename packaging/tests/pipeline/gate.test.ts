@@ -114,4 +114,57 @@ describe("planGate", () => {
     assert.equal(decision.action, "build");
     assert.match(decision.reason, /no release/);
   });
+
+  it("skips as not-ready when the requested version is newer than upstream", () => {
+    // The API dispatched 1.1.0 but the oracle still sees 1.0.0: the artifact
+    // is not published yet, so the gate vetoes the build even though the cask
+    // is behind and a release exists for the older version.
+    const decision = planGate({
+      cask: cask("1.0.0"),
+      upstreamVersion: "1.0.0",
+      requestedVersion: "1.1.0",
+      releaseExists: true,
+      releaseMatchesCask: true,
+    });
+    assert.equal(decision.action, "skip");
+    assert.equal(decision.reason, "not-ready: upstream publishes 1.0.0; requested 1.1.0");
+    assert.equal(decision.reasonCode, "not-ready");
+  });
+
+  it("does not call an uncomparable requested version not-ready", () => {
+    const decision = planGate({
+      cask: cask("1.0.0"),
+      upstreamVersion: "1.0.0",
+      requestedVersion: "latest",
+      releaseExists: true,
+      releaseMatchesCask: true,
+    });
+    assert.equal(decision.action, "skip");
+    assert.doesNotMatch(decision.reason, /not-ready/);
+  });
+
+  it("builds normally when the requested version matches upstream", () => {
+    const decision = planGate({
+      cask: cask("1.0.0"),
+      upstreamVersion: "1.1.0",
+      requestedVersion: "1.1.0",
+      releaseExists: false,
+      releaseMatchesCask: null,
+    });
+    assert.equal(decision.action, "build");
+  });
+
+  it("keeps the cask-ahead skip when the requested version is already superseded", () => {
+    // The cask covers a version newer than the API asked for; there is nothing
+    // to wait for, so the terminal skip wins over not-ready.
+    const decision = planGate({
+      cask: cask("2.0.0"),
+      upstreamVersion: "1.9.0",
+      requestedVersion: "1.10.0",
+      releaseExists: true,
+      releaseMatchesCask: null,
+    });
+    assert.equal(decision.action, "skip");
+    assert.match(decision.reason, /ahead of upstream/);
+  });
 });
