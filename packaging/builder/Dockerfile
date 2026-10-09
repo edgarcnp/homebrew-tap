@@ -61,7 +61,7 @@ RUN bash /usr/local/src/install-anylinux-tools.sh \
 
 # pkgforge appimagetool (uruntime). Renovate rewrites the version in this URL.
 RUN curl -fL -o /usr/local/bin/appimagetool \
-      "https://github.com/pkgforge-dev/appimagetool/releases/download/0.5.2/appimagetool-x86_64-linux" \
+      "https://github.com/pkgforge-dev/appimagetool/releases/download/0.5.3/appimagetool-x86_64-linux" \
  && chmod 0755 /usr/local/bin/appimagetool
 
 # Node.js, the orchestrator runtime, pinned to the same version CI sets up.
