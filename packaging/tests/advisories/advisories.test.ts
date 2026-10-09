@@ -3,30 +3,30 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { describe, it } from "node:test";
-import { selectLatestPackage, verifyIndexedFile } from "../../lib/oracles/apt.ts";
+import { selectLatestPackage, verifyIndexedFile } from "../../lib/advisories/apt.ts";
 import { GuardViolationError } from "../../lib/core/errors.ts";
-import { parseFinalUrl, resolveWithCdnRedirect } from "../../lib/oracles/cdn-redirect.ts";
+import { parseFinalUrl, resolveWithCdnRedirect } from "../../lib/advisories/cdn-redirect.ts";
 import {
   parseFeedRedirect,
   parseUpdateYml,
   requireGithubCoords,
   selectAsset,
   validateFeedRepository,
-} from "../../lib/oracles/electron-feed.ts";
-import { selectRelease, isAppImageAsset, updateYmlName } from "../../lib/oracles/github-release.ts";
-import { assertRepositoryUrl, fetchReleaseList } from "../../lib/oracles/github-api.ts";
-import { normalizeTagVersion, parseSha256Digest } from "../../lib/oracles/release-common.ts";
+} from "../../lib/advisories/electron-feed.ts";
+import { selectRelease, isAppImageAsset, updateYmlName } from "../../lib/advisories/github-release.ts";
+import { assertRepositoryUrl, fetchReleaseList } from "../../lib/advisories/github-api.ts";
+import { normalizeTagVersion, parseSha256Digest } from "../../lib/advisories/release-common.ts";
 import {
   fetchManifest,
   selectManifestAsset,
   validateManifestEndpoint,
-} from "../../lib/oracles/update-manifest.ts";
+} from "../../lib/advisories/update-manifest.ts";
 import { compareDebVersions } from "../../lib/core/version.ts";
 
 const SHA512 = "A".repeat(86) + "==";
 const GITBUTLER_HOSTS = ["releases.gitbutler.com"];
 
-describe("apt oracle", () => {
+describe("apt advisory", () => {
   const packages = [
     "Package: code",
     "Architecture: amd64",
@@ -120,7 +120,7 @@ describe("apt oracle", () => {
   });
 });
 
-describe("github-release oracle", () => {
+describe("github-release advisory", () => {
   it("accepts only the api.github.com repository shape", () => {
     assert.equal(
       assertRepositoryUrl("https://api.github.com/repos/anomalyco/opencode/"),
@@ -149,7 +149,7 @@ describe("github-release oracle", () => {
   });
 });
 
-describe("electron-feed oracle", () => {
+describe("electron-feed advisory", () => {
   it("parses the feed redirect and pins the asset shape", () => {
     const parsed = parseFeedRedirect(
       "https://github.com/CodebuffAI/codebuff-community/releases/download/freebuff-desktop-v0.0.109/latest-linux.yml",
@@ -303,7 +303,7 @@ describe("electron-feed oracle", () => {
   });
 });
 
-describe("cdn-redirect oracle", () => {
+describe("cdn-redirect advisory", () => {
   const target =
     "https://releases.gitbutler.com/releases/release/0.22.3-3215/linux/x86_64/GitButler_0.22.3_amd64.deb";
 
@@ -423,7 +423,7 @@ function mutatedEntry(mutate: (entry: Record<string, unknown>) => void): Record<
   return copy;
 }
 
-describe("update-manifest oracle", () => {
+describe("update-manifest advisory", () => {
   it("selects the requested asset from a valid manifest", () => {
     const selected = selectManifestAsset(
       manifestFor(),

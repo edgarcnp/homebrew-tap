@@ -94,17 +94,17 @@ in shell or `jq`.
 | `fbr cask render --app X --manifest M` | Writes `Casks/X.rb` from descriptor + manifest (see "Generated casks"). |
 | `fbr report compose ...` | Merges plan output, per-job results and fragments into one schema-1 record. Pure and unit-tested, replacing the workflow's `jq` assembly. |
 | `fbr report deliver --record R` | Fetches the OIDC token and POSTs the record with today's semantics: 2xx delivered, 429 backs off per Retry-After (capped) while other 4xx is a permanent warning, 000/5xx retried to three attempts total with 5/10/15 s sleeps; never logs the token; never fails the run. |
-| `fbr check [--app X \| --all]` | Descriptor schema, generated-file freshness (the cask, once casks are generated), toolchain doctor; `--resolve` adds a metadata-only oracle dry-run. |
+| `fbr check [--app X \| --all]` | Descriptor schema, generated-file freshness (the cask, once casks are generated), toolchain doctor; `--resolve` adds a metadata-only advisory dry-run. |
 | `fbr app new --id X [--from Y]` | Scaffolds descriptor, desktop templates, placeholder cask and README row. |
 
 Stages: **resolve → extract → stage → neutralize → render/icon → pack →
-verify**, with the oracle's fetch and checksum checks inside `resolve` and the
+verify**, with the advisory's fetch and checksum checks inside `resolve` and the
 smoke run inside `verify`. Each external command (`dpkg-deb`, `gpgv`,
 `quick-sharun`, `appimagetool`, the smoke run) sits behind one adapter
 interface, so stages are unit-testable against fakes and `--dry-run` prints the
 exact invocations. The existing behavior, including the sharun sidecar
 reconciliation and host-helper stash/restore, moves into stages unchanged;
-their tests move to stage tests. The oracle HTTP core is also the API delivery
+their tests move to stage tests. The advisory HTTP core is also the API delivery
 client — one guarded client, one test strategy.
 
 ### Descriptor v2
@@ -138,7 +138,7 @@ does not change).
   "version": "1.139.1",
   "architecture": "amd64",
   "descriptor": { "path": "packaging/apps/vscode/app.json", "sha256": "..." },
-  "upstream": { "oracle": "apt", "url": "https://...", "sha256": "...", "size": 12345678 },
+  "upstream": { "advisory": "apt", "url": "https://...", "sha256": "...", "size": 12345678 },
   "artifact": { "name": "vscode-1.139.1-x86_64.AppImage", "sha256": "...", "size": 98765432 },
   "toolchain": {
     "image": "ghcr.io/edgarcnp/fbr-builder-base:<tag>@sha256:...",
@@ -256,7 +256,7 @@ outside CI). No `build.sh` shim, no workflow edit, no source checkout.
 ## Migration
 
 Each phase lands on its own with `main` green; the old pipeline is the
-reference oracle until its last consumer is gone. **Status:** phases 0 and 1
+reference until its last consumer is gone. **Status:** phases 0 and 1
 are landed; the run record is still assembled in the workflows and the shell
 pipeline is still the only build path, so phases 2–5 are not started.
 

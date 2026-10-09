@@ -1,4 +1,4 @@
-// The metadata document oracles emit and the shell pipeline reads; one
+// The metadata document advisories emit and the shell pipeline reads; one
 // validator here means the scripts can trust the JSON.
 
 import * as fs from "node:fs";
@@ -15,7 +15,7 @@ import { DEB_VERSION } from "./patterns.ts";
 import type { Architecture, Metadata } from "./types.ts";
 import { isArchitecture } from "./types.ts";
 
-// The fields an oracle fills in. Everything else follows one convention:
+// The fields an advisory fills in. Everything else follows one convention:
 // packageVersion mirrors version (the deb build epoch only matters for apt),
 // depends is empty, and an unresolved payload carries a null path.
 export interface MetadataFields {

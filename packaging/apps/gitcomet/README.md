@@ -20,7 +20,7 @@ is filled on the first publish, pinning the final AppImage at install.
   architectures, and `normalizeUpstreamVersion` drops the numeric revision, so
   the cask version and the feed title agree on the upstream version. The repo is
   republished minutes after each GitHub release, which also keeps `InRelease`
-  inside the oracle's 14-day freshness window. `InRelease` publishes no
+  inside the advisory's 14-day freshness window. `InRelease` publishes no
   `Valid-Until`, so freshness falls back to `Date`.
 - **Payload** — `deb-files`: `usr/bin/gitcomet` is staged into `AppDir/bin`, and
   the 512×512 icon comes from

@@ -1,4 +1,4 @@
-// electron-updater feed oracle. The feed's 302 names the exact release tag; the
+// electron-updater feed advisory. The feed's 302 names the exact release tag; the
 // yml supplies filename, SHA-512 and size, and the GitHub API for that tag
 // supplies the SHA-256. All three are verified at download time.
 
@@ -14,7 +14,7 @@ import { MAX_PAYLOAD_BYTES, fetchOnce, httpFailure } from "../core/http.ts";
 import { makeMetadata, writeMetadata } from "../core/metadata.ts";
 import { SAFE_REFERENCE } from "../core/patterns.ts";
 import { substitutePlaceholders } from "../core/template.ts";
-import type { Architecture, ElectronFeedOracle, Metadata } from "../core/types.ts";
+import type { Architecture, ElectronFeedAdvisory, Metadata } from "../core/types.ts";
 import { downloadVerified, fetchVerified } from "./download.ts";
 import {
   assertRepositoryUrl,
@@ -237,14 +237,14 @@ export function selectAsset(
 }
 
 export async function resolveWithElectronFeed(
-  oracle: ElectronFeedOracle,
+  advisory: ElectronFeedAdvisory,
   request: ResolveRequest,
 ): Promise<Metadata> {
   const layout = ARCH_LAYOUT[request.architecture];
-  const repository = validateFeedRepository(oracle.repository);
-  const githubRepository = assertRepositoryUrl(oracle.githubRepository);
-  const tagPrefix = assertMatches(oracle.tagPrefix, SAFE_REFERENCE, "tag prefix");
-  const packageName = assertSafeName(oracle.packageName, "package name");
+  const repository = validateFeedRepository(advisory.repository);
+  const githubRepository = assertRepositoryUrl(advisory.githubRepository);
+  const tagPrefix = assertMatches(advisory.tagPrefix, SAFE_REFERENCE, "tag prefix");
+  const packageName = assertSafeName(advisory.packageName, "package name");
   const { outputDir, metadataPath } = prepareOutput(request);
 
   // Redirect only: the Location header carries the exact release tag.
@@ -268,7 +268,7 @@ export async function resolveWithElectronFeed(
   const parsed = parseFeedRedirect(location, tagPrefix, layout.yml);
   requireGithubCoords(parsed, githubRepository);
 
-  const expectedAsset = substitutePlaceholders(oracle.assetNameTemplate, {
+  const expectedAsset = substitutePlaceholders(advisory.assetNameTemplate, {
     version: parsed.version,
     arch: layout.assetArch,
   });

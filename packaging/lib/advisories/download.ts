@@ -1,4 +1,4 @@
-// The one download path every oracle shares: single-attempt fetch, enforce the
+// The one download path every advisory shares: single-attempt fetch, enforce the
 // host allow-list and size cap, verify the digest(s), write atomically.
 
 import { assertHostAllowed } from "../core/guards.ts";
@@ -15,7 +15,7 @@ import {
   writeFileAtomic,
 } from "../core/http.ts";
 
-// What the caller knows before downloading. All optional: the CDN oracle has
+// What the caller knows before downloading. All optional: the CDN advisory has
 // no checksum, while the GitHub-backed ones carry a SHA-256 (the electron feed
 // also a SHA-512).
 export interface PayloadExpectation {
@@ -38,7 +38,7 @@ export interface FetchVerifiedOptions {
 
 export interface FetchedPayload {
   bytes: Buffer;
-  // Final URL after redirects; the CDN oracle parses it as its version source.
+  // Final URL after redirects; the CDN advisory parses it as its version source.
   finalUrl: URL;
 }
 

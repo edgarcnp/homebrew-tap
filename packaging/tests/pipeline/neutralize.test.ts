@@ -30,7 +30,7 @@ function descriptorWith(updater: UpdaterConfig, id = "vscode"): AppDescriptor {
     buildPackages: [],
     architectures: ["amd64", "arm64"],
     binaryTargets: ["code"],
-    oracle: { kind: "github-release", repository: "https://api.github.com/repos/x/y", assetPrefix: "z" },
+    advisory: { kind: "github-release", repository: "https://api.github.com/repos/x/y", assetPrefix: "z" },
     payload: { kind: "deb-tree", tree: "usr/share/code" },
     icon: { source: "usr/share/pixmaps/vscode.png", size: "256x256" },
     desktopTemplate: "templates/vscode.desktop",

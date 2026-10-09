@@ -18,7 +18,7 @@
     "debloatArgs",
     "architectures",
     "binaryTargets",
-    "oracle",
+    "advisory",
     "payload",
     "icon",
     "desktopTemplate",
@@ -102,28 +102,28 @@
         "$ref": "#/$defs/safeIdentifier"
       }
     },
-    "oracle": {
+    "advisory": {
       "oneOf": [
         {
-          "$ref": "#/$defs/oracleApt"
+          "$ref": "#/$defs/advisoryApt"
         },
         {
-          "$ref": "#/$defs/oracleGithubReleaseLegacy"
+          "$ref": "#/$defs/advisoryGithubReleaseLegacy"
         },
         {
-          "$ref": "#/$defs/oracleGithubReleaseVersioned"
+          "$ref": "#/$defs/advisoryGithubReleaseVersioned"
         },
         {
-          "$ref": "#/$defs/oracleElectronFeed"
+          "$ref": "#/$defs/advisoryElectronFeed"
         },
         {
-          "$ref": "#/$defs/oracleCdnRedirect"
+          "$ref": "#/$defs/advisoryCdnRedirect"
         },
         {
-          "$ref": "#/$defs/oracleUpdateManifest"
+          "$ref": "#/$defs/advisoryUpdateManifest"
         },
         {
-          "$ref": "#/$defs/oracleAvakot"
+          "$ref": "#/$defs/advisoryAvakot"
         }
       ]
     },
@@ -293,7 +293,7 @@
         }
       }
     },
-    "oracleApt": {
+    "advisoryApt": {
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -329,7 +329,7 @@
         }
       }
     },
-    "oracleGithubReleaseLegacy": {
+    "advisoryGithubReleaseLegacy": {
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -349,7 +349,7 @@
         }
       }
     },
-    "oracleGithubReleaseVersioned": {
+    "advisoryGithubReleaseVersioned": {
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -379,7 +379,7 @@
         }
       }
     },
-    "oracleElectronFeed": {
+    "advisoryElectronFeed": {
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -415,7 +415,7 @@
         }
       }
     },
-    "oracleCdnRedirect": {
+    "advisoryCdnRedirect": {
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -446,7 +446,7 @@
         }
       }
     },
-    "oracleUpdateManifest": {
+    "advisoryUpdateManifest": {
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -477,7 +477,7 @@
         }
       }
     },
-    "oracleAvakot": {
+    "advisoryAvakot": {
       "type": "object",
       "additionalProperties": false,
       "required": [

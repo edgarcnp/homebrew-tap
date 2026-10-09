@@ -116,7 +116,7 @@ describe("planGate", () => {
   });
 
   it("skips as not-ready when the requested version is newer than upstream", () => {
-    // The API dispatched 1.1.0 but the oracle still sees 1.0.0: the artifact
+    // The API dispatched 1.1.0 but the advisory still sees 1.0.0: the artifact
     // is not published yet, so the gate vetoes the build even though the cask
     // is behind and a release exists for the older version.
     const decision = planGate({

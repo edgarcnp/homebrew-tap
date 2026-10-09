@@ -100,7 +100,7 @@ describe("descriptor loading", () => {
 describe("descriptor contents (regression against the previous per-app scripts)", () => {
   it("keeps vscode's apt pin, staging and updater neutralization", () => {
     const descriptor = loadDescriptor("vscode");
-    assert.equal(descriptor.oracle.kind, "apt");
+    assert.equal(descriptor.advisory.kind, "apt");
     assert.equal(descriptor.payload.kind, "deb-tree");
     assert.equal(descriptor.payload.tree, "usr/share/code");
     assert.equal(descriptor.icon.size, "256x256");
@@ -113,14 +113,14 @@ describe("descriptor contents (regression against the previous per-app scripts)"
 
   it("keeps opencode-desktop's update-manifest, required feed removal and warning-level scan", () => {
     const descriptor = loadDescriptor("opencode-desktop");
-    assert.equal(descriptor.oracle.kind, "update-manifest");
-    if (descriptor.oracle.kind === "update-manifest") {
+    assert.equal(descriptor.advisory.kind, "update-manifest");
+    if (descriptor.advisory.kind === "update-manifest") {
       assert.equal(
-        descriptor.oracle.repository,
+        descriptor.advisory.repository,
         "https://opencode.ai/update/api/latest/desktop/opencode",
       );
-      assert.equal(descriptor.oracle.assetTemplate, "opencode-desktop-linux-{arch}.deb");
-      assert.deepEqual(descriptor.oracle.downloadHosts, ["opencode.ai"]);
+      assert.equal(descriptor.advisory.assetTemplate, "opencode-desktop-linux-{arch}.deb");
+      assert.deepEqual(descriptor.advisory.downloadHosts, ["opencode.ai"]);
     }
     assert.equal(descriptor.payload.tree, "opt/OpenCode");
     assert.equal(descriptor.updater.removeFeed?.required, true);
@@ -134,9 +134,9 @@ describe("descriptor contents (regression against the previous per-app scripts)"
     assert.deepEqual(descriptor.hostHelpers, ["bin/resources/opencode-cli"]);
   });
 
-  it("keeps gitcomet's signed apt oracle and single-binary file list", () => {
+  it("keeps gitcomet's signed apt advisory and single-binary file list", () => {
     const descriptor = loadDescriptor("gitcomet");
-    assert.equal(descriptor.oracle.kind, "apt");
+    assert.equal(descriptor.advisory.kind, "apt");
     assert.equal(descriptor.debloatArgs, "--add-common");
     assert.deepEqual(descriptor.architectures, ["amd64"]);
     assert.deepEqual(descriptor.payload.files, ["usr/bin/gitcomet"]);
@@ -150,9 +150,9 @@ describe("descriptor contents (regression against the previous per-app scripts)"
     assert.deepEqual(descriptor.quickSharun, { hooks: ["fix-namespaces.hook"] });
   });
 
-  it("keeps little-genius' avakot oracle, file list and error-level scan", () => {
+  it("keeps little-genius' avakot advisory, file list and error-level scan", () => {
     const descriptor = loadDescriptor("little-genius");
-    assert.equal(descriptor.oracle.kind, "avakot");
+    assert.equal(descriptor.advisory.kind, "avakot");
     assert.deepEqual(descriptor.architectures, ["amd64"]);
     assert.deepEqual(descriptor.binaryTargets, ["little-genius", "lg-linux-compat"]);
     assert.equal(descriptor.payload.kind, "deb-files");
@@ -170,19 +170,19 @@ describe("descriptor contents (regression against the previous per-app scripts)"
     assert.equal(descriptor.updater.residualScan?.severity, "error");
   });
 
-  it("keeps wfhelper's AppImage oracle, tree staging and required feed removal", () => {
+  it("keeps wfhelper's AppImage advisory, tree staging and required feed removal", () => {
     const descriptor = loadDescriptor("wfhelper");
-    assert.equal(descriptor.oracle.kind, "github-release");
+    assert.equal(descriptor.advisory.kind, "github-release");
     assert.equal(
-      descriptor.oracle.kind === "github-release" ? descriptor.oracle.assetNameTemplate : "",
+      descriptor.advisory.kind === "github-release" ? descriptor.advisory.assetNameTemplate : "",
       "WFHelper-{version}.AppImage",
     );
     assert.equal(
-      descriptor.oracle.kind === "github-release" ? descriptor.oracle.tagPrefix : "",
+      descriptor.advisory.kind === "github-release" ? descriptor.advisory.tagPrefix : "",
       "v",
     );
     assert.equal(
-      descriptor.oracle.kind === "github-release" ? descriptor.oracle.packageName : "",
+      descriptor.advisory.kind === "github-release" ? descriptor.advisory.packageName : "",
       "wfhelper",
     );
     assert.deepEqual(descriptor.architectures, ["amd64"]);
@@ -199,13 +199,13 @@ describe("descriptor contents (regression against the previous per-app scripts)"
 
   it("keeps firefox's Mozilla apt suite, tree staging and codec dlopens", () => {
     const descriptor = loadDescriptor("firefox");
-    assert.equal(descriptor.oracle.kind, "apt");
-    if (descriptor.oracle.kind === "apt") {
-      assert.equal(descriptor.oracle.repository, "https://packages.mozilla.org/apt");
-      // The suite is what makes the oracle read dists/mozilla instead of dists/stable.
-      assert.equal(descriptor.oracle.suite, "mozilla");
-      assert.equal(descriptor.oracle.packageName, "firefox");
-      assert.equal(descriptor.oracle.fingerprint, "35BAA0B33E9EB396F59CA838C0BA5CE6DC6315A3");
+    assert.equal(descriptor.advisory.kind, "apt");
+    if (descriptor.advisory.kind === "apt") {
+      assert.equal(descriptor.advisory.repository, "https://packages.mozilla.org/apt");
+      // The suite is what makes the advisory read dists/mozilla instead of dists/stable.
+      assert.equal(descriptor.advisory.suite, "mozilla");
+      assert.equal(descriptor.advisory.packageName, "firefox");
+      assert.equal(descriptor.advisory.fingerprint, "35BAA0B33E9EB396F59CA838C0BA5CE6DC6315A3");
     }
     assert.deepEqual(descriptor.architectures, ["amd64"]);
     assert.deepEqual(descriptor.binaryTargets, ["firefox"]);
@@ -648,11 +648,11 @@ describe("descriptor validation", () => {
     );
   });
 
-  it("rejects unknown oracle and payload kinds", () => {
+  it("rejects unknown advisory and payload kinds", () => {
     assert.throws(
       () =>
         validateDescriptor(
-          mutated("vscode", (copy) => { nested(copy, "oracle")["kind"] = "ftp"; }),
+          mutated("vscode", (copy) => { nested(copy, "advisory")["kind"] = "ftp"; }),
           "vscode",
         ),
       /Unknown resolver kind/,
@@ -731,13 +731,13 @@ describe("descriptor validation", () => {
 
   it("accepts an apt suite and rejects one that would escape dists/", () => {
     const accepted = mutated("vscode", () => {});
-    const acceptedOracle = nested(accepted, "oracle");
-    acceptedOracle["suite"] = "mozilla";
+    const acceptedAdvisory = nested(accepted, "advisory");
+    acceptedAdvisory["suite"] = "mozilla";
     assert.doesNotThrow(() => validateDescriptor(accepted, "vscode"));
 
     const rejected = mutated("vscode", () => {});
-    const rejectedOracle = nested(rejected, "oracle");
-    rejectedOracle["suite"] = "../evil";
+    const rejectedAdvisory = nested(rejected, "advisory");
+    rejectedAdvisory["suite"] = "../evil";
     assert.throws(() => validateDescriptor(rejected, "vscode"), /suite is not a safe dists suite name/);
   });
 
@@ -811,12 +811,12 @@ describe("descriptor validation", () => {
       /severity must be/,
     );
     // No descriptor declares cdn-redirect since GitButler took the only one
-    // with it, so build that oracle shape inline rather than mutating an app.
+    // with it, so build that advisory shape inline rather than mutating an app.
     assert.throws(
       () =>
         validateDescriptor(
           mutated("vscode", (copy) => {
-            copy["oracle"] = { kind: "cdn-redirect", redirectHosts: [] };
+            copy["advisory"] = { kind: "cdn-redirect", redirectHosts: [] };
           }),
           "vscode",
         ),
@@ -862,11 +862,11 @@ describe("descriptor validation", () => {
     );
   });
 
-  it("requires the versioned-asset oracle fields together and exclusively", () => {
+  it("requires the versioned-asset advisory fields together and exclusively", () => {
     assert.throws(
       () =>
         validateDescriptor(
-          mutated("wfhelper", (copy) => { delete nested(copy, "oracle")["tagPrefix"]; }),
+          mutated("wfhelper", (copy) => { delete nested(copy, "advisory")["tagPrefix"]; }),
           "wfhelper",
         ),
       /must be set together/,
@@ -874,7 +874,7 @@ describe("descriptor validation", () => {
     assert.throws(
       () =>
         validateDescriptor(
-          mutated("wfhelper", (copy) => { nested(copy, "oracle")["assetPrefix"] = "x"; }),
+          mutated("wfhelper", (copy) => { nested(copy, "advisory")["assetPrefix"] = "x"; }),
           "wfhelper",
         ),
       /mutually exclusive/,
@@ -882,18 +882,18 @@ describe("descriptor validation", () => {
     assert.throws(
       () =>
         validateDescriptor(
-          mutated("wfhelper", (copy) => { nested(copy, "oracle")["assetNameTemplate"] = "no-version-here.deb"; }),
+          mutated("wfhelper", (copy) => { nested(copy, "advisory")["assetNameTemplate"] = "no-version-here.deb"; }),
           "wfhelper",
         ),
       /must contain \{version\}/,
     );
   });
 
-  it("rejects malformed update-manifest oracles", () => {
+  it("rejects malformed update-manifest advisories", () => {
     assert.throws(
       () =>
         validateDescriptor(
-          mutated("opencode-desktop", (copy) => { delete nested(copy, "oracle")["assetTemplate"]; }),
+          mutated("opencode-desktop", (copy) => { delete nested(copy, "advisory")["assetTemplate"]; }),
           "opencode-desktop",
         ),
       /assetTemplate must be a non-empty string/,
@@ -901,7 +901,7 @@ describe("descriptor validation", () => {
     assert.throws(
       () =>
         validateDescriptor(
-          mutated("opencode-desktop", (copy) => { nested(copy, "oracle")["assetTemplate"] = "opencode.desb"; }),
+          mutated("opencode-desktop", (copy) => { nested(copy, "advisory")["assetTemplate"] = "opencode.desb"; }),
           "opencode-desktop",
         ),
       /must contain \{arch\}/,
@@ -909,7 +909,7 @@ describe("descriptor validation", () => {
     assert.throws(
       () =>
         validateDescriptor(
-          mutated("opencode-desktop", (copy) => { nested(copy, "oracle")["downloadHosts"] = []; }),
+          mutated("opencode-desktop", (copy) => { nested(copy, "advisory")["downloadHosts"] = []; }),
           "opencode-desktop",
         ),
       /downloadHosts must not be empty/,
@@ -917,7 +917,7 @@ describe("descriptor validation", () => {
     assert.throws(
       () =>
         validateDescriptor(
-          mutated("opencode-desktop", (copy) => { nested(copy, "oracle")["downloadHosts"] = "opencode.ai"; }),
+          mutated("opencode-desktop", (copy) => { nested(copy, "advisory")["downloadHosts"] = "opencode.ai"; }),
           "opencode-desktop",
         ),
       /downloadHosts must be an array/,
@@ -993,18 +993,18 @@ describe("descriptor validation", () => {
     });
   });
 
-  it("validates the provider-specific avakot oracle", () => {
+  it("validates the provider-specific avakot advisory", () => {
     const descriptor = loadDescriptor("little-genius");
-    assert.equal(descriptor.oracle.kind, "avakot");
-    if (descriptor.oracle.kind === "avakot") {
-      assert.equal(descriptor.oracle.repository, "https://api.avakot.org/lg/manifest.json");
-      assert.equal(descriptor.oracle.assetTemplate, "linux_x86_64_deb");
-      assert.deepEqual(descriptor.oracle.downloadHosts, ["api.avakot.org"]);
+    assert.equal(descriptor.advisory.kind, "avakot");
+    if (descriptor.advisory.kind === "avakot") {
+      assert.equal(descriptor.advisory.repository, "https://api.avakot.org/lg/manifest.json");
+      assert.equal(descriptor.advisory.assetTemplate, "linux_x86_64_deb");
+      assert.deepEqual(descriptor.advisory.downloadHosts, ["api.avakot.org"]);
     }
     assert.throws(
       () =>
         validateDescriptor(
-          mutated("little-genius", (copy) => { nested(copy, "oracle")["downloadHosts"] = []; }),
+          mutated("little-genius", (copy) => { nested(copy, "advisory")["downloadHosts"] = []; }),
           "little-genius",
         ),
       /downloadHosts must not be empty/,
@@ -1014,7 +1014,7 @@ describe("descriptor validation", () => {
     assert.throws(
       () =>
         validateDescriptor(
-          mutated("little-genius", (copy) => { nested(copy, "oracle")["kind"] = "update-manifest"; }),
+          mutated("little-genius", (copy) => { nested(copy, "advisory")["kind"] = "update-manifest"; }),
           "little-genius",
         ),
       /must contain \{arch\}/,

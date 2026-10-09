@@ -1,8 +1,8 @@
-// Oracle dispatch. The switch is exhaustive, so adding a resolver kind without
+// Advisory dispatch. The switch is exhaustive, so adding a resolver kind without
 // handling it here is a type error rather than a runtime surprise.
 
 import { fail } from "../core/guards.ts";
-import type { Metadata, Oracle, OracleKind } from "../core/types.ts";
+import type { Metadata, Advisory, AdvisoryKind } from "../core/types.ts";
 import { resolveWithApt } from "./apt.ts";
 import { resolveWithCdnRedirect } from "./cdn-redirect.ts";
 import { resolveWithAvakot } from "./custom/avakot.ts";
@@ -11,14 +11,14 @@ import { resolveWithGithubRelease } from "./github-release.ts";
 import type { ResolveRequest } from "./shared.ts";
 import { resolveWithUpdateManifest } from "./update-manifest.ts";
 
-export type OracleResolver<K extends OracleKind> = (
-  oracle: Extract<Oracle, { kind: K }>,
+export type AdvisoryResolver<K extends AdvisoryKind> = (
+  advisory: Extract<Advisory, { kind: K }>,
   request: ResolveRequest,
 ) => Promise<Metadata>;
 
-type Registry = { [K in OracleKind]: OracleResolver<K> };
+type Registry = { [K in AdvisoryKind]: AdvisoryResolver<K> };
 
-export const ORACLE_RESOLVERS: Registry = {
+export const ADVISORY_RESOLVERS: Registry = {
   apt: resolveWithApt,
   "github-release": resolveWithGithubRelease,
   "electron-feed": resolveWithElectronFeed,
@@ -27,21 +27,21 @@ export const ORACLE_RESOLVERS: Registry = {
   avakot: resolveWithAvakot,
 };
 
-export function resolveWith(oracle: Oracle, request: ResolveRequest): Promise<Metadata> {
-  switch (oracle.kind) {
+export function resolveWith(advisory: Advisory, request: ResolveRequest): Promise<Metadata> {
+  switch (advisory.kind) {
     case "apt":
-      return ORACLE_RESOLVERS.apt(oracle, request);
+      return ADVISORY_RESOLVERS.apt(advisory, request);
     case "github-release":
-      return ORACLE_RESOLVERS["github-release"](oracle, request);
+      return ADVISORY_RESOLVERS["github-release"](advisory, request);
     case "electron-feed":
-      return ORACLE_RESOLVERS["electron-feed"](oracle, request);
+      return ADVISORY_RESOLVERS["electron-feed"](advisory, request);
     case "cdn-redirect":
-      return ORACLE_RESOLVERS["cdn-redirect"](oracle, request);
+      return ADVISORY_RESOLVERS["cdn-redirect"](advisory, request);
     case "update-manifest":
-      return ORACLE_RESOLVERS["update-manifest"](oracle, request);
+      return ADVISORY_RESOLVERS["update-manifest"](advisory, request);
     case "avakot":
-      return ORACLE_RESOLVERS.avakot(oracle, request);
+      return ADVISORY_RESOLVERS.avakot(advisory, request);
   }
-  const exhaustive: never = oracle;
+  const exhaustive: never = advisory;
   return fail(`Unsupported resolver kind: ${JSON.stringify(exhaustive)}`);
 }

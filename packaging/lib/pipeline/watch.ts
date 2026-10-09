@@ -1,8 +1,8 @@
 // The release-feed cross-check. The API's watcher dispatches a build off the
 // feed a descriptor declares in `watch`, while `resolve` asks a different
-// source (the oracle) which version to build. The two publish on their own
+// source (the advisory) which version to build. The two publish on their own
 // schedules, so a run can land in the window where the feed already lists the
-// new version and the oracle still serves the old one: gating on that stale
+// new version and the advisory still serves the old one: gating on that stale
 // read skips a build that is already due. This module reads the feed once and
 // reports the newest version it advertises; the run does not wait on it, and
 // the record carries both versions (plus the cask pin) for the caller to watch.

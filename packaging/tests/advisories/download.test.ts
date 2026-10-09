@@ -8,7 +8,7 @@ import * as http from "node:http";
 import { after, before, describe, it } from "node:test";
 import { ChecksumMismatchError, GuardViolationError, UpstreamUnavailableError } from "../../lib/core/errors.ts";
 import { sha256Hex, sha512Base64 } from "../../lib/core/http.ts";
-import { fetchVerified, verifyPayload } from "../../lib/oracles/download.ts";
+import { fetchVerified, verifyPayload } from "../../lib/advisories/download.ts";
 
 let server: http.Server;
 let baseUrl: string;

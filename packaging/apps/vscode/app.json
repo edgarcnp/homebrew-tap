@@ -20,7 +20,7 @@
   "debloatArgs": "--add-common --prefer-nano ffmpeg-mini gdk-pixbuf2-mini",
   "architectures": ["amd64"],
   "binaryTargets": ["code"],
-  "oracle": {
+  "advisory": {
     "kind": "apt",
     "repository": "https://packages.microsoft.com/repos/code",
     "packageName": "code",

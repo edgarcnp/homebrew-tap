@@ -15,7 +15,7 @@ extract step).
   `WFHelper-{version}.AppImage` with a SHA-256 digest. The release's
   electron-builder `latest-linux.yml` is cross-checked (SHA-512 and size
   against the API asset) before downloading, mirroring the `electron-feed`
-  oracle minus its feed-redirect step. An arm64 resolve finds no yml and fails
+  advisory minus its feed-redirect step. An arm64 resolve finds no yml and fails
   rather than packaging the wrong architecture.
 - **Watch** — the normal atom block over `WFHelper/WFHelper` releases; the
   entry titles are `v2.1.0`-style tags.

@@ -1,4 +1,4 @@
-// GitHub release asset oracle: the newest published release carrying the
+// GitHub release asset advisory: the newest published release carrying the
 // requested architecture's payload with a SHA-256 digest, verified at
 // download. Two flavors:
 //   - legacy `.deb` ("<assetPrefix>-<arch>.deb");
@@ -12,7 +12,7 @@ import { MAX_PAYLOAD_BYTES } from "../core/http.ts";
 import { makeMetadata, writeMetadata } from "../core/metadata.ts";
 import { SAFE_REFERENCE } from "../core/patterns.ts";
 import { substitutePlaceholders } from "../core/template.ts";
-import type { Architecture, GithubReleaseOracle, Metadata } from "../core/types.ts";
+import type { Architecture, GithubReleaseAdvisory, Metadata } from "../core/types.ts";
 import { ARCHITECTURES } from "../core/types.ts";
 import { downloadVerified, fetchVerified } from "./download.ts";
 import { parseUpdateYml } from "./electron-feed.ts";
@@ -53,7 +53,7 @@ export function isAppImageAsset(name: string): boolean {
 }
 
 // The electron-builder update yml shipped alongside an AppImage release
-// asset, per architecture. Mirrors the electron-feed oracle's layout without
+// asset, per architecture. Mirrors the electron-feed advisory's layout without
 // its feed-redirect step: the tag is already known from the release scan.
 export function updateYmlName(architecture: Architecture): string {
   return architecture === "arm64" ? "latest-linux-arm64.yml" : "latest-linux.yml";
@@ -200,23 +200,23 @@ async function resolveAppImageAsset(
 }
 
 export async function resolveWithGithubRelease(
-  oracle: GithubReleaseOracle,
+  advisory: GithubReleaseAdvisory,
   request: ResolveRequest,
 ): Promise<Metadata> {
-  const repository = assertRepositoryUrl(oracle.repository);
+  const repository = assertRepositoryUrl(advisory.repository);
   const { outputDir, metadataPath } = prepareOutput(request);
   const architecture = request.architecture;
   const downloadBase = githubDownloadBase(repository);
 
-  if (oracle.assetNameTemplate !== undefined) {
-    if (oracle.tagPrefix === undefined || oracle.packageName === undefined) {
+  if (advisory.assetNameTemplate !== undefined) {
+    if (advisory.tagPrefix === undefined || advisory.packageName === undefined) {
       fail("assetNameTemplate requires tagPrefix and packageName");
     }
-    const packageName = assertMatches(oracle.packageName, SAFE_REFERENCE, "package name");
+    const packageName = assertMatches(advisory.packageName, SAFE_REFERENCE, "package name");
     const { tag, version, asset } = await selectTemplatedRelease(
       repository,
-      oracle.assetNameTemplate,
-      oracle.tagPrefix,
+      advisory.assetNameTemplate,
+      advisory.tagPrefix,
       architecture,
       request.token,
     );
@@ -224,7 +224,7 @@ export async function resolveWithGithubRelease(
     // AppImage payloads (e.g. WFHelper) cross-check the release's
     // electron-builder update yml: its SHA-512 and size must agree with the
     // API asset before the payload is trusted, mirroring the electron-feed
-    // oracle minus the feed-redirect step.
+    // advisory minus the feed-redirect step.
     if (isAppImageAsset(asset.name)) {
       return resolveAppImageAsset(
         request,
@@ -256,8 +256,8 @@ export async function resolveWithGithubRelease(
     return metadata;
   }
 
-  if (oracle.assetPrefix === undefined) fail("github-release oracle requires assetPrefix or assetNameTemplate");
-  const assetPrefix = assertMatches(oracle.assetPrefix, SAFE_REFERENCE, "asset prefix");
+  if (advisory.assetPrefix === undefined) fail("github-release advisory requires assetPrefix or assetNameTemplate");
+  const assetPrefix = assertMatches(advisory.assetPrefix, SAFE_REFERENCE, "asset prefix");
   const { tag, assets } = await selectRelease(repository, assetPrefix, request.token);
   const asset = assets[architecture];
   const version = normalizeTagVersion(tag);

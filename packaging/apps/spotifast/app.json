@@ -21,7 +21,7 @@
   "buildPackages": ["alsa-lib", "libpulse"],
   "architectures": ["amd64"],
   "binaryTargets": ["spotifast"],
-  "oracle": {
+  "advisory": {
     "kind": "github-release",
     "repository": "https://api.github.com/repos/crmne/spotifast",
     "packageName": "spotifast",

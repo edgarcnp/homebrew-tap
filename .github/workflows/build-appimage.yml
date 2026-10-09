@@ -130,12 +130,12 @@ jobs:
           REQUESTED_VERSION: ${{ inputs.requested_version }}
         run: |
           # Only the apt resolver verifies a signed index with gpg.
-          if [[ "$(node source/packaging/bin/fbr.ts descriptor --app "${APP_ID}" --field oracle.kind)" == "apt" ]]; then
+          if [[ "$(node source/packaging/bin/fbr.ts descriptor --app "${APP_ID}" --field advisory.kind)" == "apt" ]]; then
             sudo apt-get update
             sudo apt-get install -y gnupg
           fi
           cd source
-          # The descriptor's watch feed and the oracle resolve asks publish on
+          # The descriptor's watch feed and the advisory resolve asks publish on
           # their own schedules (opencode's update manifest lagged its own
           # release feed by ~1min on 2.0.14, and that run gated on the stale
           # read and skipped). Read the feed once and record what it advertises;

@@ -1,4 +1,4 @@
-// CDN download-redirect oracle. The redirect target is the only version
+// CDN download-redirect advisory. The redirect target is the only version
 // source (no signed apt repository, no GitHub release), and the CDN publishes
 // no checksums, so the payload is hashed on download. In metadata-only mode
 // the payload is still downloaded to compute the SHA-256 but discarded.
@@ -15,7 +15,7 @@ import {
 } from "../core/guards.ts";
 import { digestMatchesHex, sha256Digest, sha256Hex, writeFileAtomic } from "../core/http.ts";
 import { makeMetadata, writeMetadata } from "../core/metadata.ts";
-import type { Architecture, CdnRedirectOracle, Metadata } from "../core/types.ts";
+import type { Architecture, CdnRedirectAdvisory, Metadata } from "../core/types.ts";
 import { normalizeUpstreamVersion } from "../core/version.ts";
 import { fetchVerified } from "./download.ts";
 import { prepareOutput, type ResolveRequest } from "./shared.ts";
@@ -47,7 +47,7 @@ export function parseFinalUrl(finalUrl: string, redirectHosts: readonly string[]
   }
   assertHostAllowed(url, redirectHosts, "redirect");
   const segments = url.pathname.split("/").filter(Boolean);
-  // Pins the one layout this oracle knows:
+  // Pins the one layout this advisory knows:
   // releases/release/<version>/linux/<arch>/<file>.deb
   if (
     segments.length !== 6 ||
@@ -89,31 +89,31 @@ export function parseFinalUrl(finalUrl: string, redirectHosts: readonly string[]
 }
 
 export async function resolveWithCdnRedirect(
-  oracle: CdnRedirectOracle,
+  advisory: CdnRedirectAdvisory,
   request: ResolveRequest,
 ): Promise<Metadata> {
   const mapping = ARCH_PATHS[request.architecture];
-  if (oracle.redirectHosts.length === 0) fail("redirectHosts must not be empty");
-  for (const host of oracle.redirectHosts) assertSafeName(host, "redirect host");
+  if (advisory.redirectHosts.length === 0) fail("redirectHosts must not be empty");
+  for (const host of advisory.redirectHosts) assertSafeName(host, "redirect host");
 
-  const repositoryUrl = new URL(oracle.repository);
+  const repositoryUrl = new URL(advisory.repository);
   if (repositoryUrl.protocol !== "https:") {
-    fail(`Repository must be https (got ${repositoryUrl.protocol}) for ${oracle.repository}`);
+    fail(`Repository must be https (got ${repositoryUrl.protocol}) for ${advisory.repository}`);
   }
   if (repositoryUrl.search !== "" || repositoryUrl.hash !== "") {
-    fail(`Repository must not contain a query or fragment: ${oracle.repository}`);
+    fail(`Repository must not contain a query or fragment: ${advisory.repository}`);
   }
   const repository = repositoryUrl.origin + repositoryUrl.pathname.replace(/\/+$/, "");
-  const debName = assertSafeName(oracle.debName, "deb name");
+  const debName = assertSafeName(advisory.debName, "deb name");
   const { outputDir, metadataPath } = prepareOutput(request);
 
   const { bytes, finalUrl } = await fetchVerified(`${repository}/${mapping.path}/deb`, {
-    allowedHosts: oracle.redirectHosts,
+    allowedHosts: advisory.redirectHosts,
     label: "Download",
     hostLabel: "redirect",
     timeoutMs: 60000,
   });
-  const parsed = parseFinalUrl(finalUrl.href, oracle.redirectHosts);
+  const parsed = parseFinalUrl(finalUrl.href, advisory.redirectHosts);
   if (parsed.archPath !== mapping.path) {
     throw new Error(`Redirect arch ${parsed.archPath} does not match requested ${mapping.path}`);
   }
@@ -139,7 +139,7 @@ export async function resolveWithCdnRedirect(
   }
 
   const metadata = makeMetadata({
-    package: oracle.packageName,
+    package: advisory.packageName,
     version,
     architecture: mapping.debArch,
     repositoryPath: parsed.repositoryPath,

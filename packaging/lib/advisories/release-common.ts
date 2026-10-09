@@ -1,4 +1,4 @@
-// Helpers shared by the GitHub-backed oracles (release assets and the
+// Helpers shared by the GitHub-backed advisories (release assets and the
 // electron-updater feed, which cross-checks against the same API).
 
 import { assertMatches } from "../core/guards.ts";

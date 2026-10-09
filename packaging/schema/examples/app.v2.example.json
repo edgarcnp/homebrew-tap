@@ -18,7 +18,7 @@
   "debloatArgs": "--add-common --prefer-nano ffmpeg-mini",
   "architectures": ["amd64"],
   "binaryTargets": ["code"],
-  "oracle": {
+  "advisory": {
     "kind": "apt",
     "repository": "https://packages.microsoft.com/repos/code",
     "packageName": "code",

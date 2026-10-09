@@ -8,11 +8,11 @@ import { APP_ID, GITHUB_API_REPOSITORY, SAFE_REFERENCE } from "../core/patterns.
 import { ARCHITECTURES, isArchitecture } from "../core/types.ts";
 import type {
   AppDescriptor,
-  AptOracle,
+  AptAdvisory,
   Architecture,
   ExtraFile,
   IconConfig,
-  Oracle,
+  Advisory,
   Payload,
   QuickSharunConfig,
   ResidualScan,
@@ -39,7 +39,7 @@ const TOP_LEVEL_KEYS = [
   "buildPackages",
   "architectures",
   "binaryTargets",
-  "oracle",
+  "advisory",
   "payload",
   "icon",
   "desktopTemplate",
@@ -106,7 +106,7 @@ function relativePath(value: string, label: string): string {
   return value;
 }
 
-function validateOracle(raw: unknown, label: string): Oracle {
+function validateAdvisory(raw: unknown, label: string): Advisory {
   const source = asObject(raw, label);
   const kind = str(source, "kind", label);
   switch (kind) {
@@ -121,7 +121,7 @@ function validateOracle(raw: unknown, label: string): Oracle {
       if (suite !== undefined && !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(suite)) {
         fail(`${label}.suite is not a safe dists suite name: ${suite}`);
       }
-      const apt: AptOracle = {
+      const apt: AptAdvisory = {
         kind,
         repository: str(source, "repository", label),
         packageName: str(source, "packageName", label),
@@ -219,7 +219,7 @@ function validateOracle(raw: unknown, label: string): Oracle {
       };
     }
     case "avakot": {
-      // Provider-specific manifest (see oracles/custom/): a fixed artifacts
+      // Provider-specific manifest (see advisories/custom/): a fixed artifacts
       // key names the payload, so no {arch} placeholder is required.
       rejectUnknownKeys(
         source,
@@ -582,7 +582,7 @@ export function validateDescriptor(raw: unknown, expectedId: string): AppDescrip
     buildPackages: strArray(source, "buildPackages", label),
     architectures: validateArchitectures(source["architectures"], label),
     binaryTargets: strArray(source, "binaryTargets", label),
-    oracle: validateOracle(source["oracle"], `${label}.oracle`),
+    advisory: validateAdvisory(source["advisory"], `${label}.advisory`),
     payload: validatePayload(source["payload"], `${label}.payload`),
     icon: validateIcon(source["icon"], `${label}.icon`),
     desktopTemplate: relativePath(str(source, "desktopTemplate", label), `${label}.desktopTemplate`),

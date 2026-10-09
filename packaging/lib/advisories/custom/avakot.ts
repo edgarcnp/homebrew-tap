@@ -1,10 +1,10 @@
-// Avakot manifest oracle. Provider-specific, so it lives under
-// oracles/custom/ rather than with the generic oracles: manifest.json serves
+// Avakot manifest advisory. Provider-specific, so it lives under
+// advisories/custom/ rather than with the generic advisories: manifest.json serves
 // {version, artifacts: {<name>: {url, sha256, [size], [version]}}} (e.g.
 // Little Genius). The download URL is static (no version path segment) and no
 // size is published, so the version binds through the per-entry version field
 // and the payload is measured from the verified download — downloaded and
-// discarded in --metadata-only mode, mirroring the cdn-redirect oracle.
+// discarded in --metadata-only mode, mirroring the cdn-redirect advisory.
 
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -27,7 +27,7 @@ import {
 import { makeMetadata, writeMetadata } from "../../core/metadata.ts";
 import { DEB_VERSION } from "../../core/patterns.ts";
 import { substitutePlaceholders } from "../../core/template.ts";
-import type { AvakotOracle, Metadata } from "../../core/types.ts";
+import type { AvakotAdvisory, Metadata } from "../../core/types.ts";
 import { fetchVerified } from "../download.ts";
 import { prepareOutput, type ResolveRequest } from "../shared.ts";
 import { fetchManifest, validateManifestEndpoint } from "../update-manifest.ts";
@@ -99,25 +99,25 @@ export function selectAvakotAsset(
 }
 
 export async function resolveWithAvakot(
-  oracle: AvakotOracle,
+  advisory: AvakotAdvisory,
   request: ResolveRequest,
 ): Promise<Metadata> {
-  const repository = validateManifestEndpoint(oracle.repository);
-  if (oracle.downloadHosts.length === 0) fail("downloadHosts must not be empty");
-  for (const host of oracle.downloadHosts) assertSafeName(host, "download host");
-  const packageName = assertSafeName(oracle.packageName, "package name");
-  const assetName = substitutePlaceholders(oracle.assetTemplate, {
+  const repository = validateManifestEndpoint(advisory.repository);
+  if (advisory.downloadHosts.length === 0) fail("downloadHosts must not be empty");
+  for (const host of advisory.downloadHosts) assertSafeName(host, "download host");
+  const packageName = assertSafeName(advisory.packageName, "package name");
+  const assetName = substitutePlaceholders(advisory.assetTemplate, {
     arch: request.architecture,
   });
   const { outputDir, metadataPath } = prepareOutput(request);
   const selected = selectAvakotAsset(
     await fetchManifest(repository),
     assetName,
-    oracle.downloadHosts,
+    advisory.downloadHosts,
   );
   const label = `${packageName}_${selected.version}_${request.architecture}.deb`;
   const { bytes } = await fetchVerified(selected.asset.url, {
-    allowedHosts: oracle.downloadHosts,
+    allowedHosts: advisory.downloadHosts,
     label,
     timeoutMs: 60000,
   });

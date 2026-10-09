@@ -21,7 +21,7 @@
   "buildPackages": ["libcanberra", "libxss", "speech-dispatcher"],
   "architectures": ["amd64"],
   "binaryTargets": ["firefox"],
-  "oracle": {
+  "advisory": {
     "kind": "apt",
     "repository": "https://packages.mozilla.org/apt",
     "suite": "mozilla",

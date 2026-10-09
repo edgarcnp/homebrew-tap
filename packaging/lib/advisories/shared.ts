@@ -1,4 +1,4 @@
-// Plumbing every oracle shares: output-directory preparation and metadata path
+// Plumbing every advisory shares: output-directory preparation and metadata path
 // containment.
 
 import * as fs from "node:fs";

@@ -20,7 +20,7 @@
   "buildPackages": ["libayatana-appindicator"],
   "architectures": ["amd64"],
   "binaryTargets": ["little-genius", "lg-linux-compat"],
-  "oracle": {
+  "advisory": {
     "kind": "avakot",
     "repository": "https://api.avakot.org/lg/manifest.json",
     "packageName": "little-genius",

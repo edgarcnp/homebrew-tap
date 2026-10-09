@@ -20,7 +20,7 @@
   "debloatArgs": "--add-common",
   "architectures": ["amd64"],
   "binaryTargets": ["gitcomet"],
-  "oracle": {
+  "advisory": {
     "kind": "apt",
     "repository": "https://apt.gitcomet.dev",
     "packageName": "gitcomet",

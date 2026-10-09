@@ -20,7 +20,7 @@
   "debloatArgs": "--add-common --prefer-nano ffmpeg-mini gdk-pixbuf2-mini",
   "architectures": ["amd64"],
   "binaryTargets": ["opencode-desktop"],
-  "oracle": {
+  "advisory": {
     "kind": "update-manifest",
     "repository": "https://opencode.ai/update/api/latest/desktop/opencode",
     "packageName": "opencode-desktop",

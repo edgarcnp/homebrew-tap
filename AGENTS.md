@@ -9,7 +9,7 @@ This file is a map, not the terrain: where it and the code disagree, the code
 wins and this file is stale — say so instead of following it.
 
 The deep reference is [`packaging/README.md`](packaging/README.md): the layout,
-every descriptor field, the oracle kinds, the `fbr` CLI, the run record, the
+every descriptor field, the advisory kinds, the `fbr` CLI, the run record, the
 verification and build models, and the steps for adding an app. Read the
 section you are about to change rather than guessing at it.
 
@@ -36,7 +36,7 @@ is **data** (`packaging/apps/<app>/app.json`), never a forked script.
 | --- | --- |
 | `Casks/<app>.rb` | the cask: version and `sha256` pinned |
 | `packaging/apps/<app>/` | `app.json` descriptor, `build.sh` shim, templates, key material |
-| `packaging/bin/fbr.ts` | the CLI; `packaging/lib/{core,pipeline,oracles,schema,shell}/` its library |
+| `packaging/bin/fbr.ts` | the CLI; `packaging/lib/{core,pipeline,advisories,schema,shell}/` its library |
 | `packaging/builder/` | the pinned builder image: `Dockerfile`, `pins.json` (the ref the build job reads) |
 | `packaging/lib/shell/` | the bash pipeline the build runs |
 | `packaging/schema/` | the descriptor v2 and manifest JSON Schemas, with examples |
@@ -111,7 +111,7 @@ memory or habit.
 - Adding an app needs three things — descriptor, desktop template plus a
   four-line `build.sh`, and a cask with placeholder checksums. The build matrix
   and dispatch route read the descriptor directory, so no workflow edit.
-- Keep the docs true when behavior changes: descriptor fields, oracle kinds,
+- Keep the docs true when behavior changes: descriptor fields, advisory kinds,
   CLI flags and gates belong in `packaging/README.md`; the root README's cask
   table stays complete and sorted by cask name.
 - Report findings outside the requested scope instead of fixing them.

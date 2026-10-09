@@ -16,7 +16,7 @@ version and each asset's SHA-256 and size.
   verifies the download against the manifest digest. `--metadata-only` resolve
   needs no download.
 - **Release watch** — the same manifest, declared with `format: "json"` and
-  `versionField: "version"`, so the dispatch signal and the oracle's resolve
+  `versionField: "version"`, so the dispatch signal and the advisory's resolve
   read one source instead of the pre-v2 GitHub releases feed (which still
   publishes 1.x tags). `repo` stays `anomalyco/opencode` for the API's watcher.
 - **Payload** — `deb-tree`: the whole `opt/OpenCode` tree is staged into

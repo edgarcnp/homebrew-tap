@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { selectAvakotAsset } from "../../../lib/oracles/custom/avakot.ts";
+import { selectAvakotAsset } from "../../../lib/advisories/custom/avakot.ts";
 
-describe("avakot oracle", () => {
+describe("avakot advisory", () => {
   // Mirrors the live Little Genius manifest: the .deb URL never changes and
   // no size is published, so the version binds through the per-entry field.
   const avakotFor = (version = "0.6.7"): Record<string, unknown> => ({

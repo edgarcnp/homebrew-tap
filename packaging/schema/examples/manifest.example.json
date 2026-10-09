@@ -8,7 +8,7 @@
     "sha256": "2f9b0f6f0f0f6a5d9e4c2d1b0a99887766554433221100ffeeddccbbaa998877"
   },
   "upstream": {
-    "oracle": "apt",
+    "advisory": "apt",
     "url": "https://packages.microsoft.com/repos/code/pool/main/c/code/code_1.139.1-1750000000_amd64.deb",
     "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
     "size": 123456789

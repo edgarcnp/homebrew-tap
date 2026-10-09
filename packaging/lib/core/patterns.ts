@@ -20,6 +20,6 @@ export const SAFE_REFERENCE = /^[A-Za-z0-9][A-Za-z0-9._+-]*$/;
 // manifest versions.
 export const DEB_VERSION = /^[0-9][0-9A-Za-z.+~-]*$/;
 
-// The one GitHub API repository URL shape the GitHub-backed oracles accept.
+// The one GitHub API repository URL shape the GitHub-backed advisories accept.
 export const GITHUB_API_REPOSITORY =
   /^https:\/\/api\.github\.com\/repos\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;

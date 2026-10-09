@@ -15,7 +15,7 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-// Hosts GitHub serves release assets from. Shared so an oracle cannot forget
+// Hosts GitHub serves release assets from. Shared so an advisory cannot forget
 // one and fail only when GitHub picks a different edge.
 export const GITHUB_ASSET_HOSTS: readonly string[] = [
   "github.com",

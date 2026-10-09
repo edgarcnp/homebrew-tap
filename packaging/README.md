@@ -29,8 +29,8 @@ packaging/
                            architecture, template, http, deb822, metadata
   lib/pipeline/            descriptor-driven steps: descriptor, cask, gate, watch,
                            release, neutralize, render, report
-  lib/oracles/             one module per upstream source kind; custom/ holds
-                           provider-specific oracles (e.g. avakot)
+  lib/advisories/          one module per upstream source kind; custom/ holds
+                           provider-specific advisories (e.g. avakot)
   lib/schema/              JSON Schema subset validator (descriptor v2, manifest)
   lib/shell/               the bash pipeline
   schema/                  descriptor v2 and manifest JSON Schemas, with examples
@@ -40,14 +40,14 @@ packaging/
 
 `lib/` is a library: no import-time side effects, and the CLI is the only entry
 point. The folders group by role, not file kind — `core/` knows nothing about a
-cask, `pipeline/` implements the descriptor-driven steps, `oracles/` resolves
+cask, `pipeline/` implements the descriptor-driven steps, `advisories/` resolves
 upstream sources, `schema/` validates documents. Tests live in `tests/`,
 mirroring those groups.
 
-The oracles share one download path (`oracles/download.ts`) and one GitHub API
-client (`oracles/github-api.ts`), so a resolver only supplies its URL, expected
-content and hosts. Shared regexes, the arch table and name templating live in
-`core/`.
+The advisories share one download path (`advisories/download.ts`) and one GitHub
+API client (`advisories/github-api.ts`), so a resolver only supplies its URL,
+expected content and hosts. Shared regexes, the arch table and name templating
+live in `core/`.
 
 ## Pipeline stages
 
@@ -56,7 +56,7 @@ content and hosts. Shared regexes, the arch table and name templating live in
 1. **init** — load and validate the descriptor, resolve the architecture
    (`TARGET_ARCH` → `amd64`/`arm64` + the AppImage arch), set up the scratch and
    AppDir directories with path guards.
-2. **resolve** — `fbr resolve` asks the app's oracle for the upstream version,
+2. **resolve** — `fbr resolve` asks the app's advisory for the upstream version,
    payload URL, size and SHA-256, and writes `metadata.json`.
 3. **extract** — `dpkg-deb -x` for `.deb` payloads (with an arch assertion), or
    the upstream AppImage's own `--appimage-extract` (no FUSE needed).
@@ -89,7 +89,7 @@ record whose `app` does not — `fbr report` refuses such a record first.
 | `buildPackages` | Arch packages CI installs into the build container for this app, beyond the shared toolchain — for libraries that must exist at pack time, e.g. one named in `quickSharun.libraries`. |
 | `architectures` | Arches this app ships; the pipeline builds, publishes and checks only these. |
 | `binaryTargets` | Names the cask must expose on `PATH` (checked by `fbr cask --action check`). |
-| `oracle` | Where the version and payload come from. |
+| `advisory` | Where the version and payload come from. |
 | `payload` | How the upstream package is staged into `AppDir/bin`. |
 | `icon` | Icon path in the payload plus its hicolor directory: a `WxH` size for a raster icon, or `scalable` for an SVG. The staged icon keeps the payload file's extension. |
 | `desktopTemplate` | Desktop entry template, relative to the app dir. |
@@ -99,7 +99,7 @@ record whose `app` does not — `fbr report` refuses such a record first.
 | `extraFiles` | Optional `{source, target}` pairs copied verbatim from the app directory into the AppDir after quick-sharun, e.g. Firefox's default prefs under `bin/defaults/pref/`. `target` is AppDir-relative and unique; an existing target whose bytes differ fails the build instead of overwriting the payload. |
 | `watch` | Optional release-watch block (`feedUrl`, `format`, `versionPattern`, optional `skipPattern`, `repo`, and `versionField` for `"json"`). `format` — `"atom"` or `"json"` — must be declared: the API's reader still defaults an absent one to atom, but this validator does not, so a forgotten format fails here instead of silently watching the wrong reader. The pattern matches the feed entry *title* (the GitHub release name, not the tag) and capture group 1 is the version; for `"json"` it matches the `versionField` value (a dotted path, e.g. `version`) instead, reading a single version string from a JSON document for upstreams like avakot that publish no feed. |
 
-### Oracle kinds
+### Advisory kinds
 
 | Kind | Version and payload source |
 | --- | --- |
@@ -108,7 +108,7 @@ record whose `app` does not — `fbr report` refuses such a record first.
 | `electron-feed` | An electron-updater feed whose 302 names the release tag. The yml supplies filename, SHA-512 and size; the GitHub API supplies the SHA-256. All three must agree. |
 | `cdn-redirect` | A CDN download redirect that is itself the version source. The target URL shape is pinned and the payload is hashed on download (the CDN publishes no checksums). No app currently consumes it; it is validated and tested as infrastructure for a future CDN-sourced app. |
 | `update-manifest` | A pinned https JSON manifest that publishes the version and per-asset SHA-256/size. The `assetTemplate` entry (`{arch}` substituted) must carry the version as a download-path segment on a pinned host. |
-| `avakot` (in `custom/`) | Provider-specific manifest oracle: avakot's `manifest.json` serves an `artifacts` map with a fixed entry name, static download URLs and no published size. The version binds through the per-entry `version` field and the payload is measured from the verified download (downloaded and discarded in `--metadata-only` mode). |
+| `avakot` (in `custom/`) | Provider-specific manifest advisory: avakot's `manifest.json` serves an `artifacts` map with a fixed entry name, static download URLs and no published size. The version binds through the per-entry `version` field and the payload is measured from the verified download (downloaded and discarded in `--metadata-only` mode). |
 
 ## `fbr` CLI
 
@@ -233,7 +233,7 @@ Each check lives in one place:
 - **Hosts** — every download validates the final URL's protocol and host
   against a pinned allow-list (intermediate redirect hops are not inspected; the
   runtime follows the chain). GitHub asset hosts come from one shared list, so
-  an oracle cannot forget an edge host.
+  an advisory cannot forget an edge host.
 - **Content** — size caps, SHA-256 for apt/GitHub/CDN payloads, a SHA-512
   cross-check for the electron feed, constant-time digest comparison, atomic
   writes.
@@ -252,7 +252,7 @@ Each check lives in one place:
 
 ## Adding an app
 
-1. `apps/<app>/app.json` — copy a similar descriptor and adjust the oracle,
+1. `apps/<app>/app.json` — copy a similar descriptor and adjust the advisory,
    payload, icon and updater sections.
 2. `apps/<app>/templates/<name>.desktop`, plus a four-line `build.sh`
    (`exec ../../lib/shell/build-appimage.sh <app>`).
@@ -374,7 +374,7 @@ rules.
 test dependencies): dpkg ordering, deb822/InRelease parsing and freshness, HTTP
 timeout/cap/atomic write, guards and metadata validation, descriptor validation,
 cask read/update/consistency, the gate table, updater neutralization, desktop
-rendering, run records, retry plans, the oracle parsers, and the descriptor
+rendering, run records, retry plans, the advisory parsers, and the descriptor
 v2/manifest schema contracts.
 
 `pnpm run typecheck` runs `tsc --noEmit` (strict). `pnpm run style` runs

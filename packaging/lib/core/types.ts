@@ -24,10 +24,10 @@ export interface Metadata {
 }
 
 // ---------------------------------------------------------------------------
-// Resolvers ("oracles": where the upstream version and payload come from)
+// Resolvers ("advisories": where the upstream version and payload come from)
 // ---------------------------------------------------------------------------
 
-export interface AptOracle {
+export interface AptAdvisory {
   kind: "apt";
   repository: string;
   // Suite under dists/ (the `stable` in `deb ... stable main`), e.g. "stable"
@@ -38,7 +38,7 @@ export interface AptOracle {
   keyBase64Path: string;
 }
 
-export interface GithubReleaseOracle {
+export interface GithubReleaseAdvisory {
   kind: "github-release";
   repository: string;
   // Legacy layout: "<assetPrefix>-<arch>.deb".
@@ -51,7 +51,7 @@ export interface GithubReleaseOracle {
 }
 
 // electron-updater feed: a 302 whose Location names the exact release tag.
-export interface ElectronFeedOracle {
+export interface ElectronFeedAdvisory {
   kind: "electron-feed";
   repository: string;
   githubRepository: string;
@@ -63,7 +63,7 @@ export interface ElectronFeedOracle {
 }
 
 // A CDN download redirect that is itself the version source.
-export interface CdnRedirectOracle {
+export interface CdnRedirectAdvisory {
   kind: "cdn-redirect";
   repository: string;
   // Hosts the download may resolve to after redirecting.
@@ -77,7 +77,7 @@ export interface CdnRedirectOracle {
 // A pinned https JSON manifest that is itself the version source, e.g.
 // opencode's update API: {version, metadata: {files: {<name>: {url, sha256,
 // size}}}}. The digest verifies the payload at download time.
-export interface UpdateManifestOracle {
+export interface UpdateManifestAdvisory {
   kind: "update-manifest";
   // Pinned https endpoint returning the update manifest.
   repository: string;
@@ -89,12 +89,12 @@ export interface UpdateManifestOracle {
   downloadHosts: string[];
 }
 
-// Provider-specific manifest oracle (see oracles/custom/): avakot's
+// Provider-specific manifest advisory (see advisories/custom/): avakot's
 // manifest.json serves {version, artifacts: {<name>: {url, sha256, [size],
 // [version]}}} with static download URLs and no published size, so the
 // version binds through the per-entry version field and the payload is
 // measured from the verified download.
-export interface AvakotOracle {
+export interface AvakotAdvisory {
   kind: "avakot";
   // Pinned https endpoint returning the avakot manifest.
   repository: string;
@@ -106,15 +106,15 @@ export interface AvakotOracle {
   downloadHosts: string[];
 }
 
-export type Oracle =
-  | AptOracle
-  | GithubReleaseOracle
-  | ElectronFeedOracle
-  | CdnRedirectOracle
-  | UpdateManifestOracle
-  | AvakotOracle;
+export type Advisory =
+  | AptAdvisory
+  | GithubReleaseAdvisory
+  | ElectronFeedAdvisory
+  | CdnRedirectAdvisory
+  | UpdateManifestAdvisory
+  | AvakotAdvisory;
 
-export type OracleKind = Oracle["kind"];
+export type AdvisoryKind = Advisory["kind"];
 
 // ---------------------------------------------------------------------------
 // Payload staging
@@ -286,7 +286,7 @@ export interface AppDescriptor {
   // there — a sharun wrapper dies outside the mount with "Interpreter not
   // found!"). Absent when the app runs everything inside the mount.
   hostHelpers?: string[];
-  oracle: Oracle;
+  advisory: Advisory;
   payload: Payload;
   icon: IconConfig;
   // Desktop entry template, relative to sourceDir.

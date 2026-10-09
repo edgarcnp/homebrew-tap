@@ -1,4 +1,4 @@
-// GitHub REST access shared by the release-asset and electron-feed oracles: the
+// GitHub REST access shared by the release-asset and electron-feed advisories: the
 // repository-URL check, download-base derivation, authenticated JSON fetch and
 // release-listing helpers.
 
@@ -18,8 +18,8 @@ export interface RepositoryCoordinates {
   repo: string;
 }
 
-// The one repository URL shape every GitHub oracle pins; anything else could
-// point an oracle at an attacker-controlled host.
+// The one repository URL shape every GitHub advisory pins; anything else could
+// point an advisory at an attacker-controlled host.
 export function assertRepositoryUrl(repository: string): string {
   const normalized = repository.replace(/\/+$/, "");
   if (!GITHUB_API_REPOSITORY.test(normalized)) {

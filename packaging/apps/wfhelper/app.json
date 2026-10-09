@@ -19,7 +19,7 @@
   "debloatArgs": "--add-common --prefer-nano ffmpeg-mini gdk-pixbuf2-mini",
   "architectures": ["amd64"],
   "binaryTargets": ["wfhelper"],
-  "oracle": {
+  "advisory": {
     "kind": "github-release",
     "repository": "https://api.github.com/repos/WFHelper/WFHelper",
     "packageName": "wfhelper",

@@ -49,7 +49,7 @@ const APP_V2_FIELDS = [
   "buildPackages",
   "architectures",
   "binaryTargets",
-  "oracle",
+  "advisory",
   "payload",
   "icon",
   "desktopTemplate",
@@ -88,19 +88,19 @@ describe("descriptor v2 schema", () => {
     assert.ok(problems(appSchema, mutated).includes("$.schemaVersion: must equal 2"));
   });
 
-  it("rejects an unknown oracle kind", () => {
+  it("rejects an unknown advisory kind", () => {
     const mutated = structuredClone(asRecord(appExample));
-    asRecord(mutated["oracle"])["kind"] = "git";
+    asRecord(mutated["advisory"])["kind"] = "git";
     assert.ok(
       problems(appSchema, mutated).some((problem) =>
-        problem.startsWith("$.oracle: must match exactly one"),
+        problem.startsWith("$.advisory: must match exactly one"),
       ),
     );
   });
 
-  it("rejects a github-release oracle mixing both asset layouts", () => {
+  it("rejects a github-release advisory mixing both asset layouts", () => {
     const mutated = structuredClone(asRecord(appExample));
-    mutated["oracle"] = {
+    mutated["advisory"] = {
       kind: "github-release",
       repository: "https://api.github.com/repos/acme/app",
       assetPrefix: "app",
@@ -110,7 +110,7 @@ describe("descriptor v2 schema", () => {
     };
     assert.ok(
       problems(appSchema, mutated).some((problem) =>
-        problem.startsWith("$.oracle: must match exactly one"),
+        problem.startsWith("$.advisory: must match exactly one"),
       ),
     );
   });

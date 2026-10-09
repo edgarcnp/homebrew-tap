@@ -1,4 +1,4 @@
-// Update-manifest oracle: a pinned https JSON endpoint is the version source
+// Update-manifest advisory: a pinned https JSON endpoint is the version source
 // ({version, metadata: {files: {<name>: {url, sha256, size}}}}), e.g.
 // opencode's update API. Unlike cdn-redirect it publishes the digest, so
 // --metadata-only resolve needs no download.
@@ -17,7 +17,7 @@ import { MAX_PAYLOAD_BYTES } from "../core/http.ts";
 import { makeMetadata, writeMetadata } from "../core/metadata.ts";
 import { DEB_VERSION } from "../core/patterns.ts";
 import { substitutePlaceholders } from "../core/template.ts";
-import type { Metadata, UpdateManifestOracle } from "../core/types.ts";
+import type { Metadata, UpdateManifestAdvisory } from "../core/types.ts";
 import { downloadVerified, fetchVerified } from "./download.ts";
 import { prepareOutput, type ResolveRequest } from "./shared.ts";
 
@@ -88,7 +88,7 @@ export function selectManifestAsset(
   };
 }
 
-// Shared with the provider-specific manifest oracles under custom/: fetch
+// Shared with the provider-specific manifest advisories under custom/: fetch
 // and parse a pinned JSON manifest with the same size cap. The manifest is the
 // version and digest trust root, so fetchVerified pins the final URL after any
 // redirect to the host the descriptor declared.
@@ -104,24 +104,24 @@ export async function fetchManifest(repository: string): Promise<unknown> {
 }
 
 export async function resolveWithUpdateManifest(
-  oracle: UpdateManifestOracle,
+  advisory: UpdateManifestAdvisory,
   request: ResolveRequest,
 ): Promise<Metadata> {
-  const repository = validateManifestEndpoint(oracle.repository);
-  if (oracle.downloadHosts.length === 0) fail("downloadHosts must not be empty");
-  for (const host of oracle.downloadHosts) assertSafeName(host, "download host");
-  const packageName = assertSafeName(oracle.packageName, "package name");
-  if (!oracle.assetTemplate.includes("{arch}")) {
-    fail("update-manifest oracle requires an assetTemplate containing {arch}");
+  const repository = validateManifestEndpoint(advisory.repository);
+  if (advisory.downloadHosts.length === 0) fail("downloadHosts must not be empty");
+  for (const host of advisory.downloadHosts) assertSafeName(host, "download host");
+  const packageName = assertSafeName(advisory.packageName, "package name");
+  if (!advisory.assetTemplate.includes("{arch}")) {
+    fail("update-manifest advisory requires an assetTemplate containing {arch}");
   }
-  const assetName = substitutePlaceholders(oracle.assetTemplate, {
+  const assetName = substitutePlaceholders(advisory.assetTemplate, {
     arch: request.architecture,
   });
   const { outputDir, metadataPath } = prepareOutput(request);
   const manifest = selectManifestAsset(
     await fetchManifest(repository),
     assetName,
-    oracle.downloadHosts,
+    advisory.downloadHosts,
   );
 
   const packagePath = request.metadataOnly
@@ -143,7 +143,7 @@ export async function resolveWithUpdateManifest(
       manifest.asset.url,
       packagePath,
       { sha256: manifest.asset.sha256, size: manifest.asset.size },
-      { allowedHosts: oracle.downloadHosts, label: path.basename(packagePath) },
+      { allowedHosts: advisory.downloadHosts, label: path.basename(packagePath) },
     );
   }
 

@@ -39,7 +39,7 @@ import {
   type UpstreamRecord,
 } from "./pipeline/release.ts";
 import { finalizeApp, neutralizeUpdater } from "./pipeline/neutralize.ts";
-import { resolveWith } from "./oracles/registry.ts";
+import { resolveWith } from "./advisories/registry.ts";
 import { writeDesktopEntry } from "./pipeline/render.ts";
 import type { AppDescriptor, Architecture } from "./core/types.ts";
 import { ARCHITECTURES, isArchitecture } from "./core/types.ts";
@@ -318,7 +318,7 @@ const COMMANDS: Command[] = [
       if (!isArchitecture(architecture)) {
         throw new UsageError(`--arch must be one of ${ARCHITECTURES.join(", ")}`);
       }
-      const metadata = await resolveWith(descriptor.oracle, {
+      const metadata = await resolveWith(descriptor.advisory, {
         architecture,
         outputDir: flags.str("output-dir"),
         metadataPath: flags.str("metadata"),

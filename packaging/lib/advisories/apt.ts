@@ -1,4 +1,4 @@
-// Signed apt repository oracle: pinned key -> InRelease -> Packages SHA-256 ->
+// Signed apt repository advisory: pinned key -> InRelease -> Packages SHA-256 ->
 // package SHA-256/size, picking the newest entry for the requested
 // architecture.
 
@@ -22,7 +22,7 @@ import {
 } from "../core/deb822.ts";
 import { makeMetadata, writeMetadata } from "../core/metadata.ts";
 import { REPO_ROOT } from "../core/paths.ts";
-import type { AptOracle, Architecture, Metadata } from "../core/types.ts";
+import type { AptAdvisory, Architecture, Metadata } from "../core/types.ts";
 import { compareDebVersions, normalizeUpstreamVersion } from "../core/version.ts";
 import { fetchVerified, verifyPayload } from "./download.ts";
 import { prepareOutput, type ResolveRequest } from "./shared.ts";
@@ -168,25 +168,25 @@ function resolveKeyBase64(keyBase64Path: string, outputDir: string): string {
 }
 
 export async function resolveWithApt(
-  oracle: AptOracle,
+  advisory: AptAdvisory,
   request: ResolveRequest,
 ): Promise<Metadata> {
   const packageName = assertMatches(
-    oracle.packageName,
+    advisory.packageName,
     /^[a-z0-9][a-z0-9.+_-]*$/,
     "package name",
   );
-  const fingerprint = assertMatches(oracle.fingerprint, /^[0-9A-Fa-f]{40}$/, "key fingerprint");
-  const repository = String(assertHttpsUrl(oracle.repository, "repository URL")).replace(
+  const fingerprint = assertMatches(advisory.fingerprint, /^[0-9A-Fa-f]{40}$/, "key fingerprint");
+  const repository = String(assertHttpsUrl(advisory.repository, "repository URL")).replace(
     /\/+$/,
     "",
   );
-  const suite = assertMatches(oracle.suite ?? "stable", /^[A-Za-z0-9][A-Za-z0-9._-]*$/, "suite");
+  const suite = assertMatches(advisory.suite ?? "stable", /^[A-Za-z0-9][A-Za-z0-9._-]*$/, "suite");
   const { outputDir, metadataPath } = prepareOutput(request);
   const architecture = request.architecture;
 
   const keyPath = path.join(outputDir, "repository-key.gpg");
-  writeFileAtomic(keyPath, Buffer.from(resolveKeyBase64(oracle.keyBase64Path, outputDir), "base64"));
+  writeFileAtomic(keyPath, Buffer.from(resolveKeyBase64(advisory.keyBase64Path, outputDir), "base64"));
 
   const inReleasePath = path.join(outputDir, "InRelease");
   await download(`${repository}/dists/${suite}/InRelease`, inReleasePath);
