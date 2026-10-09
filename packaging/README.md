@@ -211,8 +211,9 @@ record's own verdict:
   `retry_after_seconds`, `reason`, `rate_limited` on a transient failure. A
   value is one line of at most 256 bytes, and the serialized map at most 4096
   bytes; the API rejects a record beyond either bound, so `fbr report` and the
-  failure-fragment writer refuse it first. The message is capped at 2 KiB and
-  the whole body at 64 KiB.
+  failure-fragment writer refuse it first. The message is clamped at 2 KiB with
+  a truncation marker, so an over-long one never costs the record; the whole
+  body is capped at 64 KiB.
 - `resolved_version` / `cask_version` / `feed_version` — the three versions the
   record reports; a not-ready skip names what resolve actually saw.
 

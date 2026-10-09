@@ -436,7 +436,7 @@ describe("run records", () => {
     assert.throws(() => buildReport({ ...base, evidence: wide }), /caps it at 4096/);
   });
 
-  it("caps the message at 2 KiB and the version strings at 256 bytes", () => {
+  it("clamps an over-long message and caps the version strings at 256 bytes", () => {
     const base = {
       app: "vscode",
       runId: 1,
@@ -446,14 +446,20 @@ describe("run records", () => {
       code: "BUILD_FAILED",
       eventId: EVENT_ID,
     } as const;
-    assert.throws(
-      () => buildReport({ ...base, message: "x".repeat(2049) }),
-      /caps it at 2048/,
+    // A message at the bound stays whole; over it, the clamp cuts on a code
+    // point boundary and marks the cut instead of failing the record.
+    assert.equal(
+      buildReport({ ...base, message: "x".repeat(2048) }).message,
+      "x".repeat(2048),
     );
-    assert.throws(
-      () => buildReport({ ...base, message: "é".repeat(1025) }),
-      /caps it at 2048/,
-    );
+    const ascii = buildReport({ ...base, message: "x".repeat(2049) }).message;
+    assert.ok(Buffer.byteLength(ascii, "utf8") <= 2048);
+    assert.match(ascii, /^x+\.\.\. \[truncated\]$/);
+    // The cut may land inside a multi-byte character; it must stay valid text.
+    const wide = buildReport({ ...base, message: "é".repeat(1025) }).message;
+    assert.ok(Buffer.byteLength(wide, "utf8") <= 2048);
+    assert.match(wide, /^é+\.\.\. \[truncated\]$/);
+    assert.doesNotMatch(wide, /\uFFFD/);
     assert.throws(
       () => buildReport({ ...base, message: "boom", resolvedVersion: "v".repeat(257) }),
       /caps it at 256/,
@@ -962,12 +968,6 @@ describe("failure fragments", () => {
         }),
       /caps an evidence value at 256/,
     );
-    // The message bound is mirrored too: the report job would refuse to build
-    // a record from an over-long fragment message.
-    assert.throws(
-      () => writeFailureFragment(output, { code: "BUILD_FAILED", message: "x".repeat(2049) }),
-      /caps it at 2048/,
-    );
     assert.throws(
       () =>
         writeFailureFragment(output, {
@@ -978,6 +978,19 @@ describe("failure fragments", () => {
       /Unknown fragment stage/,
     );
     assert.equal(fs.existsSync(output), false);
+  });
+
+  it("clamps an over-long message rather than failing the site", () => {
+    const dir = tempDir();
+    const output = path.join(dir, "report-code.json");
+    // A long error must not fail the writer: that would mask the classified
+    // exit and cost the report job the fragment.
+    writeFailureFragment(output, { code: "BUILD_FAILED", message: "x".repeat(2049) });
+    const fragment = JSON.parse(fs.readFileSync(output, "utf8")) as Record<string, unknown>;
+    const message = fragment["message"] as string;
+    assert.ok(Buffer.byteLength(message, "utf8") <= 2048);
+    assert.match(message, /^x+\.\.\. \[truncated\]$/);
+    fs.rmSync(dir, { recursive: true, force: true });
   });
 });
 

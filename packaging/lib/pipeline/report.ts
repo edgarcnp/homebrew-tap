@@ -141,12 +141,17 @@ export interface RunReport {
 const CORRELATION_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
 const CORRELATION_ID_MAX_LENGTH = 128;
 
-// The API rejects a string above 256 characters, and an over-long message is
-// answered 422 rather than truncated; the message is the one field the contract
-// allows up to 2 KiB. The body itself stays under the API's 64 KiB.
+// The API's general string bound is 256 bytes; the message — the one free-form
+// field — gets 2 KiB. An over-long message is clamped rather than refused: a
+// long diagnostic must not cost the run its record (and the retry verdict the
+// record carries). The body itself stays under the API's 64 KiB.
 export const MESSAGE_MAX_BYTES = 2048;
 export const STRING_MAX_BYTES = 256;
 export const BODY_MAX_BYTES = 64 * 1024;
+
+// Appended to a message the clamp cut short, so a reader can tell prose was
+// lost and find the rest in the run log.
+const MESSAGE_TRUNCATION_MARKER = "... [truncated]";
 
 // `echoValue` is false for the dispatch correlation id: a malformed value is a
 // caller bug, and the value itself must not reach a public log.
@@ -175,6 +180,30 @@ function assertByteLength(value: string, max: number, label: string): string {
   return value;
 }
 
+// Truncates to at most `max` bytes without splitting a code point: walking code
+// points keeps a multi-byte character whole or drops it whole.
+function truncateToBytes(value: string, max: number): string {
+  let used = 0;
+  let end = 0;
+  for (const char of value) {
+    const size = Buffer.byteLength(char, "utf8");
+    if (used + size > max) break;
+    used += size;
+    end += char.length;
+  }
+  return value.slice(0, end);
+}
+
+// The message is human prose, and an over-long one must not cost the run its
+// record: the report job would fail, upload nothing, and retry.yml would read
+// the missing artifact as infrastructure and re-run. Clamp it instead, and
+// mark the cut so the bug that produced the long message stays visible.
+function clampMessage(value: string): string {
+  if (Buffer.byteLength(value, "utf8") <= MESSAGE_MAX_BYTES) return value;
+  const budget = MESSAGE_MAX_BYTES - Buffer.byteLength(MESSAGE_TRUNCATION_MARKER, "utf8");
+  return `${truncateToBytes(value, budget)}${MESSAGE_TRUNCATION_MARKER}`;
+}
+
 // A version the caller could not read stores as null; a value the API would
 // reject is a caller bug and fails here instead of on POST.
 function optionalString(value: string | null | undefined, label: string): string | null {
@@ -187,11 +216,7 @@ export function buildReport(input: ReportInput): RunReport {
   // The API validates this field against the same pattern as its discovery, so
   // refuse a record it would 422 rather than writing one it cannot attribute.
   const app = assertMatches(input.app, APP_ID, "report app");
-  const message = assertByteLength(
-    assertSingleLine(input.message, "report message"),
-    MESSAGE_MAX_BYTES,
-    "report message",
-  );
+  const message = clampMessage(assertSingleLine(input.message, "report message"));
   if (message === "") fail("Report message must not be empty");
   if (!Number.isSafeInteger(input.runId) || input.runId <= 0) {
     fail(`Report run id is not a sane run number: ${input.runId}`);
@@ -315,7 +340,8 @@ export interface FailureFragment {
 // What a failure site writes for itself: the workflow uploads this file as a
 // report-code artifact and the report job prefers it over its own stage
 // heuristic. The message is flattened to one line here so a multi-line error
-// cannot produce a fragment the report job would have to reject.
+// cannot produce a fragment the report job would have to reject, and clamped
+// so a long error cannot fail the site before it writes its verdict.
 export function writeFailureFragment(outputPath: string, failure: FailureFragment): string {
   if (failure.stage !== undefined && !REPORT_STAGES.includes(failure.stage)) {
     fail(`Unknown fragment stage: ${failure.stage}`);
@@ -328,11 +354,7 @@ export function writeFailureFragment(outputPath: string, failure: FailureFragmen
   }
   const fragment: Record<string, unknown> = {
     code: failure.code,
-    message: assertByteLength(
-      failure.message.replace(/[\r\n\u0000]+/g, " "),
-      MESSAGE_MAX_BYTES,
-      "Fragment message",
-    ),
+    message: clampMessage(failure.message.replace(/[\r\n\u0000]+/g, " ")),
   };
   if (failure.stage !== undefined) fragment["stage"] = failure.stage;
   if (failure.evidence !== undefined && Object.keys(failure.evidence).length > 0) {
