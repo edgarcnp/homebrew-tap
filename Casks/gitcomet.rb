@@ -1,6 +1,6 @@
 cask "gitcomet" do
-  version "0.2.6"
-  sha256 "251514e3ca8b68946882f9fe78a3a7d0c3151ec98b65fc67f9ce3bd9ea695f3b"
+  version "0.3.0"
+  sha256 "c0e1ea7747b40fb8eb7139b4bea78203a5c8ca60f882f2e24f8c27d4c21a492a"
 
   url "https://github.com/edgarcnp/homebrew-tap/releases/download/gitcomet-v#{version}/gitcomet-#{version}-x86_64.AppImage"
   name "GitComet"
