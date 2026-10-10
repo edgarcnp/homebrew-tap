@@ -1,5 +1,5 @@
 cask "artcraft" do
-  version "0.2.0"
+  version "0.0.0"
   sha256 "0000000000000000000000000000000000000000000000000000000000000000"
 
   url "https://github.com/edgarcnp/homebrew-tap/releases/download/artcraft-v#{version}/artcraft-#{version}-x86_64.AppImage"

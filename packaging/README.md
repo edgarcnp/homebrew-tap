@@ -256,8 +256,11 @@ Each check lives in one place:
    payload, icon and updater sections.
 2. `apps/<app>/templates/<name>.desktop`, plus a four-line `build.sh`
    (`exec ../../lib/shell/build-appimage.sh <app>`).
-3. `Casks/<app>.rb` with zero placeholder checksums; the first publish fills
-   them.
+3. `Casks/<app>.rb` with `version "0.0.0"` and zero placeholder checksums; the
+   first publish fills both. Never start the cask at the upstream head: the
+   watcher dispatches only when the feed is newer than the pinned version, so
+   a cask already at the feed version reads as up-to-date and its first build
+   never runs.
 
 Nothing else — the build matrix and the dispatch route read the descriptor
 directory.
