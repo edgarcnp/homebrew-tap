@@ -219,10 +219,11 @@ export interface ExtraFile {
   target: string;
 }
 
-// Release-watch block. versionPattern matches the atom entry *title* (the
-// GitHub release name, not the tag), or the JSON `versionField` value for
+// Release-watch block. versionPattern matches the feed entry *title*: an atom
+// entry title, the GitHub release `name` (or its `tag_name` when the name is
+// empty) for `"github-release"`, or the JSON `versionField` value for
 // `format: "json"` feeds; capture group 1 is the version.
-export type WatchFormat = "atom" | "json";
+export type WatchFormat = "atom" | "json" | "github-release";
 
 export interface WatchConfig {
   feedUrl: string;
@@ -232,7 +233,8 @@ export interface WatchConfig {
   // Upstream repo (owner/repo) the watch feed belongs to; informational for
   // the API's watcher.
   repo?: string;
-  // Feed format: "atom" parses releases.atom entry titles, "json" reads a
+  // Feed format: "atom" parses releases.atom entry titles, "github-release"
+  // reads the GitHub releases list from the pinned API URL, and "json" reads a
   // single version string at `versionField` (e.g. avakot's manifest). The
   // validator requires it — every descriptor declares it — while the API's
   // reader still treats an absent one as atom.

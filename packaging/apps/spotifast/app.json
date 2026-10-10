@@ -5,8 +5,8 @@
   "comment": "Native Spotify client",
   "cask": "spotifast",
   "watch": {
-    "feedUrl": "https://github.com/crmne/spotifast/releases.atom",
-    "format": "atom",
+    "feedUrl": "https://api.github.com/repos/crmne/spotifast/releases",
+    "format": "github-release",
     "versionPattern": "^Spotifast v(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
     "skipPattern": "^Spotifast v\\d+\\.\\d+\\.\\d+-(?:rc|beta|alpha)\\d*$",
     "repo": "crmne/spotifast"

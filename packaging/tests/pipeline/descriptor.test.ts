@@ -534,8 +534,8 @@ describe("release watch", () => {
       repo: "anomalyco/opencode",
     });
     assert.deepEqual(loadDescriptor("gitcomet").watch, {
-      feedUrl: "https://github.com/Auto-Explore/GitComet/releases.atom",
-      format: "atom",
+      feedUrl: "https://api.github.com/repos/Auto-Explore/GitComet/releases",
+      format: "github-release",
       versionPattern: "^GitComet v(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
       skipPattern: "^GitComet v\\d+\\.\\d+\\.\\d+-rc",
       repo: "Auto-Explore/GitComet",
@@ -547,10 +547,17 @@ describe("release watch", () => {
       versionPattern: "^(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
     });
     assert.deepEqual(loadDescriptor("wfhelper").watch, {
-      feedUrl: "https://github.com/WFHelper/WFHelper/releases.atom",
-      format: "atom",
+      feedUrl: "https://api.github.com/repos/WFHelper/WFHelper/releases",
+      format: "github-release",
       versionPattern: "^v(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
       repo: "WFHelper/WFHelper",
+    });
+    assert.deepEqual(loadDescriptor("spotifast").watch, {
+      feedUrl: "https://api.github.com/repos/crmne/spotifast/releases",
+      format: "github-release",
+      versionPattern: "^Spotifast v(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
+      skipPattern: "^Spotifast v\\d+\\.\\d+\\.\\d+-(?:rc|beta|alpha)\\d*$",
+      repo: "crmne/spotifast",
     });
   });
 
@@ -1021,7 +1028,7 @@ describe("descriptor validation", () => {
     );
   });
 
-  it("validates the json watch format and its version field", () => {
+  it("validates the json and github-release watch formats", () => {
     const jsonWatch = {
       feedUrl: "https://api.avakot.org/lg/manifest.json",
       format: "json",
@@ -1036,6 +1043,35 @@ describe("descriptor validation", () => {
       versionPattern: "^(\\d+)$",
     };
     assert.deepEqual(validateDescriptor(mutated("vscode", (copy) => { copy["watch"] = atomWatch; }), "vscode").watch, atomWatch);
+    // The releases format pins the feed to the API's releases list; a trailing
+    // slash is allowed (the readers strip it).
+    const releaseWatch = {
+      feedUrl: "https://api.github.com/repos/acme/app/releases",
+      format: "github-release",
+      versionPattern: "^(\\d+)$",
+    };
+    assert.deepEqual(validateDescriptor(mutated("vscode", (copy) => { copy["watch"] = releaseWatch; }), "vscode").watch, releaseWatch);
+    assert.deepEqual(
+      validateDescriptor(
+        mutated("vscode", (copy) => { copy["watch"] = { ...releaseWatch, feedUrl: `${releaseWatch.feedUrl}/` }; }),
+        "vscode",
+      ).watch,
+      { ...releaseWatch, feedUrl: `${releaseWatch.feedUrl}/` },
+    );
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("vscode", (copy) => {
+            copy["watch"] = {
+              feedUrl: "https://github.com/acme/app/releases.atom",
+              format: "github-release",
+              versionPattern: "^(\\d+)$",
+            };
+          }),
+          "vscode",
+        ),
+      /must be a GitHub releases-list URL/,
+    );
     assert.throws(
       () =>
         validateDescriptor(
@@ -1058,7 +1094,7 @@ describe("descriptor validation", () => {
           }),
           "vscode",
         ),
-      /format must be "atom" or "json"/,
+      /format must be "atom", "json" or "github-release"/,
     );
     assert.throws(
       () =>
@@ -1070,6 +1106,16 @@ describe("descriptor validation", () => {
               versionPattern: "^(\\d+)$",
               versionField: "version",
             };
+          }),
+          "vscode",
+        ),
+      /versionField requires format "json"/,
+    );
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("vscode", (copy) => {
+            copy["watch"] = { ...releaseWatch, versionField: "version" };
           }),
           "vscode",
         ),

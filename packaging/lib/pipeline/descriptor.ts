@@ -4,7 +4,7 @@
 import * as fs from "node:fs";
 import { assertSameLength, assertSingleLine, fail } from "../core/guards.ts";
 import { APPS_DIR, descriptorPath } from "../core/paths.ts";
-import { APP_ID, GITHUB_API_REPOSITORY, SAFE_REFERENCE } from "../core/patterns.ts";
+import { APP_ID, GITHUB_API_REPOSITORY, GITHUB_RELEASE_FEED, SAFE_REFERENCE } from "../core/patterns.ts";
 import { ARCHITECTURES, isArchitecture } from "../core/types.ts";
 import type {
   AppDescriptor,
@@ -525,11 +525,22 @@ function validateWatch(raw: unknown, label: string): WatchConfig | undefined {
   // liberal — a descriptor it did not write (or one written before this rule)
   // still reads an absent format as atom.
   const format = str(source, "format", label);
-  if (format !== "atom" && format !== "json") {
-    fail(`${label}.format must be "atom" or "json": ${format}`);
+  if (format !== "atom" && format !== "json" && format !== "github-release") {
+    fail(`${label}.format must be "atom", "json" or "github-release": ${format}`);
+  }
+  const feedUrl = str(source, "feedUrl", label);
+  // The GitHub releases transport fetches the pinned API path behind the
+  // shared bearer PAT, so only that URL shape may name it (the API's
+  // parseWatch owns the same rule). A trailing slash is allowed; the readers
+  // normalize it away.
+  if (format === "github-release" && !GITHUB_RELEASE_FEED.test(feedUrl)) {
+    fail(
+      `${label}.feedUrl must be a GitHub releases-list URL ` +
+        `(https://api.github.com/repos/<owner>/<repo>/releases): ${feedUrl}`,
+    );
   }
   const watch: WatchConfig = {
-    feedUrl: str(source, "feedUrl", label),
+    feedUrl,
     format,
     versionPattern: compiledPattern(str(source, "versionPattern", label), `${label}.versionPattern`),
   };
@@ -540,8 +551,8 @@ function validateWatch(raw: unknown, label: string): WatchConfig | undefined {
   const repo = optionalStr(source, "repo", label);
   if (repo !== undefined) watch.repo = repo;
   // JSON feeds (e.g. avakot's manifest) carry a single version string at a
-  // dotted path instead of atom entry titles; atom feeds must not set it, so
-  // a misplaced field fails here rather than being silently ignored.
+  // dotted path instead of feed entry titles; every other format must not set
+  // it, so a misplaced field fails here rather than being silently ignored.
   const versionField = optionalStr(source, "versionField", label);
   if (watch.format === "json") {
     if (versionField === undefined) fail(`${label}.versionField is required when format is "json"`);

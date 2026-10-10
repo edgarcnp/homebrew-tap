@@ -43,6 +43,33 @@ export function atomEntryTitles(xml: string): string[] {
   return titles;
 }
 
+// The newest-first titles a GitHub releases-list body names: each release's
+// `name`, or its `tag_name` when GitHub left the name absent or empty — the
+// same title the releases.atom feed's <title> carried. Non-object entries are
+// skipped, like every other tolerant reader in this layer; a body that is not
+// a releases array is an upstream failure, not an empty feed.
+export function githubReleaseTitles(body: string, feedUrl: string): string[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    fail(`Release feed is not valid JSON: ${feedUrl}`);
+  }
+  if (!Array.isArray(parsed)) fail(`Release feed is not a releases array: ${feedUrl}`);
+  const titles: string[] = [];
+  for (const entry of parsed) {
+    if (!isRecord(entry)) continue;
+    const name = entry["name"];
+    const tag = entry["tag_name"];
+    if (typeof name === "string" && name !== "") {
+      titles.push(name);
+      continue;
+    }
+    if (typeof tag === "string" && tag !== "") titles.push(tag);
+  }
+  return titles;
+}
+
 // One dotted path step at a time; anything short of a string is "not there".
 function dottedField(value: unknown, path: string): string | undefined {
   let current = value;
@@ -73,7 +100,9 @@ function comparableVersion(value: string | undefined): string | null {
 // release date, where a backport of an older major line sits above a newer one.
 export function selectFeedVersion(watch: WatchConfig, body: string): string | null {
   const raw: string[] = [];
-  if (watch.format === "json") {
+  if (watch.format === "github-release") {
+    raw.push(...githubReleaseTitles(body, watch.feedUrl));
+  } else if (watch.format === "json") {
     if (watch.versionField === undefined) fail(`${watch.feedUrl}: json feed needs versionField`);
     let parsed: unknown;
     try {
@@ -106,6 +135,14 @@ export function selectFeedVersion(watch: WatchConfig, body: string): string | nu
 // fatal (the workflow treats the cross-check as advisory and warns instead).
 export async function fetchFeedVersion(watch: WatchConfig): Promise<string | null> {
   const url = assertHttpsUrl(watch.feedUrl, "release feed");
+  if (watch.format === "github-release") {
+    // The API's reader pins the same newest-ten window the atom feed served
+    // and normalizes a trailing slash away (its transport requests
+    // `?per_page=10`); mirror both so the cross-check derives the same
+    // releases.
+    url.pathname = url.pathname.replace(/\/+$/, "");
+    url.searchParams.set("per_page", "10");
+  }
   const response = await fetchOnce(url, { redirect: "follow", timeoutMs: 30000 });
   if (!response.ok) {
     throw new Error(`Release feed fetch failed (${response.status}) for ${url}`);

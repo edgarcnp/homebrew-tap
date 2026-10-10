@@ -5,8 +5,8 @@
   "comment": "Warframe companion: inventory, foundry, relic and riven scanning, market orders.",
   "cask": "wfhelper",
   "watch": {
-    "feedUrl": "https://github.com/WFHelper/WFHelper/releases.atom",
-    "format": "atom",
+    "feedUrl": "https://api.github.com/repos/WFHelper/WFHelper/releases",
+    "format": "github-release",
     "versionPattern": "^v(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
     "repo": "WFHelper/WFHelper"
   },

@@ -57,6 +57,9 @@
         },
         {
           "$ref": "#/$defs/watchJson"
+        },
+        {
+          "$ref": "#/$defs/watchGithubRelease"
         }
       ]
     },
@@ -282,6 +285,36 @@
         "versionField": {
           "type": "string",
           "pattern": "^[A-Za-z0-9_-]+(\\.[A-Za-z0-9_-]+)*$"
+        },
+        "skipPattern": {
+          "type": "string",
+          "minLength": 1
+        },
+        "repo": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "watchGithubRelease": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "feedUrl",
+        "format",
+        "versionPattern"
+      ],
+      "properties": {
+        "feedUrl": {
+          "type": "string",
+          "pattern": "^https://api\\.github\\.com/repos/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/releases/?$"
+        },
+        "format": {
+          "const": "github-release"
+        },
+        "versionPattern": {
+          "type": "string",
+          "minLength": 1
         },
         "skipPattern": {
           "type": "string",

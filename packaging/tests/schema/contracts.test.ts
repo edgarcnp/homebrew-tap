@@ -98,6 +98,23 @@ describe("descriptor v2 schema", () => {
     );
   });
 
+  it("accepts a github-release watch on the pinned releases URL only", () => {
+    const mutated = structuredClone(asRecord(appExample));
+    mutated["watch"] = {
+      feedUrl: "https://api.github.com/repos/acme/app/releases",
+      format: "github-release",
+      versionPattern: "^(\\d+\\.\\d+\\.\\d+)$",
+    };
+    assert.deepEqual(problems(appSchema, mutated), []);
+    const offHost = structuredClone(mutated);
+    asRecord(offHost["watch"])["feedUrl"] = "https://github.com/acme/app/releases.atom";
+    assert.ok(
+      problems(appSchema, offHost).some((problem) =>
+        problem.startsWith("$.watch: must match exactly one"),
+      ),
+    );
+  });
+
   it("rejects a github-release advisory mixing both asset layouts", () => {
     const mutated = structuredClone(asRecord(appExample));
     mutated["advisory"] = {

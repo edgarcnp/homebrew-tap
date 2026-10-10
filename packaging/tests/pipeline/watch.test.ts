@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { loadDescriptor } from "../../lib/pipeline/descriptor.ts";
-import { atomEntryTitles, selectFeedVersion } from "../../lib/pipeline/watch.ts";
+import { atomEntryTitles, fetchFeedVersion, githubReleaseTitles, selectFeedVersion } from "../../lib/pipeline/watch.ts";
 import type { WatchConfig } from "../../lib/core/types.ts";
 
 // Shaped like releases.atom: the feed carries its own <title>, and entries
@@ -26,6 +26,26 @@ function watch(app: string): WatchConfig {
   return config;
 }
 
+// Shaped like a GitHub releases-list response: newest first, each entry
+// carrying a release `name` and `tag_name` (either may be absent or empty).
+function releases(entries: unknown[]): string {
+  return JSON.stringify(entries);
+}
+
+function release(name: string | null, tag: string): Record<string, unknown> {
+  const entry: Record<string, unknown> = { tag_name: tag };
+  if (name !== null) entry["name"] = name;
+  return entry;
+}
+
+// The atom path is exercised with a synthetic config; the shipped
+// GitHub-backed watches read the releases list instead.
+const ATOM: WatchConfig = {
+  feedUrl: "https://example.com/releases.atom",
+  format: "atom",
+  versionPattern: "^v(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
+};
+
 describe("atomEntryTitles", () => {
   it("reads entry titles and leaves the feed's own title out", () => {
     const titles = atomEntryTitles(atom("v9.9.9", ["v2.0.14", "v2.0.13"]));
@@ -38,30 +58,78 @@ describe("atomEntryTitles", () => {
   });
 });
 
+describe("githubReleaseTitles", () => {
+  it("reads release names, falls back to tags and skips non-objects", () => {
+    const body = releases([
+      "junk",
+      release("GitComet v0.2.5", "gitcomet-v0.2.5"),
+      release("", "v0.2.4"),
+      release(null, ""),
+    ]);
+    assert.deepEqual(githubReleaseTitles(body, "https://api.github.com/repos/x/y/releases"), [
+      "GitComet v0.2.5",
+      "v0.2.4",
+    ]);
+  });
+});
+
 describe("selectFeedVersion", () => {
   it("picks the newest version an atom feed advertises", () => {
-    const feed = atom("Release notes from wfhelper", ["v2.1.0", "v2.0.9", "v2.0.8"]);
-    assert.equal(selectFeedVersion(watch("wfhelper"), feed), "2.1.0");
+    const feed = atom("Release notes", ["v2.1.0", "v2.0.9", "v2.0.8"]);
+    assert.equal(selectFeedVersion(ATOM, feed), "2.1.0");
   });
 
   it("orders by dpkg semantics, not by feed position", () => {
     // Date order puts the older 1.x backport first; 2.0.12 is still newer.
-    const feed = atom("Release notes from wfhelper", ["v1.18.32", "v2.0.12", "v2.0.11"]);
+    const feed = releases([
+      release("v1.18.32", "v1.18.32"),
+      release("v2.0.12", "v2.0.12"),
+      release("v2.0.11", "v2.0.11"),
+    ]);
     assert.equal(selectFeedVersion(watch("wfhelper"), feed), "2.0.12");
   });
 
-  it("reads titles that are release names rather than tags", () => {
-    const feed = atom("Release notes from gitcomet", ["GitComet v0.2.5", "GitComet v0.2.4"]);
+  it("reads release names rather than tags", () => {
+    // The list carries both; only the name matches, exactly as the atom title
+    // did.
+    const feed = releases([
+      release("GitComet v0.2.5", "gitcomet-v0.2.5"),
+      release("GitComet v0.2.4", "gitcomet-v0.2.4"),
+    ]);
+    assert.equal(selectFeedVersion(watch("gitcomet"), feed), "0.2.5");
+  });
+
+  it("falls back to the tag when the release name is empty", () => {
+    const feed = releases([release(null, "v2.1.0"), release("", "v2.0.9")]);
+    assert.equal(selectFeedVersion(watch("wfhelper"), feed), "2.1.0");
+  });
+
+  it("applies the releases list's skipPattern before the version pattern", () => {
+    const feed = releases([
+      release("GitComet v0.3.0-rc.1", "gitcomet-v0.3.0-rc.1"),
+      release("GitComet v0.2.5", "gitcomet-v0.2.5"),
+    ]);
     assert.equal(selectFeedVersion(watch("gitcomet"), feed), "0.2.5");
   });
 
   it("returns null when no entry matches", () => {
-    assert.equal(selectFeedVersion(watch("wfhelper"), atom("Release notes", ["nightly"])), null);
-    assert.equal(selectFeedVersion(watch("wfhelper"), "<feed></feed>"), null);
+    assert.equal(selectFeedVersion(watch("wfhelper"), releases([release("nightly", "nightly")])), null);
+    assert.equal(selectFeedVersion(watch("wfhelper"), releases([])), null);
     // opencode-desktop reads the v2 update manifest: a version the pattern
     // rejects, or no version at all, advertises nothing either.
     assert.equal(selectFeedVersion(watch("opencode-desktop"), "{\"version\":\"nightly\"}"), null);
     assert.equal(selectFeedVersion(watch("opencode-desktop"), "{\"metadata\":{}}"), null);
+  });
+
+  it("rejects a releases list that is not a list", () => {
+    assert.throws(
+      () => selectFeedVersion(watch("wfhelper"), "{\"message\":\"Not Found\"}"),
+      /not a releases array/,
+    );
+    assert.throws(
+      () => selectFeedVersion(watch("wfhelper"), "<html>maintenance</html>"),
+      /not valid JSON/,
+    );
   });
 
   it("applies skipPattern before the version pattern", () => {
@@ -122,5 +190,29 @@ describe("selectFeedVersion", () => {
       versionPattern: "\\d+\\.\\d+\\.\\d+",
     };
     assert.equal(selectFeedVersion(loose, atom("Release notes", ["v2.0.1", "v9.9.9"])), "9.9.9");
+  });
+});
+
+describe("fetchFeedVersion", () => {
+  it("requests the API's ten-release window only for a releases watch", async () => {
+    const seen: string[] = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: string | URL) => {
+      seen.push(String(input));
+      return new Response("[]", { status: 200 });
+    }) as unknown as typeof fetch;
+    try {
+      const releaseWatch = watch("wfhelper");
+      assert.equal(await fetchFeedVersion(releaseWatch), null);
+      assert.equal(await fetchFeedVersion({ ...releaseWatch, feedUrl: `${releaseWatch.feedUrl}/` }), null);
+      assert.equal(await fetchFeedVersion(ATOM), null);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+    assert.deepEqual(seen, [
+      "https://api.github.com/repos/WFHelper/WFHelper/releases?per_page=10",
+      "https://api.github.com/repos/WFHelper/WFHelper/releases?per_page=10",
+      "https://example.com/releases.atom",
+    ]);
   });
 });
