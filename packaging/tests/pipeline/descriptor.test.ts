@@ -552,18 +552,19 @@ describe("release watch", () => {
       versionPattern: "^v(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
       repo: "WFHelper/WFHelper",
     });
-    assert.deepEqual(loadDescriptor("spotifast").watch, {
-      feedUrl: "https://api.github.com/repos/crmne/spotifast/releases",
+    assert.deepEqual(loadDescriptor("artcraft").watch, {
+      feedUrl: "https://api.github.com/repos/storytold/craft-launcher/releases",
       format: "github-release",
-      versionPattern: "^Spotifast v(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
-      skipPattern: "^Spotifast v\\d+\\.\\d+\\.\\d+-(?:rc|beta|alpha)\\d*$",
-      repo: "crmne/spotifast",
+      versionPattern: "^ArtCraft Launcher v(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
+      skipPattern: "^ArtCraft Launcher v\\d+\\.\\d+\\.\\d+-",
+      repo: "storytold/craft-launcher",
     });
   });
 
   it("captures the version from a real feed title", () => {
     // Feed titles are release names, not tags (e.g. "GitComet v0.2.5").
     const titles: Record<string, [string, string]> = {
+      artcraft: ["ArtCraft Launcher v0.2.0", "0.2.0"],
       vscode: ["1.137.0", "1.137.0"],
       "opencode-desktop": ["2.0.18", "2.0.18"],
       gitcomet: ["GitComet v0.2.5", "0.2.5"],
@@ -585,6 +586,10 @@ describe("release watch", () => {
     assert.ok(gitcomet?.skipPattern !== undefined);
     assert.equal(new RegExp(gitcomet.skipPattern).test("GitComet v0.3.0-rc.1"), true);
     assert.equal(new RegExp(gitcomet.skipPattern).test("GitComet v0.3.0"), false);
+    const artcraft = loadDescriptor("artcraft").watch;
+    assert.ok(artcraft?.skipPattern !== undefined);
+    assert.equal(new RegExp(artcraft.skipPattern).test("ArtCraft Launcher v0.3.0-beta.2"), true);
+    assert.equal(new RegExp(artcraft.skipPattern).test("ArtCraft Launcher v0.3.0"), false);
   });
 });
 

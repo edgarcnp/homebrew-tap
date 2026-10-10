@@ -1,0 +1,65 @@
+{
+  "id": "artcraft",
+  "appName": "ArtCraft Launcher",
+  "displayName": "ArtCraft Launcher",
+  "comment": "Install, update and launch the Craft App Suite",
+  "cask": "artcraft",
+  "watch": {
+    "feedUrl": "https://api.github.com/repos/storytold/craft-launcher/releases",
+    "format": "github-release",
+    "versionPattern": "^ArtCraft Launcher v(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
+    "skipPattern": "^ArtCraft Launcher v\\d+\\.\\d+\\.\\d+-",
+    "repo": "storytold/craft-launcher"
+  },
+  "assetPrefix": "artcraft",
+  "tagPrefix": "artcraft-v",
+  "sourceRepo": "edgarcnp/homebrew-tap",
+  "sourceOwner": "edgarcnp",
+  "sourceDir": "packaging/apps/artcraft",
+  "buildCommand": "./build.sh",
+  "debloatArgs": "--add-common",
+  "architectures": ["amd64"],
+  "binaryTargets": ["artcraft-launcher"],
+  "advisory": {
+    "kind": "github-release",
+    "repository": "https://api.github.com/repos/storytold/craft-launcher",
+    "packageName": "artcraft-launcher",
+    "tagPrefix": "v",
+    "assetNameTemplate": "artcraft-launcher-{version}-linux-x86_64.deb"
+  },
+  "payload": {
+    "kind": "deb-files",
+    "files": ["usr/bin/artcraft-launcher"]
+  },
+  "icon": {
+    "source": "usr/share/icons/hicolor/scalable/apps/ai.storyteller.artcraft-launcher.svg",
+    "size": "scalable"
+  },
+  "desktopTemplate": "templates/artcraft.desktop",
+  "updater": {
+    "patchEndpoint": {
+      "from": "storytold/craft-launcher",
+      "textReplacement": "update.invalid/launchers",
+      "binaryReplacement": "update.invalid/launchers",
+      "targets": ["bin/artcraft-launcher"]
+    },
+    "residualScan": {
+      "patterns": ["storytold/craft-launcher"],
+      "severity": "error"
+    }
+  },
+  "quickSharun": {
+    "hooks": ["fix-namespaces.hook"],
+    "libraries": [
+      "/usr/lib/libX11.so.6",
+      "/usr/lib/libX11-xcb.so.1",
+      "/usr/lib/libXcursor.so.1",
+      "/usr/lib/libXi.so.6",
+      "/usr/lib/libxkbcommon.so.0",
+      "/usr/lib/libxkbcommon-x11.so.0",
+      "/usr/lib/libwayland-client.so.0",
+      "/usr/lib/libwayland-egl.so.1",
+      "/usr/lib/libEGL.so.1"
+    ]
+  }
+}
