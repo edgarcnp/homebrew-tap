@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "description": "Build tooling for the AppImage casks in this tap. Node's native type stripping runs the TypeScript directly; no build step, no runtime dependencies.",
-  "packageManager": "pnpm@12.10.1",
+  "packageManager": "pnpm@12.11.2",
   "engines": {
     "node": "24.21.0"
   },
