@@ -1,0 +1,51 @@
+{
+  "id": "pi-desktop",
+  "appName": "PI-Desktop",
+  "displayName": "PI-Desktop",
+  "comment": "Local-first AI coding agent desktop",
+  "cask": "pi-desktop",
+  "watch": {
+    "feedUrl": "https://api.github.com/repos/vastsa/PI-Desktop/releases",
+    "format": "github-release",
+    "versionPattern": "^v(\\d+\\.\\d+\\.\\d+)$",
+    "repo": "vastsa/PI-Desktop"
+  },
+  "assetPrefix": "pi-desktop",
+  "tagPrefix": "pi-desktop-v",
+  "sourceRepo": "edgarcnp/homebrew-tap",
+  "sourceOwner": "edgarcnp",
+  "sourceDir": "packaging/apps/pi-desktop",
+  "buildCommand": "./build.sh",
+  "debloatArgs": "--add-common --prefer-nano ffmpeg-mini gdk-pixbuf2-mini",
+  "architectures": ["amd64"],
+  "binaryTargets": ["pi-desktop"],
+  "advisory": {
+    "kind": "github-release",
+    "repository": "https://api.github.com/repos/vastsa/PI-Desktop",
+    "packageName": "pi-desktop",
+    "tagPrefix": "v",
+    "assetNameTemplate": "pi-desktop_{version}_{arch}.deb"
+  },
+  "payload": {
+    "kind": "deb-tree",
+    "tree": "opt/PI-Desktop"
+  },
+  "icon": {
+    "source": "usr/share/icons/hicolor/512x512/apps/pi-desktop.png",
+    "size": "512x512"
+  },
+  "desktopTemplate": "templates/pi-desktop.desktop",
+  "updater": {
+    "removeFeed": {
+      "paths": ["bin/resources/app-update.yml"],
+      "required": true
+    },
+    "residualScan": {
+      "patterns": ["vastsa/PI-Desktop"],
+      "severity": "warning"
+    }
+  },
+  "quickSharun": {
+    "hooks": ["fix-namespaces.hook"]
+  }
+}
