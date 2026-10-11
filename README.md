@@ -21,7 +21,7 @@ brew install --cask <cask>
 
 | Cask | App | Notes |
 | --- | --- | --- |
-| `artcraft` | [ArtCraft Launcher](https://github.com/storytold/craft-launcher) | |
+| `artcraft-launcher` | [ArtCraft Launcher](https://github.com/storytold/craft-launcher) | |
 | `firefox` | [Firefox](https://www.mozilla.org/firefox/) | en-US build; [hardware decoding notes](packaging/apps/firefox/README.md) |
 | `gitcomet` | [GitComet](https://gitcomet.dev/) | |
 | `little-genius` | [Little Genius](https://lg.avakot.org/) | |

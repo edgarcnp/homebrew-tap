@@ -1,9 +1,9 @@
 {
-  "id": "artcraft",
+  "id": "artcraft-launcher",
   "appName": "ArtCraft Launcher",
   "displayName": "ArtCraft Launcher",
   "comment": "Install, update and launch the Craft App Suite",
-  "cask": "artcraft",
+  "cask": "artcraft-launcher",
   "watch": {
     "feedUrl": "https://api.github.com/repos/storytold/craft-launcher/releases",
     "format": "github-release",
@@ -11,11 +11,11 @@
     "skipPattern": "^ArtCraft Launcher v\\d+\\.\\d+\\.\\d+-",
     "repo": "storytold/craft-launcher"
   },
-  "assetPrefix": "artcraft",
-  "tagPrefix": "artcraft-v",
+  "assetPrefix": "artcraft-launcher",
+  "tagPrefix": "artcraft-launcher-v",
   "sourceRepo": "edgarcnp/homebrew-tap",
   "sourceOwner": "edgarcnp",
-  "sourceDir": "packaging/apps/artcraft",
+  "sourceDir": "packaging/apps/artcraft-launcher",
   "buildCommand": "./build.sh",
   "debloatArgs": "--add-common",
   "architectures": ["amd64"],
@@ -35,7 +35,7 @@
     "source": "usr/share/icons/hicolor/scalable/apps/ai.storyteller.artcraft-launcher.svg",
     "size": "scalable"
   },
-  "desktopTemplate": "templates/artcraft.desktop",
+  "desktopTemplate": "templates/artcraft-launcher.desktop",
   "updater": {
     "patchEndpoint": {
       "from": "storytold/craft-launcher",

@@ -1,4 +1,4 @@
-# artcraft
+# artcraft-launcher
 
 Descriptor: [`app.json`](app.json). Shared stages and the field reference are in
 the [pipeline README](../../README.md).
