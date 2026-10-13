@@ -1,6 +1,6 @@
 cask "pi-desktop" do
-  version "0.18.0"
-  sha256 "edc0bc7987faf71c63cc55cba1669e83576c0233f926282fb0d528e84828ed9a"
+  version "0.19.0"
+  sha256 "b0028e0d24b8caddc45ea7971cf1a5c6f05ec37544af30948b23d02e18e8ce8e"
 
   url "https://github.com/edgarcnp/homebrew-tap/releases/download/pi-desktop-v#{version}/pi-desktop-#{version}-x86_64.AppImage"
   name "PI-Desktop"
