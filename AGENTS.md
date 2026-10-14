@@ -98,10 +98,10 @@ memory or habit.
   bind a local `127.0.0.1` server and every other URL in the tests is a string
   fixture. Do not add a test that reaches the real network.
 - Cover the failure path, not only the happy path. Classified failures exit 3
-  (upstream unavailable), 4 (guard), 5 (checksum), 6 (updater residue) and
-  write a `--failure-out` fragment; everything else exits 1 / UNCLASSIFIED. A
-  new code needs a site, a record entry and coverage — the contract tests scan
-  the emission shapes.
+  (upstream unavailable), 4 (guard), 5 (checksum), 6 (updater residue), 7
+  (upstream conflict) and write a `--failure-out` fragment; everything else
+  exits 1 / UNCLASSIFIED. A new code needs a site, a record entry and coverage
+  — the contract tests scan the emission shapes.
 
 ## Making changes
 

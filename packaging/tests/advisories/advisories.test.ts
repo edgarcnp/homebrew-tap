@@ -3,8 +3,9 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { describe, it } from "node:test";
-import { selectLatestPackage, verifyIndexedFile } from "../../lib/advisories/apt.ts";
-import { GuardViolationError } from "../../lib/core/errors.ts";
+import { readIndexedPackages, selectLatestPackage, verifyIndexedFile } from "../../lib/advisories/apt.ts";
+import { GuardViolationError, UpstreamConflictError, UpstreamUnavailableError } from "../../lib/core/errors.ts";
+import { sha256Hex } from "../../lib/core/http.ts";
 import { parseFinalUrl, resolveWithCdnRedirect } from "../../lib/advisories/cdn-redirect.ts";
 import {
   parseFeedRedirect,
@@ -117,6 +118,112 @@ describe("apt advisory", () => {
       () => verifyIndexedFile("/nonexistent/path", { sha256: "a".repeat(64), size: 1 }, "code"),
       /ENOENT/,
     );
+  });
+
+  describe("readIndexedPackages", () => {
+    const entry = "main/binary-amd64/Packages";
+    // An older generation of the same index: shorter, so the size check is the
+    // one that fires, as it did when a CDN edge lagged a republish.
+    const stale = Buffer.from("Package: code\nVersion: 1.136.2\n");
+    const fresh = Buffer.from(
+      "Package: code\nVersion: 1.137.0\nFilename: pool/main/c/code/code_1.137.0_amd64.deb\n",
+    );
+    const release = (bytes: Buffer): string =>
+      ["Origin: code stable", "SHA256:", ` ${sha256Hex(bytes)} ${bytes.length} ${entry}`, ""].join("\n");
+
+    it("re-reads the pair when the first read is a generation the index does not name", async () => {
+      const warnings: string[] = [];
+      let releases = 0;
+      let packages = 0;
+      const bytes = await readIndexedPackages({
+        relative: entry,
+        readRelease: async () => {
+          releases += 1;
+          return release(fresh);
+        },
+        readPackages: async () => {
+          packages += 1;
+          return packages === 1 ? stale : fresh;
+        },
+        warn: (message) => warnings.push(message),
+      });
+      assert.ok(bytes.equals(fresh));
+      assert.equal(releases, 2);
+      assert.equal(packages, 2);
+      assert.equal(warnings.length, 1);
+      assert.match(warnings[0] ?? "", /disagrees with the signed InRelease/);
+    });
+
+    it("refuses a mismatch that survives both reads as a transient upstream conflict", async () => {
+      let packages = 0;
+      await assert.rejects(
+        readIndexedPackages({
+          relative: entry,
+          readRelease: async () => release(fresh),
+          readPackages: async () => {
+            packages += 1;
+            return stale;
+          },
+          warn: () => {},
+        }),
+        (error: unknown) => {
+          assert.ok(error instanceof UpstreamConflictError);
+          assert.equal(error.evidence["reason"], "index_generation_mismatch");
+          assert.match(error.message, /inconsistent main\/binary-amd64\/Packages on 2 reads/);
+          assert.match(error.message, /size mismatch/);
+          return true;
+        },
+      );
+      assert.equal(packages, 2);
+    });
+
+    it("believes the first read when the pair agrees", async () => {
+      let packages = 0;
+      const bytes = await readIndexedPackages({
+        relative: entry,
+        readRelease: async () => release(fresh),
+        readPackages: async () => {
+          packages += 1;
+          return fresh;
+        },
+      });
+      assert.ok(bytes.equals(fresh));
+      assert.equal(packages, 1);
+    });
+
+    it("does not re-read a transport failure or an index the InRelease omits", async () => {
+      let releases = 0;
+      await assert.rejects(
+        readIndexedPackages({
+          relative: entry,
+          readRelease: async () => {
+            releases += 1;
+            return release(fresh);
+          },
+          readPackages: async () => {
+            throw new UpstreamUnavailableError("busy");
+          },
+          warn: () => {},
+        }),
+        UpstreamUnavailableError,
+      );
+      assert.equal(releases, 1);
+
+      let downloads = 0;
+      await assert.rejects(
+        readIndexedPackages({
+          relative: entry,
+          readRelease: async () => "Origin: code stable\nSHA256:\n",
+          readPackages: async () => {
+            downloads += 1;
+            return fresh;
+          },
+          warn: () => {},
+        }),
+        /does not index main\/binary-amd64\/Packages/,
+      );
+      assert.equal(downloads, 0);
+    });
   });
 });
 

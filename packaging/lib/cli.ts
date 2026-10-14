@@ -9,6 +9,7 @@ import {
   ChecksumMismatchError,
   GuardViolationError,
   UpdaterResidualError,
+  UpstreamConflictError,
   UpstreamUnavailableError,
 } from "./core/errors.ts";
 import { checkCask, readCaskFile, writeCask } from "./pipeline/cask.ts";
@@ -718,6 +719,11 @@ function classifyFailure(error: unknown): FailureVerdict | undefined {
   if (error instanceof UpstreamUnavailableError) {
     return { code: "UPSTREAM_UNAVAILABLE", exitCode: 3, evidence: { ...error.evidence } };
   }
+  // The upstream served content that contradicts itself: a transient snapshot,
+  // so the plan waits and re-runs instead of leaving an issue for a human.
+  if (error instanceof UpstreamConflictError) {
+    return { code: "UPSTREAM_CONFLICT", exitCode: 7, evidence: { ...error.evidence } };
+  }
   if (error instanceof GuardViolationError) return { code: "GUARD_VIOLATION", exitCode: 4 };
   if (error instanceof ChecksumMismatchError) return { code: "CHECKSUM_MISMATCH", exitCode: 5 };
   if (error instanceof UpdaterResidualError) return { code: "UPDATER_RESIDUAL", exitCode: 6 };
@@ -725,7 +731,7 @@ function classifyFailure(error: unknown): FailureVerdict | undefined {
 }
 
 // The process exit code for a failed command: usage errors keep 2, classified
-// failures use their own code (3-6), everything else is the generic 1.
+// failures use their own code (3-7), everything else is the generic 1.
 export function errorExitCode(error: unknown): number {
   if (isUsageError(error)) return error.exitCode;
   return classifyFailure(error)?.exitCode ?? 1;

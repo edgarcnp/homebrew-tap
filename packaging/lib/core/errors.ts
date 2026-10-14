@@ -20,6 +20,22 @@ export class UpstreamUnavailableError extends Error {
   }
 }
 
+// Upstream contradicts itself: the signed index and the file it indexes
+// disagree even after a re-read. Transient, unlike ChecksumMismatchError — the
+// publisher is mid-republish and the snapshot heals, so the record asks for a
+// bounded re-run with a wait instead of a human.
+export class UpstreamConflictError extends Error {
+  // Same contract as UpstreamUnavailableError's: strings only, copied into the
+  // run record's `evidence` object verbatim (e.g. reason for the conflict).
+  readonly evidence: Readonly<Record<string, string>>;
+
+  constructor(message: string, evidence: Readonly<Record<string, string>> = {}) {
+    super(message);
+    this.name = "UpstreamConflictError";
+    this.evidence = evidence;
+  }
+}
+
 // A permanent, deliberate refusal: an allow-list, HTTPS or size guard tripped.
 // Re-running the same build changes nothing, so the record says so.
 export class GuardViolationError extends Error {

@@ -17,7 +17,7 @@ try {
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);
   process.stderr.write(`ERROR: ${message}\n`);
-  // 2 for usage errors, 3-6 for classified failures, 1 for everything else;
+  // 2 for usage errors, 3-7 for classified failures, 1 for everything else;
   // the workflow passes the code through and reads the verdict from the
   // fragment when --failure-out was given.
   process.exitCode = errorExitCode(error);

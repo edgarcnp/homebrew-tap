@@ -6,6 +6,14 @@ import * as path from "node:path";
 import { describe, it } from "node:test";
 import { listApps } from "../lib/pipeline/descriptor.ts";
 import { REPO_ROOT } from "../lib/core/paths.ts";
+import { errorExitCode } from "../lib/cli.ts";
+import {
+  ChecksumMismatchError,
+  GuardViolationError,
+  UpdaterResidualError,
+  UpstreamConflictError,
+  UpstreamUnavailableError,
+} from "../lib/core/errors.ts";
 
 // The workflows call fbr with exact flag shapes; these tests run the real
 // entry point so a flag contract change cannot ship without CI noticing.
@@ -238,5 +246,19 @@ describe("fbr CLI contract", () => {
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("classified failure exit codes", () => {
+  // The band the workflow reads: 2 for a usage error, 3-7 for a failure that
+  // classified itself and left a fragment, 1 for everything else (which the
+  // report job names UNCLASSIFIED).
+  it("maps each failure class to its documented exit code", () => {
+    assert.equal(errorExitCode(new UpstreamUnavailableError("busy")), 3);
+    assert.equal(errorExitCode(new GuardViolationError("guard")), 4);
+    assert.equal(errorExitCode(new ChecksumMismatchError("digest")), 5);
+    assert.equal(errorExitCode(new UpdaterResidualError("residual")), 6);
+    assert.equal(errorExitCode(new UpstreamConflictError("conflict")), 7);
+    assert.equal(errorExitCode(new Error("unclassified")), 1);
   });
 });

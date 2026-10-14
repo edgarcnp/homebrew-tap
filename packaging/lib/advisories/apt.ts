@@ -13,6 +13,7 @@ import {
   assertSingleLine,
   fail,
 } from "../core/guards.ts";
+import { ChecksumMismatchError, UpstreamConflictError } from "../core/errors.ts";
 import { MAX_PAYLOAD_BYTES, writeFileAtomic } from "../core/http.ts";
 import {
   assertReleaseFreshness,
@@ -92,6 +93,60 @@ export function verifyIndexedFile(
   label: string,
 ): void {
   verifyPayload(fs.readFileSync(filePath), expected, label);
+}
+
+// How many times the index pair is read before its disagreement is believed:
+// two reads that both contradict the same signed index mean the publisher is in
+// flux, and a third would only spend another copy of the index.
+const INDEX_PAIR_READS = 2;
+
+export interface IndexedPackagesSource {
+  // The index entry the InRelease must name, e.g. "main/binary-amd64/Packages";
+  // also the label a mismatch reports.
+  readonly relative: string;
+  // Downloads the signed InRelease, verifies it against the pinned key and
+  // returns the clear-signed payload.
+  readonly readRelease: () => Promise<string>;
+  // Downloads the file the InRelease indexes; fresh, because the point of a
+  // re-read is that the edge may have moved on.
+  readonly readPackages: () => Promise<Buffer>;
+  // Where the re-read notice goes; defaults to console.warn.
+  readonly warn?: (message: string) => void;
+}
+
+// The signed index and the file it indexes are two CDN objects with their own
+// caches: a mid-republish edge serves an InRelease of one generation with a
+// Packages of the previous one, and the size/digest check then fails on bytes
+// that were never wrong. So read the pair again, and believe a mismatch only
+// when it survives that — a re-read cannot weaken the check, because an
+// accepted pair still comes from an InRelease verified against the pinned key.
+// What survives is an upstream conflict (transient: the next generation heals
+// it), not a checksum failure.
+export async function readIndexedPackages(source: IndexedPackagesSource): Promise<Buffer> {
+  const warn = source.warn ?? ((message: string) => console.warn(message));
+  let mismatch = "";
+  for (let read = 1; read <= INDEX_PAIR_READS; read++) {
+    const payload = await source.readRelease();
+    const indexed = parseReleaseSha256(payload).get(source.relative);
+    if (!indexed) throw new Error(`Signed InRelease does not index ${source.relative}`);
+    const bytes = await source.readPackages();
+    try {
+      verifyPayload(bytes, indexed, source.relative);
+      return bytes;
+    } catch (error) {
+      // Only a mismatch earns another read: a transport failure or a guard trip
+      // already carries a classification of its own.
+      if (!(error instanceof ChecksumMismatchError)) throw error;
+      mismatch = error.message;
+      if (read < INDEX_PAIR_READS) {
+        warn(`${source.relative} disagrees with the signed InRelease (${mismatch}); re-reading the pair`);
+      }
+    }
+  }
+  throw new UpstreamConflictError(
+    `Upstream served an inconsistent ${source.relative} on ${INDEX_PAIR_READS} reads: ${mismatch}`,
+    { reason: "index_generation_mismatch" },
+  );
 }
 
 interface SelectedPackage {
@@ -188,25 +243,25 @@ export async function resolveWithApt(
   const keyPath = path.join(outputDir, "repository-key.gpg");
   writeFileAtomic(keyPath, Buffer.from(resolveKeyBase64(advisory.keyBase64Path, outputDir), "base64"));
 
-  const inReleasePath = path.join(outputDir, "InRelease");
-  await download(`${repository}/dists/${suite}/InRelease`, inReleasePath);
-  const releasePayload = verifyInRelease(inReleasePath, keyPath, fingerprint);
-  assertReleaseFreshness(releasePayload);
-
   const packagesRelative = `main/binary-${architecture}/Packages`;
-  const indexedPackages = parseReleaseSha256(releasePayload).get(packagesRelative);
-  if (!indexedPackages) {
-    throw new Error(`Signed InRelease does not index ${packagesRelative}`);
-  }
-
+  const inReleasePath = path.join(outputDir, "InRelease");
   const packagesPath = path.join(outputDir, `Packages.${architecture}`);
-  await download(`${repository}/dists/${suite}/${packagesRelative}`, packagesPath);
-  verifyIndexedFile(packagesPath, indexedPackages, packagesRelative);
-  const selected = selectLatestPackage(
-    fs.readFileSync(packagesPath, "utf8"),
-    packageName,
-    architecture,
-  );
+  // One read fetches both objects, so a re-read sees one generation or the
+  // other and never another mix of the two.
+  const packages = await readIndexedPackages({
+    relative: packagesRelative,
+    readRelease: async () => {
+      await download(`${repository}/dists/${suite}/InRelease`, inReleasePath);
+      const payload = verifyInRelease(inReleasePath, keyPath, fingerprint);
+      assertReleaseFreshness(payload);
+      return payload;
+    },
+    readPackages: async () => {
+      await download(`${repository}/dists/${suite}/${packagesRelative}`, packagesPath);
+      return fs.readFileSync(packagesPath);
+    },
+  });
+  const selected = selectLatestPackage(packages.toString("utf8"), packageName, architecture);
 
   let packagePath: string | null = null;
   if (!request.metadataOnly) {

@@ -96,7 +96,7 @@ record whose `app` does not — `fbr report` refuses such a record first.
 
 | Kind | Version and payload source |
 | --- | --- |
-| `apt` | Signed apt repo: pinned key → `InRelease` (verified with `gpgv` against a pinned fingerprint) → `Packages` SHA-256 → package SHA-256/size. Newest entry per architecture wins, by dpkg ordering. Reads the `stable` suite unless the descriptor pins `suite` (Mozilla serves `dists/mozilla`), and strips Mozilla's `~buildN` rebuild marker from the cask version so it matches the release feed. |
+| `apt` | Signed apt repo: pinned key → `InRelease` (verified with `gpgv` against a pinned fingerprint) → `Packages` SHA-256 → package SHA-256/size. The two index objects are read twice when a republish races the fetch — an edge can serve a fresh `InRelease` with a stale `Packages` — and a mismatch that survives both reads is a transient `UPSTREAM_CONFLICT`, not a checksum failure. Newest entry per architecture wins, by dpkg ordering. Reads the `stable` suite unless the descriptor pins `suite` (Mozilla serves `dists/mozilla`), and strips Mozilla's `~buildN` rebuild marker from the cask version so it matches the release feed. |
 | `github-release` | GitHub release assets. Legacy: newest release carrying both `<assetPrefix>-<arch>.deb`. Versioned-asset: pins a tag prefix plus an `assetNameTemplate` and resolves each shipped architecture separately. A `.AppImage` asset additionally cross-checks the release's electron-builder update yml (SHA-512 + size) before downloading. |
 | `electron-feed` | An electron-updater feed whose 302 names the release tag. The yml supplies filename, SHA-512 and size; the GitHub API supplies the SHA-256. All three must agree. |
 | `cdn-redirect` | A CDN download redirect that is itself the version source. The target URL shape is pinned and the payload is hashed on download (the CDN publishes no checksums). No app currently consumes it; it is validated and tested as infrastructure for a future CDN-sourced app. |
@@ -158,9 +158,9 @@ fbr version-compare --sort A B [C ...]       dpkg-order a list ascending, one pe
 
 Every command declares its flags: an unknown or duplicate flag is a usage error
 (exit 2), never silently ignored. A classified failure exits 3 (upstream
-unavailable), 4 (guard violation), 5 (checksum mismatch) or 6 (updater
-residual) and, when the caller passed `--failure-out`, leaves the run-record
-fragment there. Every other failure exits 1, which the record reports as
+unavailable), 4 (guard violation), 5 (checksum mismatch), 6 (updater residual)
+or 7 (upstream conflict) and, when the caller passed `--failure-out`, leaves the
+run-record fragment there. Every other failure exits 1, which the record reports
 UNCLASSIFIED.
 
 ## The run record
@@ -211,8 +211,10 @@ record's own verdict:
   record reports; a not-ready skip names what resolve actually saw.
 
 A failure site writes a fragment (`{"code","message","stage"?,"evidence"?}`)
-before exiting; the report job uploads the fragments and prefers the site's
-verdict over its job-level fallback. An absent record means the run died before
+before exiting; the report job downloads the fragments and prefers the site's
+verdict over its job-level fallback, logging the download's real outcome and
+what landed on disk so a fragment that goes missing cannot change a verdict
+without a trace. An absent record means the run died before
 the report job could start (runner loss, cancellation), which is
 infrastructure, not a verdict — and the one failure `retry.yml` re-runs without
 a classification. The retry budget is `MAX_ATTEMPTS` in `lib/pipeline/retry.ts`
