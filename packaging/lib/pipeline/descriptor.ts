@@ -60,8 +60,7 @@ function asObject(value: unknown, label: string): Json {
 }
 
 // Rejects fields the loader does not consume. Ignoring them let a typo in a
-// security-relevant block (residualScans, patchEndpoit) disable it silently;
-// the v2 schema is strict too.
+// security-relevant block (residualScans, patchEndpoit) disable it silently.
 function rejectUnknownKeys(source: Json, allowed: readonly string[], label: string): void {
   for (const key of Object.keys(source)) {
     if (!allowed.includes(key)) fail(`${label}.${key} is not a known field`);

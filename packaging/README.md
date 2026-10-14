@@ -8,11 +8,6 @@ The TypeScript runs directly on Node — native type stripping, no build step,
 no runtime dependencies. `typescript` and `@types/node` are dev-only (for
 `tsc --noEmit` and editors).
 
-The redesign of this toolchain is [`REDESIGN.md`](REDESIGN.md): phases 0–1
-(the v2 and manifest schemas, the pinned builder image) are live, while the
-descriptor v2 migration and the `plan`/`build`/`publish`/`cask render` commands
-are not. This file describes what runs today.
-
 ## Layout
 
 ```
@@ -31,9 +26,7 @@ packaging/
                            release, neutralize, render, report
   lib/advisories/          one module per upstream source kind; custom/ holds
                            provider-specific advisories (e.g. avakot)
-  lib/schema/              JSON Schema subset validator (descriptor v2, manifest)
   lib/shell/               the bash pipeline
-  schema/                  descriptor v2 and manifest JSON Schemas, with examples
   tests/                   unit suite, mirrors lib/  (node --test)
   scripts/                 repo tooling (tool installer, local style gate)
 ```
@@ -41,7 +34,7 @@ packaging/
 `lib/` is a library: no import-time side effects, and the CLI is the only entry
 point. The folders group by role, not file kind — `core/` knows nothing about a
 cask, `pipeline/` implements the descriptor-driven steps, `advisories/` resolves
-upstream sources, `schema/` validates documents. Tests live in `tests/`,
+upstream sources. Tests live in `tests/`,
 mirroring those groups.
 
 The advisories share one download path (`advisories/download.ts`) and one GitHub
@@ -377,8 +370,7 @@ rules.
 test dependencies): dpkg ordering, deb822/InRelease parsing and freshness, HTTP
 timeout/cap/atomic write, guards and metadata validation, descriptor validation,
 cask read/update/consistency, the gate table, updater neutralization, desktop
-rendering, run records, retry plans, the advisory parsers, and the descriptor
-v2/manifest schema contracts.
+rendering, run records, retry plans and the advisory parsers.
 
 `pnpm run typecheck` runs `tsc --noEmit` (strict). `pnpm run style` runs
 `brew style edgarcnp/tap` on its own — RuboCop plus shellcheck, shfmt and

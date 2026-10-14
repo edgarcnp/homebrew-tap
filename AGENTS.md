@@ -36,10 +36,9 @@ is **data** (`packaging/apps/<app>/app.json`), never a forked script.
 | --- | --- |
 | `Casks/<app>.rb` | the cask: version and `sha256` pinned |
 | `packaging/apps/<app>/` | `app.json` descriptor, `build.sh` shim, templates, key material |
-| `packaging/bin/fbr.ts` | the CLI; `packaging/lib/{core,pipeline,advisories,schema,shell}/` its library |
+| `packaging/bin/fbr.ts` | the CLI; `packaging/lib/{core,pipeline,advisories,shell}/` its library |
 | `packaging/builder/` | the pinned builder image: `Dockerfile`, `pins.json` (the ref the build job reads) |
 | `packaging/lib/shell/` | the bash pipeline the build runs |
-| `packaging/schema/` | the descriptor v2 and manifest JSON Schemas, with examples |
 | `packaging/tests/` | unit suite, mirroring `lib/` |
 | `packaging/scripts/` | repo tooling: `check-style.sh`, `install-anylinux-tools.sh`, `pin-builder-image.sh` |
 | `.github/workflows/`, `.github/actions/` | build, publish, dispatch, tests, cask pinning |
