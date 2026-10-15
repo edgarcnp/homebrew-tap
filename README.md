@@ -1,6 +1,6 @@
 # edgarcnp/tap
 
-A Homebrew tap of Linux desktop apps, repackaged as AppImages.
+A Homebrew tap of Linux desktop apps with FUSE3 support, repackaged as AppImages.
 
 ## Install
 
