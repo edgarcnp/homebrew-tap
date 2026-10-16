@@ -31,7 +31,7 @@
 # the per-run builds used it before this image existed, and every AppImage
 # bundles its glibc and friends. Renovate owns the digest; do not swap the base
 # for a "minimal" image without re-validating the pkgforge tools against it.
-FROM ghcr.io/pkgforge-dev/archlinux:v2026.10.15@sha256:ea32f7013dd1ab80779fe94f223717d77f60960a0f992973db694dae35b731c8
+FROM ghcr.io/pkgforge-dev/archlinux:v2026.10.16@sha256:0a4774dad9b1be24854f2103c1e4621658feb790b37e5a6c788641bab412ef31
 
 # renovate: datasource=node-version depName=node
 ARG NODE_VERSION=24.22.0
