@@ -60,7 +60,7 @@ describe("descriptor loading", () => {
 
   it("enforces the API's app-id shape for the id, cask and asset prefix", () => {
     // The API's discovery regex: it skips app directories that do not match,
-    // and POST /v1/homebrew/tap/events rejects a record whose `app` does not.
+    // and POST /v1/homebrew/tap/event rejects a record whose `app` does not.
     assert.equal(APP_ID.source, "^[a-z0-9][a-z0-9-]{0,63}$");
     assert.equal(APP_ID.test("a".repeat(64)), true, "64 characters is the cap");
     assert.equal(APP_ID.test("a".repeat(65)), false, "65 characters is too long");

@@ -1,7 +1,7 @@
 // The run record: the tap's machine-readable signal to the API that dispatches
 // builds, and the input the CI's own retry decision reads. One JSON document
 // per app per phase, delivered twice: the workflow POSTs the full record,
-// OIDC-authenticated, to the API's `/v1/homebrew/tap/events` endpoint and
+// OIDC-authenticated, to the API's `/v1/homebrew/tap/event` endpoint and
 // uploads a world-readable copy as the `run-report-<app>` artifact with the
 // dispatch correlation id redacted (see redactReport). The API owns readiness,
 // so retries of a failed run belong to the CI: this module classifies, and

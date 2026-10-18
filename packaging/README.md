@@ -166,7 +166,7 @@ UNCLASSIFIED.
 ## The run record
 
 Each build answers with one JSON record per app and phase. The workflow POSTs
-the full record, OIDC-authenticated, to the API's `/v1/homebrew/tap/events`
+the full record, OIDC-authenticated, to the API's `/v1/homebrew/tap/event`
 endpoint (written by `fbr report`); the concluding `succeeded`/`failed`/
 `skipped` record is also uploaded as a public `run-report-<app>` artifact, the
 input `retry.yml` reads. The phases are the API's contract: `accepted` goes out

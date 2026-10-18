@@ -1139,7 +1139,7 @@ describe("record delivery", () => {
   it("re-sends the same body — and so the same event_id — on every attempt", () => {
     assert.match(action, /--data-binary "@\$\{REPORT_BODY\}"/);
     assert.match(action, /REPORT_BODY: \$\{\{ inputs\.body \}\}/);
-    assert.match(action, /https:\/\/api\.edgarcnp\.dev\/v1\/homebrew\/tap\/events/);
+    assert.match(action, /https:\/\/api\.edgarcnp\.dev\/v1\/homebrew\/tap\/event/);
     assert.match(action, /Content-Type: application\/json/);
     assert.match(action, /Authorization: Bearer \$\{id_token\}/);
   });

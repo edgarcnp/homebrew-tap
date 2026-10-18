@@ -18,7 +18,7 @@ runs:
       shell: bash
       env:
         REPORT_BODY: ${{ inputs.body }}
-        EVENTS_URL: https://api.edgarcnp.dev/v1/homebrew/tap/events
+        EVENTS_URL: https://api.edgarcnp.dev/v1/homebrew/tap/event
       run: |
         set -euo pipefail
         # The workflow's default -x would trace the JWT into the log, so

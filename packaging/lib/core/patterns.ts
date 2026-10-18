@@ -5,7 +5,7 @@
 export const SAFE_IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 // The API's app id contract: discovery skips `apps/<id>` directories that do
-// not match, and POST /v1/homebrew/tap/events answers 422 for a record whose
+// not match, and POST /v1/homebrew/tap/event answers 422 for a record whose
 // `app` does not. Unlike SAFE_IDENTIFIER it is lowercase-only, hyphenated and
 // capped at 64 characters.
 export const APP_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;

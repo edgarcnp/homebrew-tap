@@ -127,7 +127,7 @@ memory or habit.
 - **Run-record delivery over OIDC** — a dispatched run posts `accepted` (from
   the `plan` job in `build.yml`), then one final `succeeded`/`failed`/`skipped`
   (from the `report` job in `build-appimage.yml`), to
-  `api.edgarcnp.dev/v1/homebrew/tap/events` through
+  `api.edgarcnp.dev/v1/homebrew/tap/event` through
   `.github/actions/deliver-report`. Every attempt fetches a fresh GitHub OIDC
   token (audience `api.edgarcnp.dev`) from
   `ACTIONS_ID_TOKEN_REQUEST_URL`/`ACTIONS_ID_TOKEN_REQUEST_TOKEN`; a token may
