@@ -101,6 +101,21 @@ jobs:
           if-no-files-found: error
           retention-days: 7
           overwrite: true
+      # One image version per run accumulates in the registry; keep the newest
+      # three and delete the rest. Only main prunes: a feature-branch dispatch
+      # pushes an image the pin job never adopts, and those must not count as
+      # newest and evict the version main is pinned to. Best-effort like the run
+      # reports, because the pushed image and its pin are this job's product: a
+      # failed prune must not fail the run. The version just pushed is the
+      # newest, so the pin the AppImage build reads is never in the delete set.
+      - name: Prune the older builder images
+        if: github.ref == 'refs/heads/main'
+        continue-on-error: true
+        uses: actions/delete-package-versions@e5bc658cc4c965c472efe991f8beea3981499c55 # v5.0.0
+        with:
+          package-name: fbr-builder-base
+          package-type: container
+          min-versions-to-keep: 3
 
   # After the image is pushed, commit the new tag+digest into
   # packaging/builder/pins.json so dispatches always run the image this

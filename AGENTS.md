@@ -153,7 +153,7 @@ memory or habit.
 | `build.yml` | build one app or all of them; the app list comes from the descriptors |
 | `build-appimage.yml` | the reusable per-app build (container, toolchain, pack, smoke test) |
 | `retry.yml` | on completion of a build run, re-runs it when the run record says a failure is retryable; opens an issue otherwise |
-| `builder.yml` | rebuilds the `fbr-builder-base` image on Dockerfile changes and weekly, then pins it |
+| `builder.yml` | rebuilds the `fbr-builder-base` image on Dockerfile changes and weekly, then pins it and prunes older versions, keeping the newest three |
 | `dispatch.yml` | entry point for API-dispatched builds (`request_id`, `app`, `version`); the run posts its own `accepted` report |
 | `cask-smoke.yml` | installs and smoke-tests the casks on push to `main` and weekly |
 | `publish.yml` (`brew pr-pull`) | pulls and publishes a named PR |
