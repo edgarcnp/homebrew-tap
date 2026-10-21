@@ -34,7 +34,7 @@
 FROM ghcr.io/pkgforge-dev/archlinux:v2026.10.20@sha256:041899ddf22f87a7db8c662928ffc50b97746958fc58b89a780dc1bbb0604495
 
 # renovate: datasource=node-version depName=node
-ARG NODE_VERSION=24.22.0
+ARG NODE_VERSION=24.22.1
 
 RUN pacman-key --init \
  && pacman -Syy --noconfirm archlinux-keyring \
