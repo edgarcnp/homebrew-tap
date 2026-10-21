@@ -1,6 +1,6 @@
 cask "opencode-desktop" do
-  version "2.1.1"
-  sha256 "ca0b1a7d3a273a410aba8921cef4f4d29b93caebbc50549bf9955f100cf57c15"
+  version "2.1.2"
+  sha256 "b10ee49aeadc8ff7ab64e7476791934767ee1c2cf287fac1ffe342864c7683e6"
 
   url "https://github.com/edgarcnp/homebrew-tap/releases/download/opencode-desktop-v#{version}/opencode-desktop-#{version}-x86_64.AppImage"
   name "OpenCode Desktop"
