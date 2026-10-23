@@ -1,6 +1,6 @@
 cask "artcraft-launcher" do
-  version "0.6.1"
-  sha256 "794b6b4d52453bcfb278805d60cd1c853aef1d3744fe95120494f02944649702"
+  version "0.7.0"
+  sha256 "c638228d5c664e99d2ca460335c77328a80973c9478aa0e396c32b28210a189f"
 
   url "https://github.com/edgarcnp/homebrew-tap/releases/download/artcraft-launcher-v#{version}/artcraft-launcher-#{version}-x86_64.AppImage"
   name "ArtCraft Launcher"
