@@ -2,7 +2,7 @@
 [Desktop Entry]
 Name=__PACKAGE_DISPLAY_NAME__
 Comment=__PACKAGE_COMMENT__
-Exec=ai.opencode.desktop %U
+Exec=ai.opencode %U
 Icon=__PACKAGE_NAME__
 Terminal=false
 Type=Application
