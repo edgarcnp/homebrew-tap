@@ -32,11 +32,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     container:
-      image: ghcr.io/homebrew/brew:latest@sha256:46dd6ced1f11325afc36a7fc2c749ff5b22414486f9966b99a284525f32b5d5e
+      image: ghcr.io/homebrew/brew:latest@sha256:e50d8c463824f72b0c2972815ebff2d59982280201cb0a650ecb452d737a5e5a
       options: --privileged
     steps:
       - name: Set up Homebrew
-        uses: Homebrew/actions/setup-homebrew@4790763c0a3ba4036f72634dc079c4a7dfcd4878 # 2026.10.19.1
+        uses: Homebrew/actions/setup-homebrew@d482da0e602890d3160aade42e72c8556103bf04 # 2026.10.26.1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
