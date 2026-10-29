@@ -642,13 +642,14 @@ jobs:
         continue-on-error: true
       # continue-on-error hides a failed download from the API, and a fragment
       # that goes missing turns a site's terminal verdict into this job's
-      # UNCLASSIFIED fallback. Report what landed, and flag the one case that
-      # would otherwise pass in silence: a verdict the detect job uploaded and
-      # the report job never received.
+      # UNCLASSIFIED fallback. Report what landed, and flag the cases that would
+      # otherwise pass in silence: a verdict the detect job uploaded, and a
+      # build job that failed with nothing to read at all.
       - name: Inspect the failure codes
         env:
           DOWNLOAD_OUTCOME: ${{ steps.failure_codes.outcome }}
           DETECT_FAILURE_CODE: ${{ needs.detect.outputs.failure_code_uploaded }}
+          BUILD_RESULT: ${{ needs.build.result }}
         run: |
           landed=0
           if [[ -d report-codes ]]
@@ -663,6 +664,11 @@ jobs:
           if [[ "${DETECT_FAILURE_CODE}" == "success" && "${landed}" -eq 0 ]]
           then
             echo "::error::the detect job uploaded a failure code, but none arrived: this record falls back to its stage heuristic" >&2
+          elif [[ "${BUILD_RESULT}" == "failure" && "${landed}" -eq 0 ]]
+          then
+            # The build step writes a fragment whenever its command fails, so a
+            # build job that failed with nothing to read lost it in transit.
+            echo "::error::the build job failed, but no failure code arrived: this record falls back to its stage heuristic" >&2
           fi
       - name: Write the run record
         id: write_report
@@ -706,11 +712,13 @@ jobs:
 
           # Prefer the verdict the failing site wrote for itself over the stage
           # fallback: code, message, the stage it knows it failed in, and any
-          # transport-level evidence. Multiple parallel failures (a two-arch
-          # build that lost both races) resolve deterministically: alphabetical
-          # glob order.
-          shopt -s nullglob
-          fragments=(report-codes/*/report-code.json)
+          # transport-level evidence.
+          #
+          # The artifact action decides the extraction depth — one directory per
+          # artifact, or flat when the download merges them — so find either
+          # rather than assuming one, and sort so parallel failures (a two-arch
+          # build that lost both races) resolve deterministically.
+          mapfile -t fragments < <(find report-codes -type f -name report-code.json 2>/dev/null | sort)
           fragment_code=""
           fragment_message=""
           fragment_stage=""
