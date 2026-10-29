@@ -7,5 +7,6 @@
 *.js text eol=lf
 *.ts text eol=lf
 *.desktop text eol=lf
+bun.lock text eol=lf
 *.png binary
 *.AppImage binary

@@ -2,14 +2,11 @@
   "name": "edgarcnp-homebrew-tap-packaging",
   "private": true,
   "type": "module",
-  "description": "Build tooling for the AppImage casks in this tap. Node's native type stripping runs the TypeScript directly; no build step, no runtime dependencies.",
-  "packageManager": "pnpm@12.15.0",
-  "engines": {
-    "node": "24.22.1"
-  },
+  "description": "Build tooling for the AppImage casks in this tap. Bun runs the TypeScript directly; no build step, no runtime dependencies.",
+  "packageManager": "bun@1.4.4",
   "scripts": {
-    "fbr": "node packaging/bin/fbr.ts",
-    "test": "node --test \"packaging/tests/**/*.test.ts\"",
+    "fbr": "bun packaging/bin/fbr.ts",
+    "test": "bun test packaging/tests",
     "typecheck": "tsc --noEmit",
     "lint:shell": "find packaging -name '*.sh' -print0 | xargs -0 shellcheck",
     "style": "brew style edgarcnp/tap"

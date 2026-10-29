@@ -20,7 +20,7 @@
 #   - the rest is download, extract, verify and packing tooling.
 #
 # Renovate owns the pins: the FROM digest (docker manager), the appimagetool
-# version in the URL below (regex manager), the Node ARG (regex manager), and
+# version in the URL below (regex manager), the Bun ARG (regex manager), and
 # packaging/scripts/install-anylinux-tools.sh (git-refs manager).
 #
 # Build from the repository root:
@@ -33,8 +33,8 @@
 # for a "minimal" image without re-validating the pkgforge tools against it.
 FROM ghcr.io/pkgforge-dev/archlinux:v2026.10.25@sha256:b43da1aef39b5406de37fff5fdca78d9d39363aeca68ffaaefed074b601f0d0f
 
-# renovate: datasource=node-version depName=node
-ARG NODE_VERSION=24.22.1
+# renovate: datasource=npm depName=bun
+ARG BUN_VERSION=1.4.4
 
 RUN pacman-key --init \
  && pacman -Syy --noconfirm archlinux-keyring \
@@ -64,12 +64,13 @@ RUN curl -fL -o /usr/local/bin/appimagetool \
       "https://github.com/pkgforge-dev/appimagetool/releases/download/0.5.3/appimagetool-x86_64-linux" \
  && chmod 0755 /usr/local/bin/appimagetool
 
-# Node.js, the orchestrator runtime, pinned to the same version CI sets up.
-# The official static build from nodejs.org is used instead of pacman's rolling
-# nodejs, and a versioned directory instead of a moving URL; x64 is the
-# builder image's platform.
-RUN curl -fsSL -o /tmp/node.tar.gz \
-      "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.gz" \
- && tar -xzf /tmp/node.tar.gz -C /usr/local --strip-components=1 \
- && rm /tmp/node.tar.gz \
- && /usr/local/bin/node --version
+# Bun, the orchestrator runtime, pinned to the same version CI sets up. The
+# official static build from GitHub releases is used instead of pacman's
+# rolling bun, at a versioned URL rather than a moving one; x64 is the builder
+# image's platform.
+RUN curl -fsSL -o /tmp/bun.zip \
+      "https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}/bun-linux-x64.zip" \
+ && unzip -q /tmp/bun.zip -d /tmp/bun \
+ && install -m0755 /tmp/bun/bun-linux-x64/bun /usr/local/bin/bun \
+ && rm -rf /tmp/bun.zip /tmp/bun \
+ && /usr/local/bin/bun --version
