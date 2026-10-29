@@ -44,6 +44,23 @@ function handler(request: http.IncomingMessage, response: http.ServerResponse): 
       case "/empty":
         response.writeHead(204).end();
         return;
+      case "/trickle": {
+        // Headers at once, six bytes every 20 ms: the transfer outlives the
+        // request timeout while every read still makes progress.
+        response.writeHead(200, { "content-type": "application/octet-stream" });
+        let sent = 0;
+        const timer = setInterval(() => {
+          if (sent === 6) {
+            clearInterval(timer);
+            response.end();
+            return;
+          }
+          sent += 1;
+          response.write("ab");
+        }, 20);
+        response.on("close", () => clearInterval(timer));
+        return;
+      }
       default:
         response.writeHead(200, { "content-type": "text/plain" }).end("payload");
     }
@@ -182,6 +199,35 @@ describe("readPayload", () => {
       return true;
     });
     assert.equal(MAX_PAYLOAD_BYTES, 512 * 1024 * 1024);
+  });
+
+  // A payload transfer is bounded by progress, not by elapsed time: the
+  // 243 MB opencode-desktop .deb keeps making progress for minutes on a slow
+  // link, and capping the whole body at the request timeout failed its build
+  // at exactly 60 seconds on two consecutive attempts.
+  it("bounds the wait for headers, not the transfer", async () => {
+    const response = await fetchOnce(`${baseUrl}/trickle`, { timeoutMs: 50 });
+    const bytes = await readPayload(response, MAX_PAYLOAD_BYTES, { idleTimeoutMs: 50 });
+    assert.equal(bytes.toString(), "abababababab");
+  });
+
+  it("fails a stalled body as a transient upstream failure", async () => {
+    const stalled = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(Buffer.from("head"));
+      },
+    });
+    await assert.rejects(
+      readPayload(new Response(stalled), MAX_PAYLOAD_BYTES, { idleTimeoutMs: 30 }),
+      (error: unknown) => {
+        // A stalled transfer is the transport giving up, not a bad payload, so
+        // the record must offer the retry plan a re-run instead of a human.
+        assert.ok(error instanceof UpstreamUnavailableError);
+        assert.equal(error.evidence["reason"], "timeout");
+        assert.match(error.message, /no bytes/i);
+        return true;
+      },
+    );
   });
 });
 

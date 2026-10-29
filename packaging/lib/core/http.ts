@@ -7,6 +7,12 @@ import { GuardViolationError, UpstreamUnavailableError } from "./errors.ts";
 
 export const MAX_PAYLOAD_BYTES = 512 * 1024 * 1024;
 
+// A body read fails when bytes stop arriving for this long. It is a stall
+// budget, not a transfer budget: the 243 MB opencode-desktop .deb legitimately
+// takes minutes on a slow link, and a wall-clock cap on the whole transfer
+// aborted its build at exactly 60 seconds.
+export const DEFAULT_BODY_IDLE_TIMEOUT_MS = 60000;
+
 export interface FetchOptions {
   headers?: Record<string, string>;
   redirect?: "follow" | "error" | "manual";
@@ -26,13 +32,24 @@ function buildInit(options: FetchOptions, signal: AbortSignal | undefined): Requ
 // dispatches builds — it holds the budget, the run record and the log. A
 // timeout throws; every other outcome (429/5xx included) is returned or
 // propagated for the caller's single `response.ok` check.
+//
+// timeoutMs bounds the wait for the response headers only: a body is guarded
+// by readPayload's idle timeout, because a transfer that keeps making progress
+// is healthy however long it takes.
 export async function fetchOnce(
   url: string | URL,
   options: FetchOptions = {},
 ): Promise<Response> {
   const { timeoutMs } = options;
-  const signal =
-    options.signal ?? (timeoutMs !== undefined ? AbortSignal.timeout(timeoutMs) : undefined);
+  const controller =
+    options.signal === undefined && timeoutMs !== undefined ? new AbortController() : undefined;
+  const timer =
+    controller === undefined
+      ? undefined
+      : setTimeout(() => {
+          controller.abort();
+        }, timeoutMs);
+  const signal = options.signal ?? controller?.signal;
   try {
     return await fetch(url, buildInit(options, signal));
   } catch (error) {
@@ -43,6 +60,8 @@ export async function fetchOnce(
     const name = error instanceof Error ? error.name : "";
     const reason = name === "TimeoutError" || name === "AbortError" ? "timeout" : "network";
     throw new UpstreamUnavailableError(`Request to ${url} failed: ${detail}`, { reason });
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -86,10 +105,47 @@ function retryAfterSeconds(headers: Headers): number | null {
   return null;
 }
 
+export interface ReadPayloadOptions {
+  // How long the reader waits for the next chunk before calling the transport
+  // dead. Defaults to DEFAULT_BODY_IDLE_TIMEOUT_MS.
+  idleTimeoutMs?: number;
+}
+
+type ReadChunk = Awaited<ReturnType<ReadableStreamDefaultReader<Uint8Array>["read"]>>;
+
+// Resolves with the next chunk, or rejects once nothing arrives for idleMs.
+async function readChunk(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  idleMs: number,
+  url: string,
+): Promise<ReadChunk> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const stalled = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => {
+      reject(
+        new UpstreamUnavailableError(`No bytes from ${url} for ${idleMs}ms`, {
+          reason: "timeout",
+        }),
+      );
+    }, idleMs);
+  });
+  try {
+    return await Promise.race([reader.read(), stalled]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Reads the whole body under an idle-progress guard: every chunk resets the
+// window, so a large payload on a slow link completes while a hung socket still
+// fails. A stall is the transport giving up, so it is classified as a transient
+// upstream failure — the same verdict fetchOnce gives the headers.
+//
 // maxBytes is a parameter so the cap is testable without allocating 512 MiB.
 export async function readPayload(
   response: Response,
   maxBytes: number = MAX_PAYLOAD_BYTES,
+  options: ReadPayloadOptions = {},
 ): Promise<Buffer> {
   if (!response.body) {
     const bytes = Buffer.from(await response.arrayBuffer());
@@ -98,11 +154,25 @@ export async function readPayload(
     }
     return bytes;
   }
+  const idleMs = options.idleTimeoutMs ?? DEFAULT_BODY_IDLE_TIMEOUT_MS;
   const reader = response.body.getReader();
   const chunks: Buffer[] = [];
   let total = 0;
   for (;;) {
-    const { done, value } = await reader.read();
+    let chunk: ReadChunk;
+    try {
+      chunk = await readChunk(reader, idleMs, response.url);
+    } catch (error) {
+      await reader.cancel().catch(() => {
+        // best effort: the transport is already gone
+      });
+      if (error instanceof UpstreamUnavailableError) throw error;
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new UpstreamUnavailableError(`Reading ${response.url} failed: ${detail}`, {
+        reason: "network",
+      });
+    }
+    const { done, value } = chunk;
     if (done) break;
     if (value !== undefined) {
       total += value.length;
