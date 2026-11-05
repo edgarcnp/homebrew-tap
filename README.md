@@ -29,6 +29,7 @@ brew install --cask <cask>
 | `pi-desktop` | [PI-Desktop](https://github.com/vastsa/PI-Desktop) | |
 | `vscode` | [Visual Studio Code](https://code.visualstudio.com/) | |
 | `wfhelper` | [WFHelper](https://github.com/WFHelper/WFHelper) | |
+| `zed` | [Zed](https://zed.dev/) | stable channel only |
 
 > [!NOTE]
 > Every app here is amd64-only. On an arm64 machine, `brew install --cask`

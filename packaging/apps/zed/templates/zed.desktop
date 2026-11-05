@@ -1,0 +1,21 @@
+# NOTE: Placeholders __PACKAGE_NAME__/__VERSION__ are substituted via render_template; injection mitigated by PACKAGE_NAME validation in build-appimage.sh
+[Desktop Entry]
+Name=__PACKAGE_DISPLAY_NAME__
+Comment=__PACKAGE_COMMENT__
+GenericName=Text Editor
+Exec=zed %U
+Icon=__PACKAGE_NAME__
+Terminal=false
+Type=Application
+StartupNotify=true
+StartupWMClass=zed
+Categories=Utility;TextEditor;Development;IDE;
+MimeType=text/plain;application/x-zerosize;x-scheme-handler/zed;
+Keywords=zed;
+X-AppImage-Version=__VERSION__
+Actions=new-workspace;
+
+[Desktop Action new-workspace]
+Name=Open a new workspace
+Exec=zed --new %U
+Icon=__PACKAGE_NAME__

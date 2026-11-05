@@ -95,7 +95,8 @@ pipeline_resolve() {
 }
 
 # Unpacks the payload into PAYLOAD_ROOT: dpkg-deb -x for .deb payloads, the
-# AppImage's own --appimage-extract (no FUSE needed) for upstream AppImages.
+# AppImage's own --appimage-extract (no FUSE needed) for upstream AppImages, and
+# plain tar for a bundle tarball.
 pipeline_extract() {
   local kind
   kind="$(descriptor_field '.payload.kind')"
@@ -117,6 +118,14 @@ pipeline_extract() {
       dpkg-deb -x "${PAYLOAD_PATH}" "${deb_payload}"
       PAYLOAD_ROOT="${deb_payload}"
       ;;
+    tarball-tree)
+      # A bundle tarball (Zed) is unpacked whole; the descriptor's `root` is
+      # the directory inside it that pipeline_stage stages at the AppDir root.
+      local tar_payload="${WORK_DIR}/tar-payload"
+      mkdir -p -- "${tar_payload}"
+      tar -xzf "${PAYLOAD_PATH}" -C "${tar_payload}"
+      PAYLOAD_ROOT="${tar_payload}"
+      ;;
     *)
       error "Unknown payload kind in descriptor: ${kind}"
       ;;
@@ -136,11 +145,13 @@ is_excluded_payload_entry() {
   return 1
 }
 
-# An AppImage payload carries no arch metadata in its name, so verify the
-# bytes: every ELF in AppDir/bin must carry the requested e_machine. Non-ELF
-# entries (launcher scripts) are skipped. e_machine is the little-endian u16 at
-# offset 18; its low byte identifies x86-64 (62) and aarch64 (183).
-assert_bin_elf_arch() {
+# A payload that names no arch (an AppImage, or a bundle tarball) carries no
+# metadata to trust, so verify the bytes: every ELF in the staged directory must
+# carry the requested e_machine. Non-ELF entries (launcher scripts) are skipped.
+# e_machine is the little-endian u16 at offset 18; its low byte identifies
+# x86-64 (62) and aarch64 (183).
+assert_dir_elf_arch() {
+  local dir="$1"
   local expected
   case "${APPIMAGE_ARCH}" in
     x86_64) expected=62 ;;
@@ -148,7 +159,7 @@ assert_bin_elf_arch() {
     *) error "No ELF machine mapping for AppImage arch ${APPIMAGE_ARCH}" ;;
   esac
   local entry magic machine
-  for entry in "${APPDIR}/bin/"*
+  for entry in "${dir}/"*
   do
     [[ -f "${entry}" ]] || continue
     magic="$(head -c 4 -- "${entry}" | od -An -tx1 | tr -d ' \n')"
@@ -162,8 +173,13 @@ assert_bin_elf_arch() {
   done
 }
 
+assert_bin_elf_arch() {
+  assert_dir_elf_arch "${APPDIR}/bin"
+}
+
 # Stages the payload into AppDir/bin (and AppDir/usr when the descriptor moves
-# the vendored usr/ to the AppDir root).
+# the vendored usr/ to the AppDir root; a bundle tarball is staged at the AppDir
+# root instead, keeping its own bin/ libexec/ lib/ share/ layout).
 pipeline_stage() {
   local kind
   kind="$(descriptor_field '.payload.kind')"
@@ -211,6 +227,21 @@ pipeline_stage() {
         cp -a -- "${PAYLOAD_ROOT}/usr" "${APPDIR}/usr"
       fi
       assert_bin_elf_arch
+      ;;
+    tarball-tree)
+      # The bundle keeps its own layout: bin/, libexec/, lib/ and share/ land at
+      # the AppDir root, so its binaries keep resolving $ORIGIN/../lib and the
+      # CLI keeps finding ../libexec/zed-editor beside itself.
+      local root
+      root="$(descriptor_field '.payload.root')"
+      [[ -d "${PAYLOAD_ROOT}/${root}" ]] || error "Missing payload tree: ${PAYLOAD_ROOT}/${root}"
+      cp -a -- "${PAYLOAD_ROOT}/${root}/." "${APPDIR}/"
+      assert_bin_elf_arch
+      # The editor lives outside bin/, so nothing else would check its arch.
+      if [[ -d "${APPDIR}/libexec" ]]
+      then
+        assert_dir_elf_arch "${APPDIR}/libexec"
+      fi
       ;;
     *)
       error "Unknown payload kind in descriptor: ${kind}"
@@ -427,6 +458,21 @@ pipeline_collect_targets() {
       error "No staged binaries in ${APPDIR}/bin"
     fi
     TARGETS=("${staged[@]}")
+    # A bundle tarball keeps its main executable outside bin/ (Zed's editor is
+    # libexec/zed-editor), so those are targets too: quick-sharun bundles a
+    # library only when a target reaches it, and the editor is what dlopens
+    # Vulkan and the GL stack.
+    if [[ "$(descriptor_field '.payload.kind')" = "tarball-tree" ]]
+    then
+      local bundle_binary
+      for bundle_binary in "${APPDIR}/libexec/"*
+      do
+        if [[ -f "${bundle_binary}" ]]
+        then
+          TARGETS+=("${bundle_binary}")
+        fi
+      done
+    fi
   fi
 
   local library

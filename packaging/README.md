@@ -82,7 +82,7 @@ record whose `app` does not — `fbr report` refuses such a record first.
 | `architectures` | Arches this app ships; the pipeline builds, publishes and checks only these. |
 | `binaryTargets` | Names the cask must expose on `PATH` (checked by `fbr cask --action check`). |
 | `advisory` | Where the version and payload come from. |
-| `payload` | How the upstream package is staged into `AppDir/bin`. |
+| `payload` | How the upstream package is staged: `deb-tree`/`deb-files` from a dpkg tree and `appimage-tree` entries into `AppDir/bin`, or `tarball-tree` — a bundle tarball's `root` directory (Zed's `zed.app`) into the AppDir root, so the bundle's own `bin/`, `libexec/`, `lib/` and `share/` keep the relative paths its binaries resolve (`$ORIGIN/../lib`, the CLI's `../libexec/zed-editor`). |
 | `icon` | Icon path in the payload plus its hicolor directory: a `WxH` size for a raster icon, or `scalable` for an SVG. The staged icon keeps the payload file's extension. |
 | `desktopTemplate` | Desktop entry template, relative to the app dir. |
 | `updater` | Updater neutralization: JSON key removal, endpoint patch, feed removal, `.env`, runtime hook, residual scan. |
@@ -96,7 +96,7 @@ record whose `app` does not — `fbr report` refuses such a record first.
 | Kind | Version and payload source |
 | --- | --- |
 | `apt` | Signed apt repo: pinned key → `InRelease` (verified with `gpgv` against a pinned fingerprint) → `Packages` SHA-256 → package SHA-256/size. The two index objects are read twice when a republish races the fetch — an edge can serve a fresh `InRelease` with a stale `Packages` — and a mismatch that survives both reads is a transient `UPSTREAM_CONFLICT`, not a checksum failure. Newest entry per architecture wins, by dpkg ordering. Reads the `stable` suite unless the descriptor pins `suite` (Mozilla serves `dists/mozilla`), and strips Mozilla's `~buildN` rebuild marker from the cask version so it matches the release feed. |
-| `github-release` | GitHub release assets. Legacy: newest release carrying both `<assetPrefix>-<arch>.deb`. Versioned-asset: pins a tag prefix plus an `assetNameTemplate` and resolves each shipped architecture separately. A `.AppImage` asset additionally cross-checks the release's electron-builder update yml (SHA-512 + size) before downloading. |
+| `github-release` | GitHub release assets. Legacy: newest release carrying both `<assetPrefix>-<arch>.deb`. Versioned-asset: pins a tag prefix plus an `assetNameTemplate` and resolves each shipped architecture separately; the template substitutes `{version}`, `{arch}` (amd64) and `{appimage_arch}` (x86_64), and must carry at least one placeholder. A `.AppImage` asset additionally cross-checks the release's electron-builder update yml (SHA-512 + size) before downloading; a `.tar.gz` bundle (Zed) is verified by the release's published SHA-256 alone. Any other asset container fails the resolve rather than being written under a mislabelled name. |
 | `electron-feed` | An electron-updater feed whose 302 names the release tag. The yml supplies filename, SHA-512 and size; the GitHub API supplies the SHA-256. All three must agree. |
 | `cdn-redirect` | A CDN download redirect that is itself the version source. The target URL shape is pinned and the payload is hashed on download (the CDN publishes no checksums). No app currently consumes it; it is validated and tested as infrastructure for a future CDN-sourced app. |
 | `update-manifest` | A pinned https JSON manifest that publishes the version and per-asset SHA-256/size. The `assetTemplate` entry (`{arch}` substituted) must carry the version as a download-path segment on a pinned host. |
@@ -305,6 +305,17 @@ non-FHS and old distros.
   pack stage runs `quick-sharun` with `LD_LIBRARY_PATH=<AppDir>/bin` for exactly
   that call, so the closure scan resolves the siblings instead of aborting on
   "missing libraries".
+- A bundle tarball (Zed) keeps its own layout at the AppDir root — `bin/zed`
+  (the CLI), `libexec/zed-editor` (the editor), `lib/`, `share/` — because both
+  binaries resolve `$ORIGIN/../lib` and the CLI spawns `../libexec/zed-editor`.
+  `quick-sharun` still deploys the editor as a target, so its dlopen surface
+  (Vulkan, GL) is bundled: the editor lands in `shared/bin/zed-editor` with a
+  `bin/zed-editor` wrapper beside it, while the pristine `libexec/zed-editor`
+  stays where the CLI looks. Verified against the packed artifact of 1.27.0:
+  `zed --version` reports `<AppDir>/libexec/zed-editor`, and a headless
+  `Exec=zed` launch starts the editor. Zed links `libasound`, which the builder
+  image does not carry, so its descriptor installs it through
+  `buildPackages: ["alsa-lib"]`.
 - Three things stay in this pipeline rather than delegating to `quick-sharun`:
   updater neutralization, the smoke gate (run against the packed AppImage), and
   the `appimagetool` invocation (so no zsync updater feed is embedded).

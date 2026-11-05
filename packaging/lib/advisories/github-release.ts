@@ -2,16 +2,20 @@
 // requested architecture's payload with a SHA-256 digest, verified at
 // download. Two flavors:
 //   - legacy `.deb` ("<assetPrefix>-<arch>.deb");
-//   - versioned-asset by tag prefix plus `assetNameTemplate`, `.deb` or
-//     `.AppImage`. AppImage assets additionally cross-check the release's
-//     electron-builder update yml (SHA-512 + size) before downloading.
+//   - versioned-asset by tag prefix plus `assetNameTemplate`, `.deb`,
+//     `.AppImage` or `.tar.gz`. AppImage assets additionally cross-check the
+//     release's electron-builder update yml (SHA-512 + size) before
+//     downloading; a `.tar.gz` carries an app bundle tree (Zed) and is verified
+//     by the release's published SHA-256 alone, since nothing upstream
+//     publishes a second checksum for it.
 
 import * as path from "node:path";
+import { APPIMAGE_ARCH } from "../core/architecture.ts";
 import { GITHUB_ASSET_HOSTS, assertMatches, assertPositiveSize, fail } from "../core/guards.ts";
 import { MAX_PAYLOAD_BYTES } from "../core/http.ts";
 import { makeMetadata, writeMetadata } from "../core/metadata.ts";
 import { SAFE_REFERENCE } from "../core/patterns.ts";
-import { substitutePlaceholders } from "../core/template.ts";
+import { hasPlaceholder, substitutePlaceholders } from "../core/template.ts";
 import type { Architecture, GithubReleaseAdvisory, Metadata } from "../core/types.ts";
 import { ARCHITECTURES } from "../core/types.ts";
 import { downloadVerified, fetchVerified } from "./download.ts";
@@ -47,9 +51,28 @@ function validatedAsset(record: ReleaseAssetRecord | undefined): ReleaseAsset | 
 }
 
 // An upstream AppImage payload (repacked by the appimage-tree pipeline stage),
-// as opposed to a .deb payload staged from a dpkg tree.
+// as opposed to a .deb or tarball payload staged from its own container.
 export function isAppImageAsset(name: string): boolean {
   return name.endsWith(".AppImage");
+}
+
+// A tarball carrying an app bundle tree, staged by the tarball-tree pipeline
+// stage: Zed publishes `zed-linux-x86_64.tar.gz` and no dpkg or AppImage
+// artifact at all.
+export function isTarballAsset(name: string): boolean {
+  return name.endsWith(".tar.gz");
+}
+
+// The extension the payload is written with, which also tells the extract
+// stage how to unpack it: dpkg for a `.deb`, its own extraction for an
+// `.AppImage`, `tar` for a `.tar.gz`. Any other container is a layout this
+// pipeline cannot unpack, so it fails here instead of writing a mislabelled
+// file the build would only trip over later.
+export function payloadExtension(name: string): string {
+  if (name.endsWith(".deb")) return ".deb";
+  if (isAppImageAsset(name)) return ".AppImage";
+  if (isTarballAsset(name)) return ".tar.gz";
+  return fail(`Unsupported release asset, not a .deb, .AppImage or .tar.gz payload: ${name}`);
 }
 
 // The electron-builder update yml shipped alongside an AppImage release
@@ -116,6 +139,13 @@ export interface TemplatedSelection {
   asset: ReleaseAsset;
 }
 
+// The arch placeholders an asset name template may use: `{arch}` is the
+// pipeline spelling upstreams rarely publish (amd64), `{appimage_arch}` the
+// uname-style one they usually do (x86_64, aarch64).
+function archValues(architecture: Architecture): Record<string, string> {
+  return { arch: architecture, appimage_arch: APPIMAGE_ARCH[architecture] };
+}
+
 // Newest non-draft, non-prerelease release whose tag starts with tagPrefix and
 // which carries the templated asset for the requested architecture. An arm64
 // request against an amd64-only upstream (e.g. wfhelper) scans every
@@ -128,7 +158,9 @@ export async function selectTemplatedRelease(
   token: string,
 ): Promise<TemplatedSelection> {
   const prefix = assertMatches(tagPrefix, SAFE_REFERENCE, "tag prefix");
-  if (!assetNameTemplate.includes("{version}")) fail("assetNameTemplate must contain {version}");
+  if (!hasPlaceholder(assetNameTemplate)) {
+    fail(`assetNameTemplate must contain a placeholder: ${assetNameTemplate}`);
+  }
   const releases = await fetchReleaseList(repository, token);
   for (const release of releases) {
     if (!isPublishedRelease(release)) continue;
@@ -140,13 +172,16 @@ export async function selectTemplatedRelease(
     } catch {
       continue;
     }
-    const expected = substitutePlaceholders(assetNameTemplate, { version, arch: architecture });
+    const expected = substitutePlaceholders(assetNameTemplate, {
+      version,
+      ...archValues(architecture),
+    });
     const asset = validatedAsset(releaseAssetMap(release).get(expected));
     if (asset === null) continue;
     return { tag, version, asset };
   }
   throw new Error(
-    `No GitHub release found carrying ${substitutePlaceholders(assetNameTemplate, { arch: architecture })} with a SHA-256 digest under tag prefix ${prefix}`,
+    `No GitHub release found carrying ${substitutePlaceholders(assetNameTemplate, archValues(architecture))} with a SHA-256 digest under tag prefix ${prefix}`,
   );
 }
 
@@ -225,7 +260,8 @@ export async function resolveWithGithubRelease(
     // electron-builder update yml: its SHA-512 and size must agree with the
     // API asset before the payload is trusted, mirroring the electron-feed
     // advisory minus the feed-redirect step.
-    if (isAppImageAsset(asset.name)) {
+    const extension = payloadExtension(asset.name);
+    if (extension === ".AppImage") {
       return resolveAppImageAsset(
         request,
         { outputDir, metadataPath, downloadBase, packageName, tag, version, asset, size },
@@ -233,7 +269,7 @@ export async function resolveWithGithubRelease(
     }
     const packagePath = request.metadataOnly
       ? null
-      : path.join(outputDir, `${packageName}_${version}_${architecture}.deb`);
+      : path.join(outputDir, `${packageName}_${version}_${architecture}${extension}`);
     const metadata = makeMetadata({
       package: packageName,
       version,

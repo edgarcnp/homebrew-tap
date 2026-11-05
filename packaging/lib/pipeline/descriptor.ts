@@ -5,6 +5,7 @@ import * as fs from "node:fs";
 import { assertSameLength, assertSingleLine, fail } from "../core/guards.ts";
 import { APPS_DIR, descriptorPath } from "../core/paths.ts";
 import { APP_ID, GITHUB_API_REPOSITORY, GITHUB_RELEASE_FEED, SAFE_REFERENCE } from "../core/patterns.ts";
+import { hasPlaceholder } from "../core/template.ts";
 import { ARCHITECTURES, isArchitecture } from "../core/types.ts";
 import type {
   AppDescriptor,
@@ -154,8 +155,8 @@ function validateAdvisory(raw: unknown, label: string): Advisory {
           fail(`${label}.tagPrefix is not a safe tag prefix: ${tagPrefix}`);
         }
         const assetNameTemplate = str(source, "assetNameTemplate", label);
-        if (!assetNameTemplate.includes("{version}")) {
-          fail(`${label}.assetNameTemplate must contain {version}: ${assetNameTemplate}`);
+        if (!hasPlaceholder(assetNameTemplate)) {
+          fail(`${label}.assetNameTemplate must contain a placeholder: ${assetNameTemplate}`);
         }
         return {
           kind,
@@ -278,6 +279,13 @@ function validatePayload(raw: unknown, label: string): Payload {
       rename,
       exclude: strArray(source, "exclude", label),
       moveUsrToRoot: moveUsr === undefined ? false : bool(source, "moveUsrToRoot", label),
+    };
+  }
+  if (kind === "tarball-tree") {
+    rejectUnknownKeys(source, ["kind", "root"], label);
+    return {
+      kind,
+      root: relativePath(str(source, "root", label).replace(/^\/+/, ""), `${label}.root`),
     };
   }
   return fail(`Unknown payload kind: ${kind}`);

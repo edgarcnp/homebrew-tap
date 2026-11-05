@@ -120,7 +120,7 @@ export type AdvisoryKind = Advisory["kind"];
 // Payload staging
 // ---------------------------------------------------------------------------
 
-export type PayloadKind = "deb-tree" | "deb-files" | "appimage-tree";
+export type PayloadKind = "deb-tree" | "deb-files" | "appimage-tree" | "tarball-tree";
 
 export interface Payload {
   kind: PayloadKind;
@@ -134,6 +134,12 @@ export interface Payload {
   exclude?: string[];
   // appimage-tree: move the payload's vendored usr/ to the AppDir root.
   moveUsrToRoot?: boolean;
+  // tarball-tree: directory inside the tarball holding the bundle (e.g.
+  // "zed.app"). Its contents are staged at the **AppDir root**, not into
+  // AppDir/bin, so a bundle's bin/, libexec/, lib/ and share/ keep the relative
+  // paths its own binaries resolve against ($ORIGIN/../lib, the CLI's
+  // ../libexec/zed-editor).
+  root?: string;
 }
 
 // ---------------------------------------------------------------------------

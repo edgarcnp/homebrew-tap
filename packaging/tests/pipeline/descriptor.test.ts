@@ -197,6 +197,53 @@ describe("descriptor contents (regression against the previous per-app scripts)"
     assert.equal(descriptor.updater.residualScan?.severity, "warning");
   });
 
+  it("keeps zed's bundle tarball layout and tarball advisory", () => {
+    const descriptor = loadDescriptor("zed");
+    assert.equal(descriptor.advisory.kind, "github-release");
+    assert.equal(
+      descriptor.advisory.kind === "github-release" ? descriptor.advisory.assetNameTemplate : "",
+      "zed-linux-{appimage_arch}.tar.gz",
+    );
+    assert.equal(descriptor.payload.kind, "tarball-tree");
+    assert.equal(descriptor.payload.kind === "tarball-tree" ? descriptor.payload.root : "", "zed.app");
+    assert.deepEqual(descriptor.binaryTargets, ["zed"]);
+    assert.equal(descriptor.icon.source, "zed.app/share/icons/hicolor/512x512/apps/zed.png");
+    assert.equal(descriptor.updater.residualScan?.severity, "error");
+  });
+
+  it("rejects a bundle tarball payload without a containable root", () => {
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("zed", (copy) => {
+            nested(copy, "payload")["root"] = "../outside";
+          }),
+          "zed",
+        ),
+      /must be a repository-relative path/,
+    );
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("zed", (copy) => {
+            delete nested(copy, "payload")["root"];
+          }),
+          "zed",
+        ),
+      /payload\.root must be a non-empty string/,
+    );
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("zed", (copy) => {
+            nested(copy, "payload")["tree"] = "zed.app";
+          }),
+          "zed",
+        ),
+      /payload\.tree is not a known field/,
+    );
+  });
+
   it("keeps firefox's Mozilla apt suite, tree staging and codec dlopens", () => {
     const descriptor = loadDescriptor("firefox");
     assert.equal(descriptor.advisory.kind, "apt");
@@ -897,7 +944,7 @@ describe("descriptor validation", () => {
           mutated("wfhelper", (copy) => { nested(copy, "advisory")["assetNameTemplate"] = "no-version-here.deb"; }),
           "wfhelper",
         ),
-      /must contain \{version\}/,
+      /must contain a placeholder/,
     );
   });
 

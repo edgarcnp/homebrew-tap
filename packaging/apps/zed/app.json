@@ -1,0 +1,61 @@
+{
+  "id": "zed",
+  "appName": "Zed",
+  "displayName": "Zed",
+  "comment": "High-performance, multiplayer code editor",
+  "cask": "zed",
+  "watch": {
+    "feedUrl": "https://api.github.com/repos/zed-industries/zed/releases",
+    "format": "github-release",
+    "versionPattern": "^v(\\d+\\.\\d+\\.\\d+)$",
+    "repo": "zed-industries/zed"
+  },
+  "assetPrefix": "zed",
+  "tagPrefix": "zed-v",
+  "sourceRepo": "edgarcnp/homebrew-tap",
+  "sourceOwner": "edgarcnp",
+  "sourceDir": "packaging/apps/zed",
+  "buildCommand": "./build.sh",
+  "debloatArgs": "--add-common",
+  "architectures": ["amd64"],
+  "buildPackages": ["alsa-lib"],
+  "binaryTargets": ["zed"],
+  "advisory": {
+    "kind": "github-release",
+    "repository": "https://api.github.com/repos/zed-industries/zed",
+    "packageName": "zed",
+    "tagPrefix": "v",
+    "assetNameTemplate": "zed-linux-{appimage_arch}.tar.gz"
+  },
+  "payload": {
+    "kind": "tarball-tree",
+    "root": "zed.app"
+  },
+  "icon": {
+    "source": "zed.app/share/icons/hicolor/512x512/apps/zed.png",
+    "size": "512x512"
+  },
+  "desktopTemplate": "templates/zed.desktop",
+  "updater": {
+    "patchEndpoint": {
+      "from": "cloud.zed.dev",
+      "textReplacement": "cloud.invalid",
+      "binaryReplacement": "cloud.invalid",
+      "targets": ["libexec/zed-editor"]
+    },
+    "residualScan": {
+      "patterns": ["cloud.zed.dev"],
+      "severity": "error"
+    },
+    "env": {
+      "ZED_UPDATE_EXPLANATION": "Installed by Homebrew: run brew upgrade --cask zed"
+    }
+  },
+  "quickSharun": {
+    "hooks": ["fix-namespaces.hook"],
+    "env": {
+      "DEPLOY_OPENGL": "1",
+      "DEPLOY_VULKAN": "1"
+    }
+  }
+}

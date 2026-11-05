@@ -14,7 +14,14 @@ import {
   selectAsset,
   validateFeedRepository,
 } from "../../lib/advisories/electron-feed.ts";
-import { selectRelease, isAppImageAsset, updateYmlName } from "../../lib/advisories/github-release.ts";
+import {
+  isAppImageAsset,
+  isTarballAsset,
+  payloadExtension,
+  selectRelease,
+  selectTemplatedRelease,
+  updateYmlName,
+} from "../../lib/advisories/github-release.ts";
 import { assertRepositoryUrl, fetchReleaseList } from "../../lib/advisories/github-api.ts";
 import { normalizeTagVersion, parseSha256Digest } from "../../lib/advisories/release-common.ts";
 import {
@@ -735,5 +742,68 @@ describe("fetchManifest", () => {
     } finally {
       globalThis.fetch = originalFetch;
     }
+  });
+});
+
+describe("github-release tarball assets", () => {
+  it("recognizes a bundle tarball and not its other containers", () => {
+    assert.equal(isTarballAsset("zed-linux-x86_64.tar.gz"), true);
+    assert.equal(isTarballAsset("zed-linux-x86_64.tar.xz"), false);
+    assert.equal(isTarballAsset("zed-linux-x86_64.deb"), false);
+  });
+
+  it("names a payload by its container and rejects anything else", () => {
+    assert.equal(payloadExtension("zed-linux-x86_64.tar.gz"), ".tar.gz");
+    assert.equal(payloadExtension("pi-desktop_1.0.0_amd64.deb"), ".deb");
+    assert.equal(payloadExtension("WFHelper-2.1.0.AppImage"), ".AppImage");
+    assert.throws(
+      () => payloadExtension("zed-linux-x86_64.zip"),
+      /not a \.deb, \.AppImage or \.tar\.gz payload/,
+    );
+  });
+
+  it("selects the newest stable release carrying the templated tarball", async () => {
+    const originalFetch = globalThis.fetch;
+    const assets = (digest: string, size: number): unknown[] => [
+      { name: "zed-linux-x86_64.tar.gz", digest: `sha256:${digest}`, size },
+    ];
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify([
+          { tag_name: "v1.28.0-pre", draft: false, prerelease: true, assets: assets("b".repeat(64), 90) },
+          { tag_name: "v1.27.0", draft: false, prerelease: false, assets: assets("a".repeat(64), 90705601) },
+        ]),
+        { status: 200 },
+      )) as unknown as typeof fetch;
+    try {
+      const selected = await selectTemplatedRelease(
+        "https://api.github.com/repos/zed-industries/zed",
+        "zed-linux-{appimage_arch}.tar.gz",
+        "v",
+        "amd64",
+        "",
+      );
+      // The preview is newer but unpublished, and {appimage_arch} must resolve
+      // to the x86_64 spelling Zed puts in the asset name, not amd64.
+      assert.equal(selected.tag, "v1.27.0");
+      assert.equal(selected.version, "1.27.0");
+      assert.equal(selected.asset.name, "zed-linux-x86_64.tar.gz");
+      assert.equal(selected.asset.digest, "a".repeat(64));
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("rejects a template that names a fixed file", async () => {
+    await assert.rejects(
+      selectTemplatedRelease(
+        "https://api.github.com/repos/zed-industries/zed",
+        "zed-linux.tar.gz",
+        "v",
+        "amd64",
+        "",
+      ),
+      /must contain a placeholder/,
+    );
   });
 });
