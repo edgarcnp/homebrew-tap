@@ -167,6 +167,32 @@ describe("checkCask", () => {
     assert.match(commentDrift.join("; "), /desktop entry Comment does not match/);
   });
 
+  it("checks a payload-owned desktop entry instead of a generated one", () => {
+    const zed = loadDescriptor("zed");
+    const source = fs.readFileSync(caskPath(zed.cask), "utf8");
+    assert.deepEqual(checkCask(zed, source), []);
+
+    const unpatched = source.replace('"Exec=zed"', '"Exec=other"');
+    assert.match(checkCask(zed, unpatched).join("; "), /does not replace Exec=zed/);
+
+    const noCopy = source.replace(
+      'copy "squashfs-root/share/applications/dev.zed.Zed.desktop"',
+      'copy "squashfs-root/other.desktop"',
+    );
+    assert.match(checkCask(zed, noCopy).join("; "), /does not install .*dev\.zed\.Zed\.desktop/);
+
+    // A descriptor that asks for a payload entry still rejects a cask that
+    // writes its own: the two install paths must not both run.
+    const other = loadDescriptor("opencode-desktop");
+    const otherSource = fs.readFileSync(caskPath(other.cask), "utf8");
+    const borrowed = checkCask(
+      { ...other, caskDesktopEntry: { from: "share/applications/dev.zed.Zed.desktop", exec: "Exec=zed" } },
+      otherSource,
+    );
+    assert.match(borrowed.join("; "), /does not patch squashfs-root\/share\/applications/);
+    assert.match(borrowed.join("; "), /must not also write a generated desktop entry/);
+  });
+
   it("checks an svg icon at its scalable hicolor path", () => {
     const descriptor = loadDescriptor("vscode");
     const source = fs.readFileSync(caskPath(descriptor.cask), "utf8");

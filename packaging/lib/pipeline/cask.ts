@@ -229,11 +229,8 @@ export function checkCask(descriptor: AppDescriptor, source: string): string[] {
   require(source.includes("postflight_steps do"), "missing postflight_steps");
 
   const iconTarget = `.local/share/icons/hicolor/${descriptor.icon.size}/apps/${descriptor.cask}${iconExtension(descriptor)}`;
-  const desktopTarget = `.local/share/applications/${descriptor.cask}.desktop`;
   require(source.includes(iconTarget), `postflight does not install the icon to ${iconTarget}`);
-  require(source.includes(desktopTarget), `postflight does not write ${desktopTarget}`);
   require(source.includes(`~/${iconTarget}`), `zap does not remove ~/${iconTarget}`);
-  require(source.includes(`~/${desktopTarget}`), `zap does not remove ~/${desktopTarget}`);
 
   // The cask repeats descriptor-derived strings a standalone file cannot
   // import; assert them so a displayName/comment change cannot drift out.
@@ -241,18 +238,43 @@ export function checkCask(descriptor: AppDescriptor, source: string): string[] {
     source.includes(`name "${descriptor.appName}"`),
     `cask name does not match appName "${descriptor.appName}"`,
   );
-  require(
-    source.includes(`Name=${descriptor.displayName}`),
-    `desktop entry Name does not match displayName "${descriptor.displayName}"`,
-  );
-  require(
-    source.includes(`Comment=${descriptor.comment}`),
-    `desktop entry Comment does not match comment "${descriptor.comment}"`,
-  );
-  require(
-    source.includes(`Icon=${descriptor.cask}`),
-    `desktop entry Icon does not match "${descriptor.cask}"`,
-  );
+
+  const caskDesktopEntry = descriptor.caskDesktopEntry;
+  if (caskDesktopEntry === undefined) {
+    const desktopTarget = `.local/share/applications/${descriptor.cask}.desktop`;
+    require(source.includes(desktopTarget), `postflight does not write ${desktopTarget}`);
+    require(source.includes(`~/${desktopTarget}`), `zap does not remove ~/${desktopTarget}`);
+    require(
+      source.includes(`Name=${descriptor.displayName}`),
+      `desktop entry Name does not match displayName "${descriptor.displayName}"`,
+    );
+    require(
+      source.includes(`Comment=${descriptor.comment}`),
+      `desktop entry Comment does not match comment "${descriptor.comment}"`,
+    );
+    require(
+      source.includes(`Icon=${descriptor.cask}`),
+      `desktop entry Icon does not match "${descriptor.cask}"`,
+    );
+  } else {
+    // The payload owns the entry text, so the cask patches that file and
+    // installs it: Name, Comment and Icon come from upstream, not the cask.
+    const payloadEntry = `squashfs-root/${caskDesktopEntry.from}`;
+    const entryName = caskDesktopEntry.from.slice(caskDesktopEntry.from.lastIndexOf("/") + 1);
+    const desktopTarget = `.local/share/applications/${entryName}`;
+    require(source.includes(`inreplace "${payloadEntry}"`), `postflight does not patch ${payloadEntry}`);
+    require(
+      source.includes(`"${caskDesktopEntry.exec}"`),
+      `postflight does not replace ${caskDesktopEntry.exec}`,
+    );
+    require(source.includes(`copy "${payloadEntry}"`), `postflight does not install ${payloadEntry}`);
+    require(source.includes(`"${desktopTarget}"`), `postflight does not install ${desktopTarget}`);
+    require(source.includes(`~/${desktopTarget}`), `zap does not remove ~/${desktopTarget}`);
+    require(
+      !source.includes('write_file ".local/share/applications/'),
+      "cask must not also write a generated desktop entry",
+    );
+  }
 
   return problems;
 }

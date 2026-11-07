@@ -11,6 +11,7 @@ import type {
   AppDescriptor,
   AptAdvisory,
   Architecture,
+  CaskDesktopEntry,
   ExtraFile,
   IconConfig,
   Advisory,
@@ -44,6 +45,7 @@ const TOP_LEVEL_KEYS = [
   "payload",
   "icon",
   "desktopTemplate",
+  "caskDesktopEntry",
   "extraFiles",
   "updater",
   "quickSharun",
@@ -508,6 +510,20 @@ function validateIcon(raw: unknown, label: string): IconConfig {
   };
 }
 
+// A payload-owned desktop entry (Zed) replaces the cask's generated one: the
+// cask rewrites the Exec line of the file the payload ships and installs that.
+function validateCaskDesktopEntry(raw: unknown, label: string): CaskDesktopEntry | undefined {
+  if (raw === undefined) return undefined;
+  const source = asObject(raw, label);
+  rejectUnknownKeys(source, ["from", "exec"], label);
+  const exec = str(source, "exec", label);
+  if (!/^Exec=[^"\\\r\n]+$/.test(exec)) fail(`${label}.exec must be one "Exec=<command>" line`);
+  return {
+    from: relativePath(str(source, "from", label), `${label}.from`),
+    exec,
+  };
+}
+
 // The watcher compiles these as RegExp when it polls, so a malformed pattern
 // must fail here rather than silently leaving the app unwatched.
 function compiledPattern(value: string, label: string): string {
@@ -584,6 +600,7 @@ export function validateDescriptor(raw: unknown, expectedId: string): AppDescrip
   const watch = validateWatch(source["watch"], `${label}.watch`);
   const hostHelpers = validateHostHelpers(source["hostHelpers"], `${label}.hostHelpers`);
   const extraFiles = validateExtraFiles(source["extraFiles"], `${label}.extraFiles`);
+  const caskDesktopEntry = validateCaskDesktopEntry(source["caskDesktopEntry"], `${label}.caskDesktopEntry`);
   const descriptor: AppDescriptor = {
     id,
     appName: str(source, "appName", label),
@@ -610,6 +627,7 @@ export function validateDescriptor(raw: unknown, expectedId: string): AppDescrip
   if (watch !== undefined) descriptor.watch = watch;
   if (hostHelpers !== undefined) descriptor.hostHelpers = hostHelpers;
   if (extraFiles !== undefined) descriptor.extraFiles = extraFiles;
+  if (caskDesktopEntry !== undefined) descriptor.caskDesktopEntry = caskDesktopEntry;
 
   // The app id is the API's app id end to end: cask token and asset prefix are
   // the same string, checked below.

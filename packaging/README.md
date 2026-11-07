@@ -86,6 +86,7 @@ record whose `app` does not — `fbr report` refuses such a record first.
 | `payload` | How the upstream package is staged: `deb-tree`/`deb-files` from a dpkg tree and `appimage-tree` entries into `AppDir/bin`, or `tarball-tree` — a bundle tarball's `root` directory (Zed's `zed.app`) into the AppDir root, so the bundle's own `bin/`, `libexec/`, `lib/` and `share/` keep the relative paths its binaries resolve (`$ORIGIN/../lib`, the CLI's `../libexec/zed-editor`). |
 | `icon` | Icon path in the payload plus its hicolor directory: a `WxH` size for a raster icon, or `scalable` for an SVG. The staged icon keeps the payload file's extension. |
 | `desktopTemplate` | Desktop entry template, relative to the app dir. |
+| `caskDesktopEntry` | Optional `{from, exec}`: instead of writing a generated entry, the cask rewrites the `Exec=` line of the desktop entry the payload ships and installs that file (Zed's `share/applications/dev.zed.Zed.desktop`), so `Name=`, `Comment=` and `Icon=` come from upstream. `from` is payload-relative; `exec` must be one `Exec=<command>` line. |
 | `updater` | Updater neutralization: JSON key removal, endpoint patch, feed removal, `.env`, runtime hook, residual scan. |
 | `quickSharun` | quick-sharun knobs: `hooks` (`ADD_HOOKS`), `env`, and `libraries` — absolute paths of libraries the app only `dlopen`s at runtime, passed to quick-sharun as deploy targets (an `ldd` scan never surfaces those, so nothing else would bundle them). |
 | `hostHelpers` | Optional AppDir paths under `bin/` the app executes outside the mount. Stashed before quick-sharun and restored after, so they stay host-runnable instead of becoming sharun wrappers. |
@@ -241,7 +242,8 @@ Each check lives in one place:
   (opencode-desktop and wfhelper intentionally leave inert copies behind).
 - **Casks** — one parser reads `Casks/*.rb`; `fbr cask --action check` asserts
   the cask agrees with its descriptor (URL, asset name, binaries, icon size,
-  desktop entry, zap paths).
+  desktop entry — written from the template, or patched from the payload when
+  `caskDesktopEntry` is set — and zap paths).
 - **The build** — `smoke_test_appimage` runs the AppImage headless and fails on
   dynamic-loader errors and on a launcher left waiting on a defunct child (a
   child still unreaped after `SMOKE_DEFUNCT_SECONDS`, default 3, means the app

@@ -36,17 +36,11 @@
     "size": "512x512"
   },
   "desktopTemplate": "templates/zed.desktop",
+  "caskDesktopEntry": {
+    "from": "share/applications/dev.zed.Zed.desktop",
+    "exec": "Exec=zed"
+  },
   "updater": {
-    "patchEndpoint": {
-      "from": "cloud.zed.dev",
-      "textReplacement": "cloud.invalid",
-      "binaryReplacement": "cloud.invalid",
-      "targets": ["libexec/zed-editor"]
-    },
-    "residualScan": {
-      "patterns": ["cloud.zed.dev"],
-      "severity": "error"
-    },
     "env": {
       "ZED_UPDATE_EXPLANATION": "Installed by Homebrew: run brew upgrade --cask zed"
     }

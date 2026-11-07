@@ -208,7 +208,48 @@ describe("descriptor contents (regression against the previous per-app scripts)"
     assert.equal(descriptor.payload.kind === "tarball-tree" ? descriptor.payload.root : "", "zed.app");
     assert.deepEqual(descriptor.binaryTargets, ["zed"]);
     assert.equal(descriptor.icon.source, "zed.app/share/icons/hicolor/512x512/apps/zed.png");
-    assert.equal(descriptor.updater.residualScan?.severity, "error");
+    assert.deepEqual(descriptor.updater.env, {
+      ZED_UPDATE_EXPLANATION: "Installed by Homebrew: run brew upgrade --cask zed",
+    });
+    // Zed builds its cloud, LLM, updater and sign-in session URLs from one host
+    // literal, so an endpoint patch on cloud.zed.dev also breaks sign-in.
+    // ZED_UPDATE_EXPLANATION is upstream's own package-manager switch: init()
+    // starts no updater poller, and the manual check only shows the message.
+    assert.equal(descriptor.updater.patchEndpoint, undefined);
+    assert.equal(descriptor.updater.residualScan, undefined);
+  });
+
+  it("validates a payload-owned cask desktop entry", () => {
+    const descriptor = loadDescriptor("zed");
+    assert.deepEqual(descriptor.caskDesktopEntry, {
+      from: "share/applications/dev.zed.Zed.desktop",
+      exec: "Exec=zed",
+    });
+
+    const assertRejects = (entry: unknown, expected: RegExp): void => {
+      assert.throws(
+        () =>
+          validateDescriptor(
+            mutated("zed", (copy) => {
+              copy["caskDesktopEntry"] = entry;
+            }),
+            "zed",
+          ),
+        expected,
+      );
+    };
+    assertRejects(
+      { from: "share/applications/dev.zed.Zed.desktop", exec: "zed" },
+      /caskDesktopEntry\.exec must be one "Exec=<command>" line/,
+    );
+    assertRejects(
+      { from: "../outside.desktop", exec: "Exec=zed" },
+      /caskDesktopEntry\.from must be a repository-relative path/,
+    );
+    assertRejects(
+      { from: "share/applications/dev.zed.Zed.desktop", exec: "Exec=zed", path: "x" },
+      /caskDesktopEntry\.path is not a known field/,
+    );
   });
 
   it("rejects a bundle tarball payload without a containable root", () => {

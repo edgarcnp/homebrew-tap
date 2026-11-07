@@ -215,6 +215,16 @@ export interface IconConfig {
   // hicolor directory: a WxH size, e.g. 512x512, or "scalable" for an SVG.
   size: string;
 }
+// Desktop entry the payload ships: the cask patches its Exec line to the
+// Homebrew-installed binary and installs that file, instead of writing a
+// generated entry of its own. Absent when the cask writes the entry.
+export interface CaskDesktopEntry {
+  // Payload-relative path, e.g. share/applications/dev.zed.Zed.desktop.
+  from: string;
+  // The line the cask rewrites, e.g. Exec=zed.
+  exec: string;
+}
+
 
 // A file copied verbatim from sourceDir into the AppDir after quick-sharun,
 // e.g. Firefox default prefs under bin/defaults/pref. `target` is
@@ -299,6 +309,10 @@ export interface AppDescriptor {
   icon: IconConfig;
   // Desktop entry template, relative to sourceDir.
   desktopTemplate: string;
+  // Payload-relative desktop entry the cask installs, with its Exec line
+  // rewritten to the Homebrew binary. Absent when the cask writes a generated
+  // entry from desktopTemplate instead.
+  caskDesktopEntry?: CaskDesktopEntry;
   // Files copied verbatim from sourceDir into the AppDir after quick-sharun.
   // Absent when the app ships none.
   extraFiles?: ExtraFile[];
