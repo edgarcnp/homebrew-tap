@@ -257,17 +257,26 @@ export function checkCask(descriptor: AppDescriptor, source: string): string[] {
       `desktop entry Icon does not match "${descriptor.cask}"`,
     );
   } else {
-    // The payload owns the entry text, so the cask patches that file and
-    // installs it: Name, Comment and Icon come from upstream, not the cask.
-    const payloadEntry = `squashfs-root/${caskDesktopEntry.from}`;
+    // The payload owns the entry text (Name, Comment and Icon come from
+    // upstream), so the cask patches that file and installs it. The extraction
+    // directory is the cask's business; the payload path is the descriptor's.
     const entryName = caskDesktopEntry.from.slice(caskDesktopEntry.from.lastIndexOf("/") + 1);
     const desktopTarget = `.local/share/applications/${entryName}`;
-    require(source.includes(`inreplace "${payloadEntry}"`), `postflight does not patch ${payloadEntry}`);
+    const entryPattern = caskDesktopEntry.from.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    // The rewrite mechanism is the cask's choice; the payload path and the
+    // descriptor's Exec line are the contract.
     require(
-      source.includes(`"${caskDesktopEntry.exec}"`),
-      `postflight does not replace ${caskDesktopEntry.exec}`,
+      source.includes(`squashfs-root/${caskDesktopEntry.from}`),
+      `postflight does not read squashfs-root/${caskDesktopEntry.from}`,
     );
-    require(source.includes(`copy "${payloadEntry}"`), `postflight does not install ${payloadEntry}`);
+    require(
+      source.includes(`^${caskDesktopEntry.exec}`),
+      `postflight does not rewrite ${caskDesktopEntry.exec}`,
+    );
+    require(
+      new RegExp(`copy "[^"]*squashfs-root/${entryPattern}"`).test(source),
+      `postflight does not install squashfs-root/${caskDesktopEntry.from}`,
+    );
     require(source.includes(`"${desktopTarget}"`), `postflight does not install ${desktopTarget}`);
     require(source.includes(`~/${desktopTarget}`), `zap does not remove ~/${desktopTarget}`);
     require(

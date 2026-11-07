@@ -172,8 +172,8 @@ describe("checkCask", () => {
     const source = fs.readFileSync(caskPath(zed.cask), "utf8");
     assert.deepEqual(checkCask(zed, source), []);
 
-    const unpatched = source.replace('"Exec=zed"', '"Exec=other"');
-    assert.match(checkCask(zed, unpatched).join("; "), /does not replace Exec=zed/);
+    const unpatched = source.replace("^Exec=zed", "^Exec=other");
+    assert.match(checkCask(zed, unpatched).join("; "), /does not rewrite Exec=zed/);
 
     const noCopy = source.replace(
       'copy "squashfs-root/share/applications/dev.zed.Zed.desktop"',
@@ -189,7 +189,7 @@ describe("checkCask", () => {
       { ...other, caskDesktopEntry: { from: "share/applications/dev.zed.Zed.desktop", exec: "Exec=zed" } },
       otherSource,
     );
-    assert.match(borrowed.join("; "), /does not patch squashfs-root\/share\/applications/);
+    assert.match(borrowed.join("; "), /does not read squashfs-root\/share\/applications/);
     assert.match(borrowed.join("; "), /must not also write a generated desktop entry/);
   });
 

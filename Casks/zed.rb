@@ -19,14 +19,17 @@ cask "zed" do
 
   app_image "zed-#{version}-x86_64.AppImage", target: "zed-x86_64.AppImage"
   binary "zed-#{version}-x86_64.AppImage", target: "zed"
-  generate_completions_from_executable "#{HOMEBREW_PREFIX}/bin/zed", "--completions",
-                                       shells: [:bash, :zsh, :fish, :pwsh]
 
   postflight_steps do
-    run "{{HOMEBREW_PREFIX}}/bin/zed", args: ["--appimage-extract"], chdir: "{{staged_path}}"
-    inreplace "squashfs-root/share/applications/dev.zed.Zed.desktop",
-              "Exec=zed",
-              "Exec=\"{{HOMEBREW_PREFIX}}/bin/zed\""
+    run "{{HOMEBREW_PREFIX}}/bin/zed", args: ["--appimage-extract"], chdir: "{{staged_path}}",
+                                               writable_paths: ["{{staged_path}}"]
+    # A run step rewrites the entry: a cask sandbox pre-creates the parent of
+    # every path an inreplace names, and that collides with the AppImage's own
+    # squashfs-root during extraction.
+    run "sed",
+        args: ["-i", "s|^Exec=zed|Exec=\"{{HOMEBREW_PREFIX}}/bin/zed\"|",
+               "squashfs-root/share/applications/dev.zed.Zed.desktop"],
+        chdir: "{{staged_path}}", writable_paths: ["{{staged_path}}"]
     copy "squashfs-root/share/applications/dev.zed.Zed.desktop",
          ".local/share/applications/dev.zed.Zed.desktop",
          target_base: :home
