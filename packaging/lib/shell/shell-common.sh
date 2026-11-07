@@ -101,12 +101,69 @@ normalize_package_payload_permissions() {
   find "${root}" -type f ! \( -perm /u=x -o -perm /g=x -o -perm /o=x \) -exec chmod 0644 {} +
 }
 
-# Runs the built AppImage headless and fails on dynamic-loader errors, mirroring
-# quick-sharun --simple-test. APPIMAGE_EXTRACT_AND_RUN=1 avoids a FUSE
-# dependency; SMOKE_TIMEOUT (default 20s) sets the kill timeout.
+# True while <pid> is a live process; a zombie has already exited.
+smoke_process_running() {
+  local stat_file="/proc/$1/stat"
+  local line
+  [[ -r "${stat_file}" ]] || return 1
+  IFS= read -r line <"${stat_file}" 2>/dev/null || return 1
+  [[ "${line##*) }" != Z* ]]
+}
+
+# Zombies among <root>'s descendants, one pid per line. Read from /proc so the
+# gate needs no procps in the builder image.
+smoke_defunct_descendants() {
+  local root="$1"
+  local -A parent_of=() state_of=()
+  local stat_file line pid rest candidate node depth
+  for stat_file in /proc/[0-9]*/stat
+  do
+    [[ -r "${stat_file}" ]] || continue
+    IFS= read -r line <"${stat_file}" 2>/dev/null || continue
+    pid="${line%% *}"
+    [[ "${pid}" =~ ^[0-9]+$ ]] || continue
+    # the state and parent fields follow "<pid> (<comm>) "
+    rest="${line##*) }"
+    state_of["${pid}"]="${rest%% *}"
+    rest="${rest#* }"
+    parent_of["${pid}"]="${rest%% *}"
+  done
+  for candidate in "${!state_of[@]}"
+  do
+    [[ "${state_of[${candidate}]}" = "Z" ]] || continue
+    node="${parent_of[${candidate}]:-}"
+    depth=0
+    while [[ -n "${node}" && "${node}" != "0" && "${depth}" -lt 128 ]]
+    do
+      if [[ "${node}" = "${root}" ]]
+      then
+        printf '%s\n' "${candidate}"
+        break
+      fi
+      node="${parent_of[${node}]:-}"
+      depth=$((depth + 1))
+    done
+  done
+}
+
+# Runs the built AppImage headless and fails on dynamic-loader errors and on a
+# launcher that never gets past its own dead child, mirroring quick-sharun
+# --simple-test. Extra arguments are passed to the app itself (an Electron
+# payload needs --no-sandbox headless). APPIMAGE_EXTRACT_AND_RUN=1 avoids a
+# FUSE dependency; SMOKE_TIMEOUT (default 20s) sets the kill timeout.
+#
+# The child check covers the case where a repackaged app leaves the build
+# looking healthy while nothing opens: the app's CLI spawns the real binary,
+# that binary dies at startup, and the CLI waits on the corpse — the processes
+# stay for the whole window and the loader message goes to the dead child's
+# stderr, so no captured output tells the story (Zed 1.27.0 on a host glibc
+# older than the bundled one). A child that exits on the way up is normal, so
+# a pid has to stay defunct for SMOKE_DEFUNCT_SECONDS (default 3) first.
 smoke_test_appimage() {
   local appimage="$1"
-  local output
+  shift
+  local -a launch_args=("$@")
+  local output_file output
 
   if [[ ! -f "${appimage}" ]]
   then
@@ -121,13 +178,57 @@ smoke_test_appimage() {
 
   [[ "${SMOKE_TIMEOUT:-20}" =~ ^[0-9]+$ ]] || SMOKE_TIMEOUT=20
   local timeout_seconds="${SMOKE_TIMEOUT:-20}"
+  [[ "${SMOKE_DEFUNCT_SECONDS:-3}" =~ ^[0-9]+$ ]] || SMOKE_DEFUNCT_SECONDS=3
+  local defunct_seconds="${SMOKE_DEFUNCT_SECONDS:-3}"
 
   info "Smoke testing: ${appimage}"
+  output_file="$(mktemp "${TMPDIR:-/tmp}/fbr-smoke.XXXXXX")" || error "mktemp failed for the smoke output"
+  local -a runner=()
   if command -v xvfb-run >/dev/null 2>&1
   then
-    output="$(APPIMAGE_EXTRACT_AND_RUN=1 xvfb-run -a timeout -k 5 "${timeout_seconds}" "${appimage}" --no-sandbox 2>&1 || true)"
-  else
-    output="$(APPIMAGE_EXTRACT_AND_RUN=1 timeout -k 5 "${timeout_seconds}" "${appimage}" --no-sandbox 2>&1 || true)"
+    runner=(xvfb-run -a)
+  fi
+  # In the background so the tree can be watched while it runs; the timeout
+  # still bounds the whole window.
+  APPIMAGE_EXTRACT_AND_RUN=1 "${runner[@]}" timeout -k 5 "${timeout_seconds}" \
+    "${appimage}" "${launch_args[@]}" >"${output_file}" 2>&1 &
+  local runner_pid=$!
+
+  local -A first_seen=()
+  local elapsed=0 stuck="" pid since
+  while [[ -z "${stuck}" ]] && smoke_process_running "${runner_pid}"
+  do
+    sleep 1
+    elapsed=$((elapsed + 1))
+    for pid in $(smoke_defunct_descendants "${runner_pid}")
+    do
+      first_seen["${pid}"]="${first_seen[${pid}]:-${elapsed}}"
+      since="${first_seen[${pid}]}"
+      if ((elapsed - since >= defunct_seconds))
+      then
+        stuck="${pid}"
+        break
+      fi
+    done
+  done
+  # A stuck child is a verdict already: stop the window instead of waiting out
+  # the timeout, so the build fails on the finding rather than on the clock.
+  if [[ -n "${stuck}" ]]
+  then
+    kill "${runner_pid}" 2>/dev/null || true
+  fi
+  wait "${runner_pid}" 2>/dev/null || true
+
+  output="$(cat -- "${output_file}" 2>/dev/null || true)"
+  rm -f -- "${output_file}"
+
+  if [[ -n "${stuck}" ]]
+  then
+    # The launcher is waiting on a child that already exited, so the window
+    # this gate exists to see never opened, and a re-run cannot fix it.
+    classify_failure SMOKE_FAILED "smoke test: unreaped child"
+    error "$(printf 'Smoke test failed: %s kept pid %s defunct for %ss or more, so its parent is waiting on a process that already exited\n%s' \
+      "${appimage}" "${stuck}" "${defunct_seconds}" "${output}")"
   fi
 
   if grep -Eq 'symbol lookup error|undefined symbol|error while loading shared libraries|cannot open shared object|Cannot mount AppImage|AppRun not found|Failed to execute dwarfsextract' <<<"${output}"

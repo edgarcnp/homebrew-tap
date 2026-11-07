@@ -667,3 +667,166 @@ describe("assert_bin_elf_arch", () => {
     assert.match(result.stderr, /is not x86_64/);
   });
 });
+
+// A bundle tarball's CLI re-execs its sibling binary by relative path, and
+// that exec goes through the host's loader against the AppImage's bundled
+// libc. The stage re-points libexec/<name> at quick-sharun's bin/<name>
+// wrapper, so the child always starts under the bundled loader.
+function makeRecordingSharun(): void {
+  fs.writeFileSync(
+    pathIn("sharun"),
+    '#!/bin/sh\nprintf "args=%s APPDIR=%s SHARUN_DIR=%s\\n" "$*" "${APPDIR:-}" "${SHARUN_DIR:-}" >> "$ARGS_LOG"\n',
+  );
+  fs.chmodSync(pathIn("sharun"), 0o755);
+}
+
+function writeFileExecutable(relative: string, content: string): void {
+  fs.mkdirSync(path.dirname(pathIn(relative)), { recursive: true });
+  fs.writeFileSync(pathIn(relative), content);
+  fs.chmodSync(pathIn(relative), 0o755);
+}
+
+function runStage(stage: string): { status: number | null; stderr: string } {
+  const result = spawnSync(
+    "bash",
+    ["-c", `set -Eeuo pipefail; . "$PIPELINE_LIB"; APPDIR="$APP_DIR"; ${stage}`],
+    { encoding: "utf8", env: { ...process.env, PIPELINE_LIB, APP_DIR: appDir } },
+  );
+  return { status: result.status, stderr: result.stderr ?? "" };
+}
+
+describe("pipeline_shim_bundle_libexec", () => {
+  it("re-points a bundle binary at the bin/ wrapper and keeps the arguments", () => {
+    makeRecordingSharun();
+    wrap("bin/zed-editor");
+    writeFileExecutable("libexec/zed-editor", "pristine-editor-binary");
+    writeFileExecutable("shared/bin/zed-editor", "patched-editor-binary");
+
+    assert.equal(runStage("pipeline_shim_bundle_libexec").status, 0);
+
+    const shim = pathIn("libexec/zed-editor");
+    assert.equal(fs.lstatSync(shim).isSymbolicLink(), false);
+    const content = fs.readFileSync(shim, "utf8");
+    assert.match(content, /^#!\/bin\/sh\n/);
+    assert.match(content, /exec "\$\{appdir\}\/bin\/zed-editor" "\$@"/);
+
+    const argsLog = path.join(workDir, "args.log");
+    const run = spawnSync(shim, ["zed-cli:///tmp/socket"], {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        ARGS_LOG: argsLog,
+        APPDIR: "/not-the-appdir",
+        SHARUN_DIR: "/not-the-appdir",
+      },
+    });
+    assert.equal(run.status, 0, run.stderr);
+    const logged = fs.readFileSync(argsLog, "utf8");
+    assert.match(logged, /^args=zed-cli:\/\/\/tmp\/socket /m);
+    // The shim re-exports the AppDir: an inherited SHARUN_DIR from another
+    // AppImage would send sharun to that mount's shared/bin instead.
+    assert.ok(logged.includes(`APPDIR=${appDir} `), logged);
+    assert.ok(logged.includes(`SHARUN_DIR=${appDir}\n`), logged);
+  });
+
+  it("stays clean when the stage runs again", () => {
+    makeRecordingSharun();
+    wrap("bin/zed-editor");
+    writeFileExecutable("libexec/zed-editor", "pristine-editor-binary");
+    writeFileExecutable("shared/bin/zed-editor", "patched-editor-binary");
+
+    assert.equal(runStage("pipeline_shim_bundle_libexec").status, 0);
+    const first = fs.readFileSync(pathIn("libexec/zed-editor"), "utf8");
+    assert.equal(runStage("pipeline_shim_bundle_libexec").status, 0);
+    assert.equal(fs.readFileSync(pathIn("libexec/zed-editor"), "utf8"), first);
+  });
+
+  it("leaves a libexec binary without a bin/ wrapper alone", () => {
+    makeRecordingSharun();
+    writeFileExecutable("libexec/helper", "pristine-helper");
+
+    assert.equal(runStage("pipeline_shim_bundle_libexec").status, 0);
+    assert.equal(fs.readFileSync(pathIn("libexec/helper"), "utf8"), "pristine-helper");
+  });
+
+  it("no-ops when the app was not built with sharun", () => {
+    writeFileExecutable("libexec/zed-editor", "pristine-editor-binary");
+    writeFileExecutable("bin/zed-editor", "plain-wrapper");
+
+    assert.equal(runStage("pipeline_shim_bundle_libexec").status, 0);
+    assert.equal(fs.readFileSync(pathIn("libexec/zed-editor"), "utf8"), "pristine-editor-binary");
+  });
+
+  it("fails when the wrapper has no shared/bin sibling", () => {
+    makeRecordingSharun();
+    wrap("bin/zed-editor");
+    writeFileExecutable("libexec/zed-editor", "pristine-editor-binary");
+
+    const { status, stderr } = runStage("pipeline_shim_bundle_libexec");
+    assert.equal(status, 1);
+    assert.match(stderr, /Missing shared\/bin\/zed-editor/);
+  });
+});
+
+// The post-pack gate. A launcher that waits on a child which already exited
+// leaves no message behind — the child's stderr is gone with it — so the gate
+// reads the process tree instead of the output. python3 is the portable way to
+// hold an unreaped child here; the rest of the suite never needs it.
+const HAS_PYTHON = spawnSync("python3", ["--version"], { encoding: "utf8" }).status === 0;
+
+function smokeApp(script: string): string {
+  const file = path.join(workDir, "fake.AppImage");
+  fs.writeFileSync(file, script);
+  fs.chmodSync(file, 0o755);
+  return file;
+}
+
+function runSmoke(appimage: string): { status: number | null; stderr: string } {
+  const result = spawnSync(
+    "bash",
+    ["-c", 'set -Eeuo pipefail; . "$COMMON"; smoke_test_appimage "$APPIMAGE"'],
+    {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        COMMON: SHELL_COMMON,
+        APPIMAGE: appimage,
+        SMOKE_TIMEOUT: "8",
+        SMOKE_DEFUNCT_SECONDS: "2",
+      },
+    },
+  );
+  return { status: result.status, stderr: result.stderr ?? "" };
+}
+
+describe("smoke_test_appimage", () => {
+  it("fails when the launcher keeps its child defunct", { skip: !HAS_PYTHON, timeout: 20000 }, () => {
+    const appimage = smokeApp(
+      [
+        "#!/bin/sh",
+        "exec python3 -c 'import os, time",
+        "if os.fork() == 0:",
+        "    os._exit(0)",
+        "time.sleep(30)'",
+        "",
+      ].join("\n"),
+    );
+
+    const { status, stderr } = runSmoke(appimage);
+    assert.equal(status, 1);
+    assert.match(stderr, /kept pid \d+ defunct/);
+  });
+
+  it("passes an app that exits on its own", () => {
+    const { status, stderr } = runSmoke(smokeApp("#!/bin/sh\nsleep 1\n"));
+    assert.equal(status, 0, stderr);
+  });
+
+  it("still fails on loader errors", () => {
+    const { status, stderr } = runSmoke(
+      smokeApp('#!/bin/sh\necho "symbol lookup error: /lib/x.so.1: undefined symbol: foo"\n'),
+    );
+    assert.equal(status, 1);
+    assert.match(stderr, /loader errors/);
+  });
+});

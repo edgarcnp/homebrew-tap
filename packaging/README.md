@@ -59,8 +59,9 @@ live in `core/`.
 6. **render + icon** — `fbr render-desktop` (literal substitution, no `sed`) and
    the descriptor's icon into the hicolor tree.
 7. **pack** — `quick-sharun` (generates AppRun, bundles the runtime closure
-   including glibc and ld-linux), sidecar reconciliation, `fbr finalize` (AppDir
-   `.env` + runtime hook), pkgforge `appimagetool`, then the smoke test.
+   including glibc and ld-linux), sidecar reconciliation, the bundled-loader
+   shim for a bundle's `libexec/` binaries, `fbr finalize` (AppDir `.env` +
+   runtime hook), pkgforge `appimagetool`, then the smoke test.
 
 ## Descriptor
 
@@ -242,7 +243,13 @@ Each check lives in one place:
   the cask agrees with its descriptor (URL, asset name, binaries, icon size,
   desktop entry, zap paths).
 - **The build** — `smoke_test_appimage` runs the AppImage headless and fails on
-  dynamic-loader errors; the release pins the AppImage SHA-256 back into the cask.
+  dynamic-loader errors and on a launcher left waiting on a defunct child (a
+  child still unreaped after `SMOKE_DEFUNCT_SECONDS`, default 3, means the app
+  never got past it — the way a host-glibc mismatch reaches the gate, because
+  the dead child's stderr goes nowhere). It passes `--no-sandbox` only to
+  Chromium-based payloads: a native bundle rejects the flag and exits before it
+  starts, which would make the gate vacuous. The release pins the AppImage
+  SHA-256 back into the cask.
 
 ## Adding an app
 
@@ -310,11 +317,18 @@ non-FHS and old distros.
   binaries resolve `$ORIGIN/../lib` and the CLI spawns `../libexec/zed-editor`.
   `quick-sharun` still deploys the editor as a target, so its dlopen surface
   (Vulkan, GL) is bundled: the editor lands in `shared/bin/zed-editor` with a
-  `bin/zed-editor` wrapper beside it, while the pristine `libexec/zed-editor`
-  stays where the CLI looks. Verified against the packed artifact of 1.27.0:
-  `zed --version` reports `<AppDir>/libexec/zed-editor`, and a headless
-  `Exec=zed` launch starts the editor. Zed links `libasound`, which the builder
-  image does not carry, so its descriptor installs it through
+  `bin/zed-editor` wrapper beside it. That wrapper is the one the CLI has to
+  reach: the CLI execs its sibling itself, and a direct exec runs the host's
+  `ld-linux` while the rpath pulls the bundled libc, so on a host older than the
+  bundled glibc the editor dies on a `GLIBC_PRIVATE` symbol before it can open a
+  window while the CLI waits on it forever — the report is "the processes are
+  there and no window appears" (Zed 1.27.0 on host glibc 2.43 against bundled
+  2.44: `__pointer_chk_guard`). `pipeline_shim_bundle_libexec` replaces every
+  `libexec/<name>` whose `bin/<name>` wrapper `quick-sharun` created with a shim
+  that re-exports `APPDIR`/`SHARUN_DIR` and execs that wrapper, so the editor and
+  its crash-handler re-exec always start under the bundled loader; `zed
+  --version` still reports `<AppDir>/libexec/zed-editor`. Zed links `libasound`,
+  which the builder image does not carry, so its descriptor installs it through
   `buildPackages: ["alsa-lib"]`.
 - Three things stay in this pipeline rather than delegating to `quick-sharun`:
   updater neutralization, the smoke gate (run against the packed AppImage), and
