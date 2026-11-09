@@ -34,7 +34,7 @@ jobs:
         # os: [ macos-26 ]
         include:
           - container:
-              image: ghcr.io/homebrew/brew:latest@sha256:1b85f3ae0e6eb7f1d77326143a99d5b1f201f6c63a88c8dac3e1e042801dafe7
+              image: ghcr.io/homebrew/brew:latest@sha256:63be5353975c43bce2c885742370ab320b3c57541de72fd1458a26a8e35d7d8e
     runs-on: ${{ matrix.os }}
     timeout-minutes: 40
     container:
@@ -47,7 +47,7 @@ jobs:
     steps:
       - name: Set up Homebrew
         id: set-up-homebrew
-        uses: Homebrew/actions/setup-homebrew@c262868c096d909fc278daa87ed9772967331ea3 # 2026.11.02.1
+        uses: Homebrew/actions/setup-homebrew@63a2d4d8d4193eab3e62b1b782ff3ab8408f5b29 # 2026.11.09.1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
