@@ -51,11 +51,17 @@ jobs:
         run: |
           tap_dir="$(brew --repository "$TAP_REPO")"
           cd "$tap_dir"
+          # Homebrew loads casks by name only: a path or a Ruby source file is
+          # refused, and a bare token would resolve against homebrew/cask
+          # first, so every lookup here names this tap as well.
+          owner="${TAP_REPO%%/*}"
+          repo="${TAP_REPO#*/}"
+          tap="${owner}/${repo#homebrew-}"
           # Iterate descriptors rather than cask filenames: the descriptor is
           # the source of truth, and its cask token (== app id) names the file.
           for app in $(bun packaging/bin/fbr.ts list-apps); do
             name="$(bun packaging/bin/fbr.ts descriptor --app "$app" --field cask)"
-            cask="Casks/${name}.rb"
+            cask="${tap}/${name}"
             # Casks with a placeholder sha256 can't be installed until their
             # first release is published; skip them unless the asset exists.
             # The cask is read through the shared parser rather than grep.
