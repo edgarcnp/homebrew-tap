@@ -2,6 +2,16 @@
 
 A Homebrew tap of Linux desktop apps with FUSE3 support, repackaged as AppImages.
 
+> [!WARNING]
+> This is a personal tap, not an official distribution channel for any of the
+> apps it lists. Each cask is packaged on a best-effort basis for my own use
+> and published in case it is useful to someone else, so casks may be added,
+> changed, or dropped at any time and without notice — including a change of
+> version, contents, or availability that upstream does not make. Nothing here
+> carries a support commitment or a promise of continuity. The apps themselves
+> belong to their respective projects, which are not affiliated with this tap
+> and do not endorse these builds.
+
 ## Install
 
 Install an app by its full cask name:
