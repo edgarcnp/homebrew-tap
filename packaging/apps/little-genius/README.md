@@ -39,6 +39,12 @@ the same pinned JSON manifest (`https://api.avakot.org/lg/manifest.json`).
   `quickSharun.libraries` hands `/usr/lib/libayatana-appindicator3.so.1` to
   quick-sharun as a deploy target, which bundles it together with its `ldd`
   closure (`libayatana-indicator`, `libdbusmenu-{glib,gtk3}`).
+- **OpenSSL 3 ABI** — the 0.8.10 payload links `libssl.so.3` and
+  `libcrypto.so.3` (0.8.7 linked no OpenSSL at all). Arch's `openssl` package
+  is version 4 and ships only the `.so.4` sonames, so quick-sharun aborted on
+  `bin/little-genius is missing libraries` and the build failed unclassified.
+  `buildPackages` installs `core/openssl-3`, which provides the version-3
+  sonames, and quick-sharun bundles them from the closure.
 - **Updater** — the manifest endpoint embedded once in the `little-genius` ELF
   is rewritten to a never-resolving host with a same-length patch
   (`https://update.invalid/lg/manifest.json` is byte-identical in length to the

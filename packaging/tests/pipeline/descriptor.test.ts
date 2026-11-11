@@ -162,8 +162,10 @@ describe("descriptor contents (regression against the previous per-app scripts)"
     );
     assert.equal(descriptor.icon.size, "512x512");
     // The tray indicator is dlopened at runtime; buildPackages installs it and
-    // the descriptor names it as a quick-sharun deploy target.
-    assert.deepEqual(descriptor.buildPackages, ["libayatana-appindicator"]);
+    // the descriptor names it as a quick-sharun deploy target. The 0.8.10
+    // payload links the OpenSSL 3 sonames, which current Arch ships only in
+    // core/openssl-3 (its openssl package is version 4).
+    assert.deepEqual(descriptor.buildPackages, ["libayatana-appindicator", "openssl-3"]);
     assert.deepEqual(descriptor.quickSharun.libraries, ["/usr/lib/libayatana-appindicator3.so.1"]);
     assert.equal(descriptor.updater.patchEndpoint?.from, "https://api.avakot.org/lg/manifest.json");
     assert.equal(descriptor.updater.patchEndpoint?.binaryReplacement.length, 39);
@@ -1248,8 +1250,9 @@ describe("descriptor env and output lines", () => {
     assert.equal(env.get("BUILD_COMMAND"), "./build.sh");
     assert.equal(env.get("DEBLOAT_ARGS"), "--add-common --prefer-nano webkit2gtk-4.1-mini gdk-pixbuf2-mini");
     assert.equal(env.get("APP_ARCHITECTURES"), '["amd64"]');
-    // The webkit closure and tray indicator are build-time-only packages.
-    assert.equal(env.get("BUILD_PACKAGES"), "libayatana-appindicator");
+    // The webkit closure, tray indicator and OpenSSL 3 sonames are build-time-only
+    // packages.
+    assert.equal(env.get("BUILD_PACKAGES"), "libayatana-appindicator openssl-3");
   });
 
   it("emits an empty build package list when an app declares none", () => {
