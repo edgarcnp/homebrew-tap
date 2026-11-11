@@ -66,6 +66,7 @@ export const FAILURE_CODES = {
   PIN_CASK_FAILED: { class: "transient", retryable: true },
   UNCLASSIFIED: { class: "infra", retryable: true, retryAfterSeconds: 300 },
   BUILD_FAILED: { class: "permanent", retryable: false },
+  MISSING_PAYLOAD_LIB: { class: "permanent", retryable: false },
   SMOKE_FAILED: { class: "permanent", retryable: false },
   UPDATER_RESIDUAL: { class: "permanent", retryable: false },
   ARTIFACT_MISSING: { class: "permanent", retryable: false },

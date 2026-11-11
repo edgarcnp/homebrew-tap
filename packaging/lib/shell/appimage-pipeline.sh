@@ -535,6 +535,46 @@ pipeline_collect_targets() {
   done < <(descriptor_field '.quickSharun.libraries // [] | .[]')
 }
 
+# Names the abort quick-sharun reports when a staged binary needs a soname the
+# build environment does not carry. The fragment lists the sonames its scan
+# could not resolve, which is the whole diagnostic; the workflow's generic
+# BUILD_FAILED told the reader nothing. Anything it cannot attribute stays
+# unclassified, so the record's fallback is still the only guess in play.
+classify_quick_sharun_failure() {
+  local log="$1"
+  [[ -f "${log}" ]] || return 1
+  grep -q 'is missing libraries' "${log}" || return 1
+
+  local missing
+  missing="$(grep -oE '[^[:space:]]+ => not found' "${log}" | awk '{print $1}' | sort -u | tr '\n' ' ')"
+  missing="${missing% }"
+  if [[ -n "${missing}" ]]
+  then
+    classify_failure MISSING_PAYLOAD_LIB "payload libraries missing from the build environment: ${missing}"
+  else
+    classify_failure MISSING_PAYLOAD_LIB "payload libraries missing from the build environment"
+  fi
+}
+
+# Runs quick-sharun with its output kept. The log is what names a missing-library
+# abort, and it stays in the work dir for the run; a failure it cannot attribute
+# aborts without a classification, exactly as before.
+pipeline_run_quick_sharun() {
+  local log="${WORK_DIR}/quick-sharun.log"
+  # A staged tree can keep its libraries beside its binaries (Firefox's deb tree
+  # does, and those libraries carry no $ORIGIN rpath), so the staged bin dir must
+  # be on the search path for quick-sharun's ldd and strace scans to resolve
+  # siblings; without it the build aborts on "missing libraries". Scoped to the
+  # call so the later appimagetool run sees the ambient env.
+  local search_path="${APPDIR}/bin${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+  if LD_LIBRARY_PATH="${search_path}" quick-sharun "${TARGETS[@]}" 2>&1 | tee "${log}"
+  then
+    return 0
+  fi
+  classify_quick_sharun_failure "${log}" || true
+  error "quick-sharun failed"
+}
+
 # Packages the AppDir: quick-sharun (AppRun + the runtime closure including
 # libc), then the pkgforge appimagetool via APPIMAGETOOL, then the smoke gate.
 pipeline_pack() {
@@ -554,13 +594,7 @@ Install the Anylinux tools (packaging/scripts/install-anylinux-tools.sh) or add 
   pipeline_collect_targets
   pipeline_export_quick_sharun_env
   pipeline_stash_host_helpers
-  # A staged tree can keep its libraries beside its binaries (Firefox's deb
-  # tree does, and those libraries carry no $ORIGIN rpath), so the staged bin
-  # dir must be on the search path for quick-sharun's ldd and strace scans to
-  # resolve siblings; without it the build aborts on "missing libraries".
-  # Scoped to the call so the later appimagetool run sees the ambient env.
-  LD_LIBRARY_PATH="${APPDIR}/bin${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}" \
-    quick-sharun "${TARGETS[@]}"
+  pipeline_run_quick_sharun
   pipeline_restore_host_helpers
   pipeline_reconcile_sharun_sidecars
   pipeline_shim_bundle_libexec

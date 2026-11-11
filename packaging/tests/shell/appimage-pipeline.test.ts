@@ -500,6 +500,62 @@ describe("classify_failure", () => {
     assert.equal(fs.existsSync(fragment), false);
   });
 });
+// quick-sharun's closure scan is the authority on the payload's libraries: when
+// a staged binary needs a soname the build environment does not carry, its scan
+// aborts and nobody else knows why. Mapping that abort names the sonames in the
+// record instead of leaving the job's generic BUILD_FAILED.
+describe("classify_quick_sharun_failure", () => {
+  function mapLog(lines: string[] | null): {
+    status: number | null;
+    fragment: Record<string, unknown> | null;
+    stderr: string;
+  } {
+    const log = path.join(workDir, "quick-sharun.log");
+    const fragment = path.join(workDir, "report-code.json");
+    if (lines !== null) {
+      fs.writeFileSync(log, `${lines.join("\n")}\n`);
+    }
+    const result = spawnSync(
+      "bash",
+      ["-c", `set -Eeuo pipefail; . "$PIPELINE_LIB"; classify_quick_sharun_failure "$LOG"`],
+      { encoding: "utf8", env: { ...process.env, PIPELINE_LIB, LOG: log, FBR_FAILURE_OUT: fragment } },
+    );
+    const written = fs.existsSync(fragment)
+      ? (JSON.parse(fs.readFileSync(fragment, "utf8")) as Record<string, unknown>)
+      : null;
+    return { status: result.status, fragment: written, stderr: result.stderr };
+  }
+
+  it("names the sonames quick-sharun reported missing", () => {
+    const { status, fragment } = mapLog([
+      " Starting deployment, checking if extra libraries need to be added...",
+      "",
+      "\tlibcrypto.so.3 => not found",
+      "\tlibssl.so.3 => not found",
+      " /tmp/appimage.AppDir/bin/little-genius is missing libraries! Aborting...",
+      "=============================================================",
+    ]);
+    assert.equal(status, 0);
+    assert.ok(fragment);
+    assert.equal(fragment["code"], "MISSING_PAYLOAD_LIB");
+    assert.equal(
+      fragment["message"],
+      "payload libraries missing from the build environment: libcrypto.so.3 libssl.so.3",
+    );
+  });
+
+  it("leaves a failure it cannot attribute unclassified", () => {
+    const { status, fragment } = mapLog([" Something unrelated went wrong"]);
+    assert.equal(status, 1);
+    assert.equal(fragment, null);
+  });
+
+  it("stays a no-op when there is no log to read", () => {
+    const { status, fragment } = mapLog(null);
+    assert.equal(status, 1);
+    assert.equal(fragment, null);
+  });
+});
 
 describe("pipeline_neutralize", () => {
   function neutralize(env: Record<string, string>): { status: number | null; args: string } {

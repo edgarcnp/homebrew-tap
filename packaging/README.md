@@ -61,7 +61,9 @@ live in `core/`.
 7. **pack** — `quick-sharun` (generates AppRun, bundles the runtime closure
    including glibc and ld-linux), sidecar reconciliation, the bundled-loader
    shim for a bundle's `libexec/` binaries, `fbr finalize` (AppDir `.env` +
-   runtime hook), pkgforge `appimagetool`, then the smoke test.
+   runtime hook), pkgforge `appimagetool`, then the smoke test. A closure that
+   needs a soname the build environment does not carry aborts as
+   `MISSING_PAYLOAD_LIB`, and the record names the sonames it could not resolve.
 
 ## Descriptor
 

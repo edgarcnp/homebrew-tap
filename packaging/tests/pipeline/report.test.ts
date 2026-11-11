@@ -1039,13 +1039,15 @@ describe("workflow failure sites", () => {
   }
 
   it("writes only failure codes and stages the record contract knows", () => {
-    // Three shapes write a code: a fragment literal, the `--code` flag, and the
-    // report job's shell case arms. A stage comes from a fragment when the
-    // failing site knows it better than the job.
+    // Four shapes write a code: a fragment literal, the `--code` flag, the
+    // report job's shell case arms, and the shell pipeline's classify_failure
+    // call. A stage comes from a fragment when the failing site knows it better
+    // than the job.
     const codes = [
       ...captured(/"code":"([A-Z_]+)"/g),
       ...captured(/--code\s+([A-Z_]+)(?![A-Za-z0-9_])/g),
       ...captured(/\bcode="([A-Z_]+)"/g),
+      ...captured(/\bclassify_failure\s+([A-Z_]+)(?![A-Za-z0-9_])/g),
     ];
     assert.ok(codes.length > 0, "expected classified failure sites");
     for (const code of codes) {
