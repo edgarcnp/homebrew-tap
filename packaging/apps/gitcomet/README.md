@@ -3,34 +3,32 @@
 Descriptor: [`app.json`](app.json). Shared stages and the field reference are in
 the [pipeline README](../../README.md).
 
-Built from GitComet's signed apt repository, `apt.gitcomet.dev`.
+Built from GitComet's GitHub release tarball.
 
 ## Trust model
 
-GPG chain, the strongest in this tap alongside vscode: the keyring is pinned in
-[`assets/`](assets) by fingerprint, `InRelease` is verified against it, and both
-the `Packages` index and the downloaded `.deb` are checked against the SHA-256
-and size the signed index records. The repository host is pinned too — the
-downloader accepts no edge host. The cask's `sha256` starts as placeholders and
-is filled on the first publish, pinning the final AppImage at install.
+GitHub release asset: the release whose tag normalizes to the requested version
+must carry `gitcomet-v<version>-linux-x86_64.tar.gz` with a SHA-256 `digest` and
+a sane `size`; the download is verified against both. A missing tag, asset or
+digest is a typed not-ready. The cask's `sha256` starts as placeholders and is
+filled on the first publish, pinning the final AppImage at install.
 
 ## App-specific
 
-- **Version source** — `apt`: the index carries `<version>-<revision>` for both
-  architectures, and `normalizeUpstreamVersion` drops the numeric revision, so
-  the cask version and the feed title agree on the upstream version. The repo is
-  republished minutes after each GitHub release, which also keeps `InRelease`
-  inside the advisory's 14-day freshness window. `InRelease` publishes no
-  `Valid-Until`, so freshness falls back to `Date`.
-- **Payload** — `deb-files`: `usr/bin/gitcomet` is staged into `AppDir/bin`, and
-  the 512×512 icon comes from
-  `usr/share/icons/hicolor/512x512/apps/gitcomet.png`.
-- **No webkit** — GitComet is a GPUI/OpenGL app, not GTK/WebKit. Its deb
-  depends only on `git, libc6, libgcc-s1, libxcb1,
-  libxkbcommon-x11-0, libxkbcommon0, zlib1g`, which sharun reaches through `ldd`
-  and bundles, so the host needs none of them. `debloatArgs` is `--add-common`
-  alone — the tool's own usage examples show it standalone, it implies
-  `--add-mesa` (which this app wants), and nothing here needs ffmpeg.
+- **Version source** — `github-release` with tag prefix `v` and asset template
+  `gitcomet-v{version}-linux-x86_64.tar.gz`. The watch feed is the API's source;
+  the tap resolves only the requested release.
+- **Payload** — `tarball-tree` with `target: "bin"`: the versioned tarball root
+  (`gitcomet-v<version>-linux-x86_64/`) is detected as the single top-level
+  directory, and its contents (the `gitcomet` binary plus docs) are staged into
+  `AppDir/bin`. The tarball ships no icon, so the descriptor uses a repo-owned
+  512×512 `templates/gitcomet.png` from upstream's `assets/linux` tree
+  (`icon.base: "app"`).
+- **No webkit** — GitComet is a GPUI/OpenGL app, not GTK/WebKit. It links only
+  base system libraries, which sharun reaches through `ldd` and bundles, so the
+  host needs none of them. `debloatArgs` is `--add-common` alone — the tool's
+  own usage examples show it standalone, it implies `--add-mesa` (which this
+  app wants), and nothing here needs ffmpeg.
 - **Updater** — upstream's check is read-only: it queries the releases API and
   shows a toast with a link, it never downloads or installs anything. Setting
   `GITCOMET_NO_UPDATE_CHECK=1` — upstream's supported switch, written to the
@@ -39,8 +37,8 @@ is filled on the first publish, pinning the final AppImage at install.
 - **Release watch** — the pattern matches the release *title* (`GitComet
   v<version>`), not the tag, so capture group 1 is the version. `skipPattern`
   drops `-rc` entries: upstream's release workflow accepts `-rc.N` versions, and
-  an rc that the apt index never carries would advertise a version `resolve`
-  cannot reach, holding every run until it gave up. The cask's livecheck reads
+  an rc that has no declared release asset would be a not-ready the tap can
+  never build. The cask's livecheck reads
   this tap's own release tags (the versions the pipeline published), so it never
   sees an upstream rc.
 - **Local data** — the app keeps everything under XDG data and state only

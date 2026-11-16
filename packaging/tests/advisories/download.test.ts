@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import * as http from "node:http";
 import { after, before, describe, it } from "node:test";
 import { ChecksumMismatchError, GuardViolationError, UpstreamUnavailableError } from "../../lib/core/errors.ts";
-import { sha256Hex, sha512Base64 } from "../../lib/core/http.ts";
+import { sha256Hex, sha512Digest } from "../../lib/core/http.ts";
 import { fetchVerified, verifyPayload } from "../../lib/advisories/download.ts";
 
 let server: http.Server;
@@ -60,9 +60,16 @@ describe("verifyPayload", () => {
 
   it("checks the SHA-512 cross-check", () => {
     const bytes = Buffer.from("payload");
-    assert.doesNotThrow(() => verifyPayload(bytes, { sha512: sha512Base64(bytes) }, "asset"));
+    assert.doesNotThrow(() =>
+      verifyPayload(bytes, { sha512: sha512Digest(bytes).toString("base64") }, "asset"),
+    );
     assert.throws(
-      () => verifyPayload(bytes, { sha512: sha512Base64(Buffer.from("other")) }, "asset"),
+      () =>
+        verifyPayload(
+          bytes,
+          { sha512: sha512Digest(Buffer.from("other")).toString("base64") },
+          "asset",
+        ),
       ChecksumMismatchError,
     );
   });

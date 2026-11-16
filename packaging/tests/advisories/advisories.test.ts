@@ -1,240 +1,64 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { describe, it } from "node:test";
-import { readIndexedPackages, selectLatestPackage, verifyIndexedFile } from "../../lib/advisories/apt.ts";
-import { GuardViolationError, UpstreamConflictError, UpstreamUnavailableError } from "../../lib/core/errors.ts";
-import { sha256Hex } from "../../lib/core/http.ts";
-import { parseFinalUrl, resolveWithCdnRedirect } from "../../lib/advisories/cdn-redirect.ts";
-import {
-  parseFeedRedirect,
-  parseUpdateYml,
-  requireGithubCoords,
-  selectAsset,
-  validateFeedRepository,
-} from "../../lib/advisories/electron-feed.ts";
 import {
   isAppImageAsset,
-  isTarballAsset,
   payloadExtension,
+  resolveWithGithubRelease,
   selectRelease,
-  selectTemplatedRelease,
   updateYmlName,
 } from "../../lib/advisories/github-release.ts";
 import { assertRepositoryUrl, fetchReleaseList } from "../../lib/advisories/github-api.ts";
+import { resolveWithJsonAsset, selectJsonAsset } from "../../lib/advisories/json-asset.ts";
+import {
+  resolveWithMozillaRelease,
+  verifyDetachedSignature,
+  verifySigningKey,
+} from "../../lib/advisories/mozilla-release.ts";
 import { normalizeTagVersion, parseSha256Digest } from "../../lib/advisories/release-common.ts";
+import { parseUpdateYml } from "../../lib/advisories/update-yml.ts";
 import {
   fetchManifest,
+  resolveWithUpdateManifest,
   selectManifestAsset,
   validateManifestEndpoint,
 } from "../../lib/advisories/update-manifest.ts";
-import { compareDebVersions } from "../../lib/core/version.ts";
+import { GuardViolationError, NotReadyError } from "../../lib/core/errors.ts";
+import { REPO_ROOT } from "../../lib/core/paths.ts";
+import type { JsonAssetArtifact, MozillaReleaseArtifact } from "../../lib/core/types.ts";
 
 const SHA512 = "A".repeat(86) + "==";
-const GITBUTLER_HOSTS = ["releases.gitbutler.com"];
+const OPENCODE_HOSTS = ["opencode.ai"];
+const FIXTURE_DIR = path.join(REPO_ROOT, "packaging", "tests", "fixtures", "signature");
+const FIXTURE_FINGERPRINT = "36041EC6C8BCF1CC11EC50DC1A109BC1DB4F9184";
 
-describe("apt advisory", () => {
-  const packages = [
-    "Package: code",
-    "Architecture: amd64",
-    "Version: 1.137.0-1786487972",
-    `SHA256: ${"a".repeat(64)}`,
-    "Size: 1024",
-    "Filename: pool/main/c/code/code_1.137.0-1786487972_amd64.deb",
-    "Depends: libc6 (>= 2.17)",
-    "",
-    "Package: code",
-    "Architecture: amd64",
-    "Version: 1.136.2",
-    `SHA256: ${"b".repeat(64)}`,
-    "Size: 1024",
-    "Filename: pool/main/c/code/code_1.136.2_amd64.deb",
-    "",
-  ].join("\n");
+function isNotReady(expected: RegExp) {
+  return (error: unknown): boolean => {
+    assert.ok(error instanceof NotReadyError, `expected NotReadyError, got ${String(error)}`);
+    assert.match(error.message, expected);
+    return true;
+  };
+}
 
-  it("picks the newest entry for the requested architecture", () => {
-    const selected = selectLatestPackage(packages, "code", "amd64");
-    assert.equal(selected.version, "1.137.0");
-    assert.equal(selected.packageVersion, "1.137.0-1786487972");
-    assert.equal(selected.sha256, "a".repeat(64));
-    assert.equal(selected.depends, "libc6 (>= 2.17)");
-  });
+function jsonResponse(body: unknown, url: string, status = 200): Response {
+  const response = new Response(
+    typeof body === "string" ? body : JSON.stringify(body),
+    { status },
+  );
+  Object.defineProperty(response, "url", { value: url });
+  return response;
+}
 
-  it("applies dpkg ordering when versions carry letters", () => {
-    const withPrerelease = packages.replace("Version: 1.136.2", "Version: 1.136.2+a");
-    assert.equal(selectLatestPackage(withPrerelease, "code", "amd64").version, "1.137.0");
-    // "1.137.0a" sorts after "1.137.0"; the old string comparison disagreed with dpkg here.
-    const newer = packages.replace("Version: 1.137.0-1786487972", "Version: 1.137.0a-1");
-    assert.equal(compareDebVersions("1.137.0a-1", "1.136.2"), 1);
-    assert.equal(selectLatestPackage(newer, "code", "amd64").version, "1.137.0a");
-  });
+function bytesResponse(bytes: Buffer, url: string, status = 200): Response {
+  const response = new Response(bytes, { status });
+  Object.defineProperty(response, "url", { value: url });
+  return response;
+}
 
-  it("normalizes Mozilla's ~buildN version so the cask tracks the release feed", () => {
-    const mozilla = [
-      "Package: firefox",
-      "Architecture: amd64",
-      "Version: 156.0.1~build1",
-      `SHA256: ${"c".repeat(64)}`,
-      "Size: 1024",
-      "Filename: pool/mozilla/firefox_156.0.1~build1_amd64_deadbeef.deb",
-      "",
-      "Package: firefox",
-      "Architecture: amd64",
-      "Version: 157.0~build1",
-      `SHA256: ${"d".repeat(64)}`,
-      "Size: 2048",
-      "Filename: pool/mozilla/firefox_157.0~build1_amd64_feedface.deb",
-      "",
-    ].join("\n");
-    const selected = selectLatestPackage(mozilla, "firefox", "amd64");
-    assert.equal(selected.version, "157.0");
-    assert.equal(selected.packageVersion, "157.0~build1");
-    assert.equal(selected.sha256, "d".repeat(64));
-  });
-
-  it("rejects unsafe indexes and unknown packages", () => {
-    assert.throws(() => selectLatestPackage(packages, "firefox", "amd64"), /No firefox\/amd64 entry/);
-    assert.throws(
-      () =>
-        selectLatestPackage(
-          packages.replace("pool/main/c/code/code_1.137.0-1786487972_amd64.deb", "../../etc/passwd"),
-          "code",
-          "amd64",
-        ),
-      /Unsafe code Filename/,
-    );
-    assert.throws(
-      () =>
-        selectLatestPackage(
-          packages.replace("pool/main/c/code/code_1.137.0-1786487972_amd64.deb", "pool/../x.deb"),
-          "code",
-          "amd64",
-        ),
-      /Unsafe code Filename/,
-    );
-    assert.throws(
-      () => selectLatestPackage(packages.replace(`SHA256: ${"a".repeat(64)}`, "SHA256: nope"), "code", "amd64"),
-      /Invalid code SHA256/,
-    );
-  });
-
-  it("verifies an indexed file's size and digest", () => {
-    // exercised through a real file so the timing-safe comparison path runs
-    assert.throws(
-      () => verifyIndexedFile("/nonexistent/path", { sha256: "a".repeat(64), size: 1 }, "code"),
-      /ENOENT/,
-    );
-  });
-
-  describe("readIndexedPackages", () => {
-    const entry = "main/binary-amd64/Packages";
-    // An older generation of the same index: shorter, so the size check is the
-    // one that fires, as it did when a CDN edge lagged a republish.
-    const stale = Buffer.from("Package: code\nVersion: 1.136.2\n");
-    const fresh = Buffer.from(
-      "Package: code\nVersion: 1.137.0\nFilename: pool/main/c/code/code_1.137.0_amd64.deb\n",
-    );
-    const release = (bytes: Buffer): string =>
-      ["Origin: code stable", "SHA256:", ` ${sha256Hex(bytes)} ${bytes.length} ${entry}`, ""].join("\n");
-
-    it("re-reads the pair when the first read is a generation the index does not name", async () => {
-      const warnings: string[] = [];
-      let releases = 0;
-      let packages = 0;
-      const bytes = await readIndexedPackages({
-        relative: entry,
-        readRelease: async () => {
-          releases += 1;
-          return release(fresh);
-        },
-        readPackages: async () => {
-          packages += 1;
-          return packages === 1 ? stale : fresh;
-        },
-        warn: (message) => warnings.push(message),
-      });
-      assert.ok(bytes.equals(fresh));
-      assert.equal(releases, 2);
-      assert.equal(packages, 2);
-      assert.equal(warnings.length, 1);
-      assert.match(warnings[0] ?? "", /disagrees with the signed InRelease/);
-    });
-
-    it("refuses a mismatch that survives both reads as a transient upstream conflict", async () => {
-      let packages = 0;
-      await assert.rejects(
-        readIndexedPackages({
-          relative: entry,
-          readRelease: async () => release(fresh),
-          readPackages: async () => {
-            packages += 1;
-            return stale;
-          },
-          warn: () => {},
-        }),
-        (error: unknown) => {
-          assert.ok(error instanceof UpstreamConflictError);
-          assert.equal(error.evidence["reason"], "index_generation_mismatch");
-          assert.match(error.message, /inconsistent main\/binary-amd64\/Packages on 2 reads/);
-          assert.match(error.message, /size mismatch/);
-          return true;
-        },
-      );
-      assert.equal(packages, 2);
-    });
-
-    it("believes the first read when the pair agrees", async () => {
-      let packages = 0;
-      const bytes = await readIndexedPackages({
-        relative: entry,
-        readRelease: async () => release(fresh),
-        readPackages: async () => {
-          packages += 1;
-          return fresh;
-        },
-      });
-      assert.ok(bytes.equals(fresh));
-      assert.equal(packages, 1);
-    });
-
-    it("does not re-read a transport failure or an index the InRelease omits", async () => {
-      let releases = 0;
-      await assert.rejects(
-        readIndexedPackages({
-          relative: entry,
-          readRelease: async () => {
-            releases += 1;
-            return release(fresh);
-          },
-          readPackages: async () => {
-            throw new UpstreamUnavailableError("busy");
-          },
-          warn: () => {},
-        }),
-        UpstreamUnavailableError,
-      );
-      assert.equal(releases, 1);
-
-      let downloads = 0;
-      await assert.rejects(
-        readIndexedPackages({
-          relative: entry,
-          readRelease: async () => "Origin: code stable\nSHA256:\n",
-          readPackages: async () => {
-            downloads += 1;
-            return fresh;
-          },
-          warn: () => {},
-        }),
-        /does not index main\/binary-amd64\/Packages/,
-      );
-      assert.equal(downloads, 0);
-    });
-  });
-});
-
-describe("github-release advisory", () => {
+describe("github-release artifact", () => {
   it("accepts only the api.github.com repository shape", () => {
     assert.equal(
       assertRepositoryUrl("https://api.github.com/repos/anomalyco/opencode/"),
@@ -251,83 +75,129 @@ describe("github-release advisory", () => {
     assert.throws(() => parseSha256Digest("md5:abc"), /not a sha256 digest/);
   });
 
-  it("is exported for network-free reuse", () => {
-    assert.equal(typeof selectRelease, "function");
-  });
-
-  it("recognizes AppImage payloads and names the per-arch update yml", () => {
+  it("recognizes payload containers and names the per-arch update yml", () => {
     assert.equal(isAppImageAsset("WFHelper-2.1.0.AppImage"), true);
     assert.equal(isAppImageAsset("opencode-desktop-linux-amd64.deb"), false);
     assert.equal(updateYmlName("amd64"), "latest-linux.yml");
     assert.equal(updateYmlName("arm64"), "latest-linux-arm64.yml");
+    assert.equal(payloadExtension("zed-linux-x86_64.tar.gz"), ".tar.gz");
+    assert.equal(payloadExtension("firefox-160.0.tar.xz"), ".tar.xz");
+    assert.equal(payloadExtension("pi-desktop_1.0.0_amd64.deb"), ".deb");
+    assert.equal(payloadExtension("WFHelper-2.1.0.AppImage"), ".AppImage");
+    assert.throws(
+      () => payloadExtension("zed-linux-x86_64.zip"),
+      /not a \.deb, \.AppImage or tarball payload/,
+    );
   });
-});
 
-describe("electron-feed advisory", () => {
-  it("parses the feed redirect and pins the asset shape", () => {
-    const parsed = parseFeedRedirect(
-      "https://github.com/CodebuffAI/codebuff-community/releases/download/freebuff-desktop-v0.0.109/latest-linux.yml",
-      "freebuff-desktop-v",
-    );
-    assert.deepEqual(parsed, {
-      version: "0.0.109",
-      tag: "freebuff-desktop-v0.0.109",
-      owner: "CodebuffAI",
-      repo: "codebuff-community",
-      fileName: "latest-linux.yml",
-    });
-    assert.throws(() => parseFeedRedirect("https://evil.example.com/x/y/z", "p"), /unexpected URL/);
-    assert.throws(
-      () => parseFeedRedirect("https://github.com/a/b/releases/tag/v1/x.yml", "v"),
-      /not a release asset download/,
-    );
-    assert.throws(
-      () =>
-        parseFeedRedirect(
-          "https://github.com/a/b/releases/download/v1.0.0/latest-linux.yml",
-          "freebuff-desktop-v",
-        ),
-      /does not start with/,
-    );
-    assert.throws(
-      () =>
-        parseFeedRedirect("https://github.com/a/b/releases/download/tag1/file.txt", "tag"),
-      /not an update yml/,
-    );
-    assert.throws(
-      () =>
-        parseFeedRedirect(
-          "https://github.com/a/b/releases/download/v1.0.0/latest-linux-arm64.yml",
+  it("selects exactly the requested version, not the newest release", async () => {
+    const originalFetch = globalThis.fetch;
+    const assets = (digest: string, size: number): unknown[] => [
+      { name: "zed-linux-x86_64.tar.gz", digest: `sha256:${digest}`, size },
+    ];
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify([
+          { tag_name: "v1.29.1-pre", draft: false, prerelease: true, assets: assets("b".repeat(64), 90) },
+          { tag_name: "v1.28.1", draft: false, prerelease: false, assets: assets("a".repeat(64), 90705601) },
+          { tag_name: "v1.27.0", draft: false, prerelease: false, assets: assets("c".repeat(64), 90705601) },
+        ]),
+        { status: 200 },
+      )) as unknown as typeof fetch;
+    try {
+      const selected = await selectRelease(
+        "https://api.github.com/repos/zed-industries/zed",
+        "zed-linux-{appimage_arch}.tar.gz",
+        "v",
+        "1.27.0",
+        "amd64",
+        "",
+      );
+      assert.equal(selected.tag, "v1.27.0");
+      assert.equal(selected.version, "1.27.0");
+      assert.equal(selected.asset.name, "zed-linux-x86_64.tar.gz");
+      assert.equal(selected.asset.digest, "c".repeat(64));
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("is not-ready when the requested tag or its asset is absent", async () => {
+    const originalFetch = globalThis.fetch;
+    const release = (assets: unknown[]) =>
+      new Response(
+        JSON.stringify([
+          { tag_name: "v1.28.1", draft: false, prerelease: false, assets },
+        ]),
+        { status: 200 },
+      );
+    try {
+      globalThis.fetch = (async () => release([])) as unknown as typeof fetch;
+      await assert.rejects(
+        selectRelease(
+          "https://api.github.com/repos/zed-industries/zed",
+          "zed-linux-{appimage_arch}.tar.gz",
           "v",
-          "latest-linux.yml",
+          "1.29.0",
+          "amd64",
+          "",
         ),
-      /not the requested/,
-    );
+        isNotReady(/no published release carries v1\.29\.0/),
+      );
+
+      globalThis.fetch = (async () =>
+        release([
+          {
+            name: "zed-linux-x86_64.tar.gz",
+            digest: "no-digest",
+            size: 10,
+          },
+        ])) as unknown as typeof fetch;
+      await assert.rejects(
+        selectRelease(
+          "https://api.github.com/repos/zed-industries/zed",
+          "zed-linux-{appimage_arch}.tar.gz",
+          "v",
+          "1.28.1",
+          "amd64",
+          "",
+        ),
+        isNotReady(/has no zed-linux-x86_64\.tar\.gz with a SHA-256 digest/),
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 
-  it("rejects a feed host that is not the configured one", () => {
-    assert.equal(
-      validateFeedRepository("https://freebuff.com/api/desktop/updates/"),
-      "https://freebuff.com/api/desktop/updates",
-    );
-    assert.throws(() => validateFeedRepository("http://freebuff.com/x"), /must be https/);
-    assert.throws(() => validateFeedRepository("https://freebuff.com/x?y=1"), /query or fragment/);
-    assert.throws(() => validateFeedRepository("nope"), /Invalid feed repository URL/);
-  });
-
-  it("cross-checks the feed coordinates against the configured repository", () => {
-    const parsed = {
-      version: "0.0.109",
-      tag: "freebuff-desktop-v0.0.109",
-      owner: "CodebuffAI",
-      repo: "codebuff-community",
-      fileName: "latest-linux.yml",
-    };
-    requireGithubCoords(parsed, "https://api.github.com/repos/CodebuffAI/codebuff-community");
-    assert.throws(
-      () => requireGithubCoords(parsed, "https://api.github.com/repos/other/repo"),
-      /does not match configured repository/,
-    );
+  it("reports not-ready from the resolver instead of throwing", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "fbr-github-"));
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify([]), { status: 200 })) as unknown as typeof fetch;
+    try {
+      const outcome = await resolveWithGithubRelease(
+        {
+          kind: "github-release",
+          repository: "https://api.github.com/repos/zed-industries/zed",
+          packageName: "zed",
+          tagPrefix: "v",
+          assetNameTemplate: "zed-linux-{appimage_arch}.tar.gz",
+        },
+        {
+          architecture: "amd64",
+          requestedVersion: "9.9.9",
+          outputDir: dir,
+          metadataPath: path.join(dir, "metadata.json"),
+          metadataOnly: true,
+          token: "",
+        },
+      );
+      assert.equal(outcome.status, "not-ready");
+      assert.equal(fs.existsSync(path.join(dir, "metadata.json")), false);
+    } finally {
+      globalThis.fetch = originalFetch;
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("parses the electron-builder update yml", () => {
@@ -345,153 +215,46 @@ describe("electron-feed advisory", () => {
     const parsed = parseUpdateYml(body, "0.0.109", "Freebuff-0.0.109-linux-x86_64.AppImage");
     assert.deepEqual(parsed, { sha512: SHA512, size: 1234567 });
 
-    assert.throws(() => parseUpdateYml(body, "0.0.110", "Freebuff-0.0.109-linux-x86_64.AppImage"), /does not match tag version/);
-    assert.throws(() => parseUpdateYml(body, "0.0.109", "Other.AppImage"), /does not match expected/);
     assert.throws(
-      () => parseUpdateYml(body.replace("path: Freebuff", "path: Other"), "0.0.109", "Freebuff-0.0.109-linux-x86_64.AppImage"),
-      /does not match expected/,
+      () => parseUpdateYml(body, "0.0.110", "Freebuff-0.0.109-linux-x86_64.AppImage"),
+      /does not match tag version/,
     );
     assert.throws(
-      () => parseUpdateYml(body.replace(`sha512: ${SHA512}\nreleaseDate`, "sha512: B\nreleaseDate"), "0.0.109", "Freebuff-0.0.109-linux-x86_64.AppImage"),
-      /disagrees with the files entry/,
+      () => parseUpdateYml(body, "0.0.109", "Other.AppImage"),
+      /does not match expected/,
     );
     assert.throws(
       () => parseUpdateYml(body.replace("size: 1234567", "size: 0"), "0.0.109", "Freebuff-0.0.109-linux-x86_64.AppImage"),
       /not a sane byte count/,
     );
-    assert.throws(
-      () =>
-        parseUpdateYml(
-          body.replaceAll(SHA512, "short"),
-          "0.0.109",
-          "Freebuff-0.0.109-linux-x86_64.AppImage",
-        ),
-      /not a base64 SHA-512/,
-    );
     assert.throws(() => parseUpdateYml("version: 1.0.0\n", "1.0.0", "x"), /missing path/);
   });
 
-  it("selects the release asset and rejects mismatches", () => {
-    const release = {
-      tag_name: "freebuff-desktop-v0.0.109",
-      draft: false,
-      assets: [
-        { name: "Freebuff-0.0.109-linux-x86_64.AppImage", digest: `sha256:${"c".repeat(64)}`, size: 100 },
-      ],
-    };
-    const asset = selectAsset(release, "freebuff-desktop-v0.0.109", "Freebuff-0.0.109-linux-x86_64.AppImage", 100);
-    assert.deepEqual(asset, {
-      name: "Freebuff-0.0.109-linux-x86_64.AppImage",
-      sha256: "c".repeat(64),
-      size: 100,
-    });
-    assert.throws(
-      () => selectAsset(release, "freebuff-desktop-v0.0.108", "Freebuff-0.0.109-linux-x86_64.AppImage", 100),
-      /does not match requested/,
-    );
-    assert.throws(
-      () => selectAsset({ ...release, draft: true }, "freebuff-desktop-v0.0.109", "Freebuff-0.0.109-linux-x86_64.AppImage", 100),
-      /is a draft/,
-    );
-    assert.throws(
-      () => selectAsset({ ...release, prerelease: true }, "freebuff-desktop-v0.0.109", "Freebuff-0.0.109-linux-x86_64.AppImage", 100),
-      /is a prerelease/,
-    );
-    assert.throws(
-      () => selectAsset(release, "freebuff-desktop-v0.0.109", "absent.AppImage", 100),
-      /has no asset/,
-    );
-    assert.throws(
-      () => selectAsset(release, "freebuff-desktop-v0.0.109", "Freebuff-0.0.109-linux-x86_64.AppImage", 101),
-      /does not match update yml size/,
-    );
-    assert.throws(
-      () => selectAsset(
-        { ...release, assets: [{ name: "Freebuff-0.0.109-linux-x86_64.AppImage", digest: "sha1:x", size: 100 }] },
-        "freebuff-desktop-v0.0.109",
-        "Freebuff-0.0.109-linux-x86_64.AppImage",
-        100,
-      ),
-      /not a sha256 digest/,
-    );
-  });
-});
-
-describe("cdn-redirect advisory", () => {
-  const target =
-    "https://releases.gitbutler.com/releases/release/0.22.3-3215/linux/x86_64/GitButler_0.22.3_amd64.deb";
-
-  it("validates the upstream .deb URL shape", () => {
-    const parsed = parseFinalUrl(target, GITBUTLER_HOSTS);
-    assert.equal(parsed.repository, "https://releases.gitbutler.com");
-    assert.equal(parsed.fileVersion, "0.22.3");
-    assert.equal(parsed.releaseVersion, "0.22.3-3215");
-    assert.equal(parsed.archPath, "x86_64");
-    assert.equal(parsed.fileArch, "amd64");
-  });
-
-  it("rejects a .deb whose filename arch does not match the request", async () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "fbr-cdn-"));
+  it("walks past the first release page", async () => {
+    const urls: string[] = [];
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async () => {
-      const response = new Response("deb-bytes", { status: 200 });
-      Object.defineProperty(response, "url", {
-        value:
-          "https://releases.gitbutler.com/releases/release/0.22.3-3215/linux/x86_64/GitButler_0.22.3_arm64.deb",
-      });
-      return response;
+    const page = (count: number): unknown[] =>
+      Array.from({ length: count }, (_entry, index) => ({
+        tag_name: `t${index}`,
+        draft: false,
+        prerelease: false,
+        assets: [],
+      }));
+    globalThis.fetch = (async (input: string | URL) => {
+      const url = String(input);
+      urls.push(url);
+      return new Response(
+        JSON.stringify(url.includes("page=2") ? page(2) : page(100)),
+        { status: 200 },
+      );
     }) as unknown as typeof fetch;
     try {
-      await assert.rejects(
-        resolveWithCdnRedirect(
-          {
-            kind: "cdn-redirect",
-            repository: "https://releases.gitbutler.com/download",
-            redirectHosts: GITBUTLER_HOSTS,
-            packageName: "gitbutler",
-            debName: "gitbutler",
-          },
-          {
-            architecture: "amd64",
-            outputDir: dir,
-            metadataPath: path.join(dir, "metadata.json"),
-            metadataOnly: true,
-            token: "",
-          },
-        ),
-        /does not match requested/,
-      );
+      const releases = await fetchReleaseList("https://api.github.com/repos/o/r", "");
+      assert.equal(releases.length, 102);
+      assert.match(urls[1] ?? "", /page=2/);
     } finally {
       globalThis.fetch = originalFetch;
-      fs.rmSync(dir, { recursive: true, force: true });
     }
-  });
-
-  it("rejects off-host redirects and unrecognized layouts", () => {
-    assert.throws(
-      () => parseFinalUrl(target.replace("releases.gitbutler.com", "evil.example.com"), GITBUTLER_HOSTS),
-      /Unexpected redirect host/,
-    );
-    assert.throws(
-      () => parseFinalUrl(target.replace("GitButler_0.22.3_amd64.deb", "setup.exe"), GITBUTLER_HOSTS),
-      /Unrecognized \.deb filename/,
-    );
-    assert.throws(
-      () => parseFinalUrl(target.replace("GitButler_0.22.3_", "GitButler_0.22.4_"), GITBUTLER_HOSTS),
-      /does not match filename version/,
-    );
-    assert.throws(
-      () => parseFinalUrl(target.replace("/0.22.3-3215/", "/v0.22.3/"), GITBUTLER_HOSTS),
-      /Unrecognized release segment/,
-    );
-    assert.throws(
-      () => parseFinalUrl(target.replace("/releases/release/", "/releases/other/"), GITBUTLER_HOSTS),
-      /Unrecognized release path/,
-    );
-    assert.throws(
-      () => parseFinalUrl(target.replace("https://", "http://"), GITBUTLER_HOSTS),
-      /non-HTTPS URL/,
-    );
   });
 });
 
@@ -523,8 +286,6 @@ function manifestFor(version = "2.0.8"): Record<string, unknown> {
   };
 }
 
-const OPENCODE_HOSTS = ["opencode.ai"];
-
 function manifestEntry(m: Record<string, unknown>): Record<string, unknown> {
   const metadata = m["metadata"] as Record<string, unknown>;
   const files = metadata["files"] as Record<string, Record<string, unknown>>;
@@ -537,12 +298,13 @@ function mutatedEntry(mutate: (entry: Record<string, unknown>) => void): Record<
   return copy;
 }
 
-describe("update-manifest advisory", () => {
+describe("update-manifest artifact", () => {
   it("selects the requested asset from a valid manifest", () => {
     const selected = selectManifestAsset(
       manifestFor(),
       "opencode-desktop-linux-arm64.deb",
       OPENCODE_HOSTS,
+      "2.0.8",
     );
     assert.equal(selected.version, "2.0.8");
     assert.equal(selected.repository, "https://opencode.ai");
@@ -554,38 +316,89 @@ describe("update-manifest advisory", () => {
     });
   });
 
-  it("rejects a non-object, version-less or badly versioned manifest", () => {
-    assert.throws(() => selectManifestAsset("nope", "a", OPENCODE_HOSTS), /not an object/);
-    assert.throws(() => selectManifestAsset([], "a", OPENCODE_HOSTS), /not an object/);
+  it("is not-ready when the manifest publishes another version", () => {
     assert.throws(
-      () => selectManifestAsset({ ...manifestFor(), version: 2 }, "a", OPENCODE_HOSTS),
+      () =>
+        selectManifestAsset(
+          manifestFor(),
+          "opencode-desktop-linux-amd64.deb",
+          OPENCODE_HOSTS,
+          "2.0.9",
+        ),
+      isNotReady(/update manifest publishes 2\.0\.8; requested 2\.0\.9/),
+    );
+  });
+
+  it("is not-ready for a missing asset, url, digest or size", () => {
+    assert.throws(
+      () => selectManifestAsset(manifestFor(), "nope.deb", OPENCODE_HOSTS, "2.0.8"),
+      isNotReady(/has no entry for nope\.deb/),
+    );
+    assert.throws(
+      () =>
+        selectManifestAsset(
+          mutatedEntry((entry) => {
+            entry["url"] = "";
+          }),
+          "opencode-desktop-linux-amd64.deb",
+          OPENCODE_HOSTS,
+          "2.0.8",
+        ),
+      isNotReady(/has no url/),
+    );
+    assert.throws(
+      () =>
+        selectManifestAsset(
+          mutatedEntry((entry) => {
+            entry["sha256"] = "";
+          }),
+          "opencode-desktop-linux-amd64.deb",
+          OPENCODE_HOSTS,
+          "2.0.8",
+        ),
+      isNotReady(/has no sha256/),
+    );
+    assert.throws(
+      () =>
+        selectManifestAsset(
+          mutatedEntry((entry) => {
+            delete entry["size"];
+          }),
+          "opencode-desktop-linux-amd64.deb",
+          OPENCODE_HOSTS,
+          "2.0.8",
+        ),
+      isNotReady(/has no size/),
+    );
+  });
+
+  it("rejects a non-object, version-less or badly versioned manifest", () => {
+    assert.throws(() => selectManifestAsset("nope", "a", OPENCODE_HOSTS, "2.0.8"), /not an object/);
+    assert.throws(() => selectManifestAsset([], "a", OPENCODE_HOSTS, "2.0.8"), /not an object/);
+    assert.throws(
+      () => selectManifestAsset({ ...manifestFor(), version: 2 }, "a", OPENCODE_HOSTS, "2.0.8"),
       /no sane version/,
     );
     assert.throws(
-      () => selectManifestAsset({ ...manifestFor(), version: "/etc" }, "a", OPENCODE_HOSTS),
+      () => selectManifestAsset({ ...manifestFor(), version: "/etc" }, "a", OPENCODE_HOSTS, "/etc"),
       /no sane version/,
     );
   });
 
   it("rejects a manifest without a metadata object or a files map", () => {
     assert.throws(
-      () => selectManifestAsset({ version: "2.0.8" }, "a", OPENCODE_HOSTS),
+      () => selectManifestAsset({ version: "2.0.8" }, "a", OPENCODE_HOSTS, "2.0.8"),
       /no metadata object/,
     );
     assert.throws(
-      () => selectManifestAsset({ version: "2.0.8", metadata: { files: [] } }, "a", OPENCODE_HOSTS),
+      () =>
+        selectManifestAsset(
+          { version: "2.0.8", metadata: { files: [] } },
+          "a",
+          OPENCODE_HOSTS,
+          "2.0.8",
+        ),
       /no metadata\.files map/,
-    );
-  });
-
-  it("rejects a missing or malformed asset entry", () => {
-    assert.throws(
-      () => selectManifestAsset(manifestFor(), "nope.deb", OPENCODE_HOSTS),
-      /no entry for nope\.deb/,
-    );
-    assert.throws(
-      () => selectManifestAsset({ ...manifestFor(), metadata: { files: { x: "y" } } }, "x", OPENCODE_HOSTS),
-      /no entry for x/,
     );
   });
 
@@ -595,15 +408,12 @@ describe("update-manifest advisory", () => {
         entry["url"] = url;
       });
     assert.throws(
-      () => selectManifestAsset(withUrl(""), "opencode-desktop-linux-amd64.deb", OPENCODE_HOSTS),
-      /has no url/,
-    );
-    assert.throws(
       () =>
         selectManifestAsset(
           withUrl("http://opencode.ai/files/bin/2.0.8/x.deb"),
           "opencode-desktop-linux-amd64.deb",
           OPENCODE_HOSTS,
+          "2.0.8",
         ),
       /must be https/,
     );
@@ -613,6 +423,7 @@ describe("update-manifest advisory", () => {
           withUrl("https://opencode.ai/files/bin/2.0.8/x.deb?foo=1"),
           "opencode-desktop-linux-amd64.deb",
           OPENCODE_HOSTS,
+          "2.0.8",
         ),
       /must not contain a query or fragment/,
     );
@@ -622,6 +433,7 @@ describe("update-manifest advisory", () => {
           withUrl("https://evil.example.com/files/bin/2.0.8/x.deb"),
           "opencode-desktop-linux-amd64.deb",
           OPENCODE_HOSTS,
+          "2.0.8",
         ),
       /Unexpected update manifest asset host/,
     );
@@ -631,6 +443,7 @@ describe("update-manifest advisory", () => {
           withUrl("https://opencode.ai/files/bin/2.0.9/x.deb"),
           "opencode-desktop-linux-amd64.deb",
           OPENCODE_HOSTS,
+          "2.0.8",
         ),
       /does not carry version 2\.0\.8/,
     );
@@ -645,42 +458,58 @@ describe("update-manifest advisory", () => {
           }),
           "opencode-desktop-linux-amd64.deb",
           OPENCODE_HOSTS,
+          "2.0.8",
         ),
       /sha256/,
     );
-    assert.throws(
-      () =>
-        selectManifestAsset(
-          mutatedEntry((entry) => {
-            entry["size"] = 0;
-          }),
-          "opencode-desktop-linux-amd64.deb",
-          OPENCODE_HOSTS,
-        ),
-      /not a sane byte count/,
-    );
-    assert.throws(
-      () =>
-        selectManifestAsset(
-          mutatedEntry((entry) => {
-            entry["size"] = -1;
-          }),
-          "opencode-desktop-linux-amd64.deb",
-          OPENCODE_HOSTS,
-        ),
-      /not a sane byte count/,
-    );
-    assert.throws(
-      () =>
-        selectManifestAsset(
-          mutatedEntry((entry) => {
-            entry["size"] = 1.5;
-          }),
-          "opencode-desktop-linux-amd64.deb",
-          OPENCODE_HOSTS,
-        ),
-      /not a sane byte count/,
-    );
+    for (const size of [0, -1, 1.5]) {
+      assert.throws(
+        () =>
+          selectManifestAsset(
+            mutatedEntry((entry) => {
+              entry["size"] = size;
+            }),
+            "opencode-desktop-linux-amd64.deb",
+            OPENCODE_HOSTS,
+            "2.0.8",
+          ),
+        /not a sane byte count/,
+      );
+    }
+  });
+
+  it("reports not-ready from the resolver when the manifest is behind", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "fbr-manifest-"));
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      jsonResponse(
+        manifestFor("2.0.8"),
+        "https://opencode.ai/update/api/latest/desktop/opencode",
+      )) as unknown as typeof fetch;
+    try {
+      const outcome = await resolveWithUpdateManifest(
+        {
+          kind: "update-manifest",
+          repository: "https://opencode.ai/update/api/latest/desktop/opencode",
+          packageName: "opencode-desktop",
+          assetTemplate: "opencode-desktop-linux-{arch}.deb",
+          downloadHosts: OPENCODE_HOSTS,
+        },
+        {
+          architecture: "amd64",
+          requestedVersion: "2.0.9",
+          outputDir: dir,
+          metadataPath: path.join(dir, "metadata.json"),
+          metadataOnly: true,
+          token: "",
+        },
+      );
+      assert.equal(outcome.status, "not-ready");
+      assert.equal(fs.existsSync(path.join(dir, "metadata.json")), false);
+    } finally {
+      globalThis.fetch = originalFetch;
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("normalizes the manifest endpoint and rejects unsafe ones", () => {
@@ -692,39 +521,8 @@ describe("update-manifest advisory", () => {
     assert.throws(() => validateManifestEndpoint("https://opencode.ai/x?y=1"), /query or fragment/);
     assert.throws(() => validateManifestEndpoint("not a url"), /Invalid update manifest endpoint/);
   });
-});
 
-describe("fetchReleaseList", () => {
-  it("walks past the first page", async () => {
-    const urls: string[] = [];
-    const originalFetch = globalThis.fetch;
-    const page = (count: number): unknown[] =>
-      Array.from({ length: count }, (_entry, index) => ({
-        tag_name: `t${index}`,
-        draft: false,
-        prerelease: false,
-        assets: [],
-      }));
-    globalThis.fetch = (async (input: string | URL) => {
-      const url = String(input);
-      urls.push(url);
-      return new Response(
-        JSON.stringify(url.includes("page=2") ? page(2) : page(100)),
-        { status: 200 },
-      );
-    }) as unknown as typeof fetch;
-    try {
-      const releases = await fetchReleaseList("https://api.github.com/repos/o/r", "");
-      assert.equal(releases.length, 102);
-      assert.match(urls[1] ?? "", /page=2/);
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
-  });
-});
-
-describe("fetchManifest", () => {
-  it("rejects a redirect that leaves the pinned host", async () => {
+  it("rejects a manifest redirect that leaves the pinned host", async () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = (async () => {
       const response = new Response('{"version":"1.0.0"}', { status: 200 });
@@ -732,78 +530,258 @@ describe("fetchManifest", () => {
       return response;
     }) as unknown as typeof fetch;
     try {
-      await assert.rejects(
-        fetchManifest("https://good.example/manifest.json"),
-        (error: unknown) => {
-          assert.ok(error instanceof GuardViolationError);
-          return true;
-        },
-      );
+      await assert.rejects(fetchManifest("https://good.example/manifest.json"), (error: unknown) => {
+        assert.ok(error instanceof GuardViolationError);
+        return true;
+      });
     } finally {
       globalThis.fetch = originalFetch;
     }
   });
 });
 
-describe("github-release tarball assets", () => {
-  it("recognizes a bundle tarball and not its other containers", () => {
-    assert.equal(isTarballAsset("zed-linux-x86_64.tar.gz"), true);
-    assert.equal(isTarballAsset("zed-linux-x86_64.tar.xz"), false);
-    assert.equal(isTarballAsset("zed-linux-x86_64.deb"), false);
-  });
+const JSON_ASSET: JsonAssetArtifact = {
+  kind: "json-asset",
+  url: "https://update.example/api/linux-x64/stable/latest",
+  downloadHosts: ["update.example", "download.example"],
+  urlField: "url",
+  sha256Field: "sha256hash",
+  versionField: "productVersion",
+  packageName: "code",
+};
 
-  it("names a payload by its container and rejects anything else", () => {
-    assert.equal(payloadExtension("zed-linux-x86_64.tar.gz"), ".tar.gz");
-    assert.equal(payloadExtension("pi-desktop_1.0.0_amd64.deb"), ".deb");
-    assert.equal(payloadExtension("WFHelper-2.1.0.AppImage"), ".AppImage");
+function jsonDocument(version = "1.146.0"): Record<string, unknown> {
+  return {
+    productVersion: version,
+    url: "https://download.example/stable/1.146.0/code-stable-x64.tar.gz",
+    sha256hash: "a".repeat(64),
+  };
+}
+
+describe("json-asset artifact", () => {
+  it("binds the document to the requested version", () => {
+    assert.deepEqual(selectJsonAsset(jsonDocument(), JSON_ASSET, "1.146.0"), {
+      version: "1.146.0",
+      url: "https://download.example/stable/1.146.0/code-stable-x64.tar.gz",
+      sha256: "a".repeat(64),
+    });
     assert.throws(
-      () => payloadExtension("zed-linux-x86_64.zip"),
-      /not a \.deb, \.AppImage or \.tar\.gz payload/,
+      () => selectJsonAsset(jsonDocument(), JSON_ASSET, "1.147.0"),
+      isNotReady(/update document publishes 1\.146\.0; requested 1\.147\.0/),
     );
   });
 
-  it("selects the newest stable release carrying the templated tarball", async () => {
-    const originalFetch = globalThis.fetch;
-    const assets = (digest: string, size: number): unknown[] => [
-      { name: "zed-linux-x86_64.tar.gz", digest: `sha256:${digest}`, size },
-    ];
-    globalThis.fetch = (async () =>
-      new Response(
-        JSON.stringify([
-          { tag_name: "v1.28.0-pre", draft: false, prerelease: true, assets: assets("b".repeat(64), 90) },
-          { tag_name: "v1.27.0", draft: false, prerelease: false, assets: assets("a".repeat(64), 90705601) },
-        ]),
-        { status: 200 },
-      )) as unknown as typeof fetch;
-    try {
-      const selected = await selectTemplatedRelease(
-        "https://api.github.com/repos/zed-industries/zed",
-        "zed-linux-{appimage_arch}.tar.gz",
-        "v",
-        "amd64",
-        "",
+  it("is not-ready without a version, url or digest, and rejects a bad digest", () => {
+    for (const field of ["productVersion", "url", "sha256hash"]) {
+      const body = jsonDocument();
+      delete body[field];
+      assert.throws(
+        () => selectJsonAsset(body, JSON_ASSET, "1.146.0"),
+        isNotReady(new RegExp(`has no ${field}`)),
       );
-      // The preview is newer but unpublished, and {appimage_arch} must resolve
-      // to the x86_64 spelling Zed puts in the asset name, not amd64.
-      assert.equal(selected.tag, "v1.27.0");
-      assert.equal(selected.version, "1.27.0");
-      assert.equal(selected.asset.name, "zed-linux-x86_64.tar.gz");
-      assert.equal(selected.asset.digest, "a".repeat(64));
+    }
+    assert.throws(
+      () =>
+        selectJsonAsset(
+          { ...jsonDocument(), sha256hash: "not-a-digest" },
+          JSON_ASSET,
+          "1.146.0",
+        ),
+      /sha256hash/,
+    );
+    assert.throws(() => selectJsonAsset("nope", JSON_ASSET, "1.146.0"), /not an object/);
+  });
+
+  it("downloads, verifies and measures the declared asset", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "fbr-json-asset-"));
+    const payload = Buffer.from("vscode tarball bytes");
+    const digest = createHash("sha256").update(payload).digest("hex");
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: string | URL) => {
+      const url = String(input);
+      if (url === JSON_ASSET.url) {
+        return jsonResponse({ ...jsonDocument(), sha256hash: digest }, url);
+      }
+      return bytesResponse(payload, url);
+    }) as unknown as typeof fetch;
+    try {
+      const outcome = await resolveWithJsonAsset(JSON_ASSET, {
+        architecture: "amd64",
+        requestedVersion: "1.146.0",
+        outputDir: dir,
+        metadataPath: path.join(dir, "metadata.json"),
+        metadataOnly: false,
+        token: "",
+      });
+      assert.equal(outcome.status, "ready");
+      if (outcome.status !== "ready") return;
+      assert.equal(outcome.metadata.version, "1.146.0");
+      assert.equal(outcome.metadata.sha256, digest);
+      assert.equal(outcome.metadata.size, payload.length);
+      assert.ok(outcome.metadata.path !== null);
+      assert.deepEqual(fs.readFileSync(outcome.metadata.path), payload);
     } finally {
       globalThis.fetch = originalFetch;
+      fs.rmSync(dir, { recursive: true, force: true });
     }
   });
 
-  it("rejects a template that names a fixed file", async () => {
-    await assert.rejects(
-      selectTemplatedRelease(
-        "https://api.github.com/repos/zed-industries/zed",
-        "zed-linux.tar.gz",
-        "v",
-        "amd64",
-        "",
-      ),
-      /must contain a placeholder/,
+  it("returns not-ready when the document publishes another version", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "fbr-json-asset-"));
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: string | URL) =>
+      jsonResponse(jsonDocument("1.145.0"), String(input))) as unknown as typeof fetch;
+    try {
+      const outcome = await resolveWithJsonAsset(JSON_ASSET, {
+        architecture: "amd64",
+        requestedVersion: "1.146.0",
+        outputDir: dir,
+        metadataPath: path.join(dir, "metadata.json"),
+        metadataOnly: true,
+        token: "",
+      });
+      assert.equal(outcome.status, "not-ready");
+      if (outcome.status !== "not-ready") return;
+      assert.match(outcome.detail, /publishes 1\.145\.0; requested 1\.146\.0/);
+      assert.equal(fs.existsSync(path.join(dir, "metadata.json")), false);
+    } finally {
+      globalThis.fetch = originalFetch;
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+const MOZILLA_FIXTURE: MozillaReleaseArtifact = {
+  kind: "mozilla-release",
+  urlTemplate: "https://ftp.mozilla.org/firefox/{version}/payload.txt",
+  signatureTemplate: "{url}.asc",
+  packageName: "firefox",
+  fingerprint: FIXTURE_FINGERPRINT,
+  keyPath: "packaging/tests/fixtures/signature/release-key.asc",
+};
+
+describe("mozilla-release artifact", () => {
+  it("pins the committed Mozilla release key", () => {
+    const keyPath = path.join(REPO_ROOT, "packaging/apps/firefox/assets/mozilla-release-key.asc");
+    assert.doesNotThrow(() =>
+      verifySigningKey(keyPath, "14F26682D0916CDD81E37B6D61B7B526D98F0353"),
     );
+    assert.throws(
+      () => verifySigningKey(keyPath, "0".repeat(40)),
+      /does not contain expected fingerprint/,
+    );
+  });
+
+  it("verifies a detached signature and rejects tampered bytes", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "fbr-signature-"));
+    const payload = path.join(dir, "payload.bin");
+    const tampered = path.join(dir, "tampered.bin");
+    fs.writeFileSync(payload, fs.readFileSync(path.join(FIXTURE_DIR, "payload.txt")));
+    fs.writeFileSync(tampered, "tampered\n");
+    try {
+      assert.doesNotThrow(() =>
+        verifyDetachedSignature(
+          payload,
+          path.join(FIXTURE_DIR, "payload.txt.asc"),
+          path.join(FIXTURE_DIR, "release-key.asc"),
+          FIXTURE_FINGERPRINT,
+          dir,
+        ),
+      );
+      assert.throws(
+        () =>
+          verifyDetachedSignature(
+            tampered,
+            path.join(FIXTURE_DIR, "payload.txt.asc"),
+            path.join(FIXTURE_DIR, "release-key.asc"),
+            FIXTURE_FINGERPRINT,
+            dir,
+          ),
+        /signature verification failed/,
+      );
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("downloads, verifies and hashes the signed release tarball", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "fbr-mozilla-"));
+    const payload = fs.readFileSync(path.join(FIXTURE_DIR, "payload.txt"));
+    const signature = fs.readFileSync(path.join(FIXTURE_DIR, "payload.txt.asc"));
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: string | URL) => {
+      const url = String(input);
+      return url.endsWith(".asc")
+        ? bytesResponse(signature, url)
+        : bytesResponse(payload, url);
+    }) as unknown as typeof fetch;
+    try {
+      const outcome = await resolveWithMozillaRelease(MOZILLA_FIXTURE, {
+        architecture: "amd64",
+        requestedVersion: "160.0",
+        outputDir: dir,
+        metadataPath: path.join(dir, "metadata.json"),
+        metadataOnly: true,
+        token: "",
+      });
+      assert.equal(outcome.status, "ready");
+      if (outcome.status !== "ready") return;
+      assert.equal(outcome.metadata.version, "160.0");
+      assert.equal(outcome.metadata.size, payload.length);
+      assert.equal(outcome.metadata.path, null);
+      assert.equal(
+        outcome.metadata.repositoryPath,
+        "firefox/160.0/payload.txt",
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("is not-ready for a missing signature or a failed verification", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "fbr-mozilla-"));
+    const payload = fs.readFileSync(path.join(FIXTURE_DIR, "payload.txt"));
+    const signature = fs.readFileSync(path.join(FIXTURE_DIR, "payload.txt.asc"));
+    const originalFetch = globalThis.fetch;
+    try {
+      globalThis.fetch = (async (input: string | URL) => {
+        const url = String(input);
+        if (url.endsWith(".asc")) return jsonResponse("not found", url, 404);
+        return bytesResponse(payload, url);
+      }) as unknown as typeof fetch;
+      const missing = await resolveWithMozillaRelease(MOZILLA_FIXTURE, {
+        architecture: "amd64",
+        requestedVersion: "160.0",
+        outputDir: dir,
+        metadataPath: path.join(dir, "metadata.json"),
+        metadataOnly: true,
+        token: "",
+      });
+      assert.equal(missing.status, "not-ready");
+
+      globalThis.fetch = (async (input: string | URL) => {
+        const url = String(input);
+        return url.endsWith(".asc")
+          ? bytesResponse(signature, url)
+          : jsonResponse("tampered\n", url);
+      }) as unknown as typeof fetch;
+      const failed = await resolveWithMozillaRelease(MOZILLA_FIXTURE, {
+        architecture: "amd64",
+        requestedVersion: "160.0",
+        outputDir: dir,
+        metadataPath: path.join(dir, "metadata.json"),
+        metadataOnly: true,
+        token: "",
+      });
+      assert.equal(failed.status, "not-ready");
+      if (failed.status === "not-ready") {
+        assert.match(failed.detail, /signature verification failed/);
+      }
+      assert.equal(fs.existsSync(path.join(dir, "metadata.json")), false);
+    } finally {
+      globalThis.fetch = originalFetch;
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

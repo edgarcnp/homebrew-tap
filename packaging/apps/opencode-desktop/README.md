@@ -16,9 +16,10 @@ version and each asset's SHA-256 and size.
   verifies the download against the manifest digest. `--metadata-only` resolve
   needs no download.
 - **Release watch** — the same manifest, declared with `format: "json"` and
-  `versionField: "version"`, so the dispatch signal and the advisory's resolve
-  read one source instead of the pre-v2 GitHub releases feed (which still
-  publishes 1.x tags). `repo` stays `anomalyco/opencode` for the API's watcher.
+  `versionField: "version"`, so the API's dispatch signal and the tap's artifact
+  resolve read one version instead of the pre-v2 GitHub releases feed (which
+  still publishes 1.x tags). The tap never reads the watch block itself.
+  `repo` stays `anomalyco/opencode` for the API's watcher.
 - **Payload** — `deb-tree`: the whole `opt/OpenCode` tree is staged into
   `AppDir/bin`; the build asserts the `.deb` `Architecture` matches the request.
 - **Updater** — `resources/app-update.yml` is removed (`required: true`, since
@@ -38,8 +39,8 @@ Upstream versions are used verbatim.
 
 ## Local run
 
-`PACKAGE_VERSION` is optional; set, it must match the resolved version
-(CI always sets it).
+`PACKAGE_VERSION` is the requested version and is required; the build fails
+if the resolved version differs (CI always sets it).
 
 ```sh
 TARGET_ARCH=amd64 ./build.sh

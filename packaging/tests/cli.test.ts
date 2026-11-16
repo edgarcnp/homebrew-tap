@@ -10,6 +10,7 @@ import { errorExitCode } from "../lib/cli.ts";
 import {
   ChecksumMismatchError,
   GuardViolationError,
+  NotReadyError,
   UpdaterResidualError,
   UpstreamConflictError,
   UpstreamUnavailableError,
@@ -67,45 +68,52 @@ describe("fbr CLI contract", () => {
   });
 
   it("accepts the gate flags exactly as the workflow passes them", () => {
-    const base = ["gate", "--app", "vscode", "--upstream-version", vscodeCaskVersion(), "--release-exists"];
-
-    const matching = fbr([...base, "--release-matches-cask", "true"]);
-    assert.equal(matching.status, 0, matching.stderr);
-    assert.match(matching.stdout, /^skipped=true$/m);
-    assert.match(matching.stdout, /^not_ready=false$/m);
-
-    const differing = fbr([...base, "--release-matches-cask", "false"]);
-    assert.equal(differing.status, 0, differing.stderr);
-    assert.match(differing.stdout, /^repair_cask=true$/m);
-    assert.match(differing.stdout, /assets differ/);
-
-    // Omitted flag: the comparison could not run.
-    const unknown = fbr(base);
-    assert.equal(unknown.status, 0, unknown.stderr);
-    assert.match(unknown.stdout, /^repair_cask=true$/m);
-    assert.match(unknown.stdout, /could not be compared/);
-
-    // The API's decided version is provably newer than what upstream
-    // publishes: the gate answers not-ready so the API can ask again later.
-    const notReady = fbr([...base, "--requested-version", "9.9.9"]);
-    assert.equal(notReady.status, 0, notReady.stderr);
-    assert.match(notReady.stdout, /^skipped=true$/m);
-    assert.match(notReady.stdout, /^not_ready=true$/m);
-    assert.match(notReady.stdout, /^reason=not-ready: upstream publishes .*; requested 9\.9\.9$/m);
-  });
-
-  it("rejects an unparseable release match instead of guessing", () => {
-    const result = fbr([
+    const version = vscodeCaskVersion();
+    const base = [
       "gate",
       "--app",
       "vscode",
-      "--upstream-version",
-      vscodeCaskVersion(),
-      "--release-matches-cask",
-      "maybe",
+      "--requested-version",
+      version,
+      "--artifact-version",
+      version,
+      "--release-exists",
+    ];
+
+    const matching = fbr(base);
+    assert.equal(matching.status, 0, matching.stderr);
+    assert.match(matching.stdout, /^skipped=true$/m);
+    assert.match(matching.stdout, /^not_ready=false$/m);
+    assert.match(matching.stdout, /already at requested/);
+
+    // The cask is behind, the release for the requested version exists: the
+    // expensive build is unnecessary, only the pin is repaired.
+    const repair = fbr([
+      "gate",
+      "--app",
+      "vscode",
+      "--requested-version",
+      "9.9.9",
+      "--artifact-version",
+      "9.9.9",
+      "--release-exists",
     ]);
+    assert.equal(repair.status, 0, repair.stderr);
+    assert.match(repair.stdout, /^repair_cask=true$/m);
+
+    // No artifact for the requested version: a typed not-ready skip, whatever
+    // the cask says.
+    const notReady = fbr(["gate", "--app", "vscode", "--requested-version", "9.9.9"]);
+    assert.equal(notReady.status, 0, notReady.stderr);
+    assert.match(notReady.stdout, /^skipped=true$/m);
+    assert.match(notReady.stdout, /^not_ready=true$/m);
+    assert.match(notReady.stdout, /^reason=not-ready: no published artifact for 9\.9\.9$/m);
+  });
+
+  it("requires the requested version instead of guessing one", () => {
+    const result = fbr(["gate", "--app", "vscode", "--artifact-version", "1.0.0"]);
     assert.equal(result.status, 2);
-    assert.match(result.stderr, /must be "true" or "false"/);
+    assert.match(result.stderr, /--requested-version/);
   });
 
   it("rejects unknown flags and stray positionals", () => {
@@ -183,20 +191,20 @@ describe("fbr CLI contract", () => {
     assert.match(unknownApp.stderr, /Unknown app/);
   });
 
-  it("exposes the feed cross-check only as an advisory feed-version read", () => {
-    // The run no longer waits on the feed, so the hold flag and the command
-    // that printed it are gone: the workflow calls this exact shape.
-    const removed = fbr(["feed-hold", "--app", "vscode"]);
-    assert.equal(removed.status, 2);
-    assert.match(removed.stderr, /Unknown command: feed-hold/);
-
-    const staleFlag = fbr(["feed-version", "--app", "vscode", "--upstream-version", "1.0.0"]);
-    assert.equal(staleFlag.status, 2);
-    assert.match(staleFlag.stderr, /Unknown option '--upstream-version'/);
-
-    const missingApp = fbr(["feed-version"]);
-    assert.equal(missingApp.status, 2);
-    assert.match(missingApp.stderr, /--app/);
+  it("requires a requested version for resolve", () => {
+    const missing = fbr([
+      "resolve",
+      "--app",
+      "vscode",
+      "--arch",
+      "amd64",
+      "--output-dir",
+      "unused",
+      "--metadata",
+      "unused.json",
+    ]);
+    assert.equal(missing.status, 2);
+    assert.match(missing.stderr, /--requested-version/);
   });
 
   it("classifies a permanent failure and writes the fragment the workflow uploads", () => {
@@ -249,16 +257,37 @@ describe("fbr CLI contract", () => {
   });
 });
 
+describe("build workflow contract", () => {
+  const workflow = fs.readFileSync(
+    path.join(REPO_ROOT, ".github", "workflows", "build-appimage.yml"),
+    "utf8",
+  );
+  const entry = fs.readFileSync(
+    path.join(REPO_ROOT, ".github", "workflows", "build.yml"),
+    "utf8",
+  );
+
+  it("resolves and gates the single requested version", () => {
+    assert.match(workflow, /--requested-version "\$\{requested\}"/);
+    assert.match(workflow, /"\$\{resolve_rc\}" -eq 8/);
+    assert.match(workflow, /gate_args=\(--app .* --requested-version "\$\{requested\}"\)/);
+    assert.match(workflow, /--artifact-version "\$\{version\}"/);
+    assert.match(workflow, /NOT_READY: \$\{\{ needs\.detect\.outputs\.not_ready \}\}/);
+    assert.match(entry, /requested_version: \$\{\{ inputs\.requested_version \}\}/);
+  });
+});
+
 describe("classified failure exit codes", () => {
-  // The band the workflow reads: 2 for a usage error, 3-7 for a failure that
-  // classified itself and left a fragment, 1 for everything else (which the
-  // report job names UNCLASSIFIED).
+  // The band the workflow reads: 2 for a usage error, 8 for a typed not-ready
+  // verdict, 3-7 for a failure that classified itself and left a fragment, 1
+  // for everything else (which the report job names UNCLASSIFIED).
   it("maps each failure class to its documented exit code", () => {
     assert.equal(errorExitCode(new UpstreamUnavailableError("busy")), 3);
     assert.equal(errorExitCode(new GuardViolationError("guard")), 4);
     assert.equal(errorExitCode(new ChecksumMismatchError("digest")), 5);
     assert.equal(errorExitCode(new UpdaterResidualError("residual")), 6);
     assert.equal(errorExitCode(new UpstreamConflictError("conflict")), 7);
+    assert.equal(errorExitCode(new NotReadyError("missing")), 8);
     assert.equal(errorExitCode(new Error("unclassified")), 1);
   });
 });

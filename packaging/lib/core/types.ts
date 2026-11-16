@@ -13,71 +13,63 @@ export function isArchitecture(value: unknown): value is Architecture {
 export interface Metadata {
   package: string;
   version: string;
-  packageVersion: string;
   architecture: Architecture;
   repositoryPath: string;
   sha256: string;
   size: number;
-  depends: string;
   repository: string;
   path: string | null;
 }
 
 // ---------------------------------------------------------------------------
-// Resolvers ("advisories": where the upstream version and payload come from)
+// Artifacts: where the exact requested version's payload comes from
 // ---------------------------------------------------------------------------
 
-export interface AptAdvisory {
-  kind: "apt";
-  repository: string;
-  // Suite under dists/ (the `stable` in `deb ... stable main`), e.g. "stable"
-  // or Mozilla's "mozilla". Omitted means "stable".
-  suite?: string;
-  packageName: string;
-  fingerprint: string;
-  keyBase64Path: string;
-}
-
-export interface GithubReleaseAdvisory {
+export interface GithubReleaseArtifact {
   kind: "github-release";
   repository: string;
-  // Legacy layout: "<assetPrefix>-<arch>.deb".
-  assetPrefix?: string;
-  // Versioned-asset flavor (e.g. wfhelper), set together with tagPrefix and
-  // packageName and instead of assetPrefix. {version} and {arch} substitute.
-  assetNameTemplate?: string;
-  tagPrefix?: string;
-  packageName?: string;
-}
-
-// electron-updater feed: a 302 whose Location names the exact release tag.
-export interface ElectronFeedAdvisory {
-  kind: "electron-feed";
-  repository: string;
-  githubRepository: string;
-  tagPrefix: string;
-  // Upstream package identity recorded in the metadata document.
-  packageName: string;
-  // Expected upstream AppImage name; {version} and {arch} are substituted.
+  // {version}, {arch} and {appimage_arch} substitute; must contain a
+  // placeholder so the template can name the requested version's asset.
   assetNameTemplate: string;
+  tagPrefix: string;
+  packageName: string;
 }
 
-// A CDN download redirect that is itself the version source.
-export interface CdnRedirectAdvisory {
-  kind: "cdn-redirect";
-  repository: string;
-  // Hosts the download may resolve to after redirecting.
-  redirectHosts: string[];
+// A pinned https JSON feed that names the exact asset for its version and
+// publishes its SHA-256, e.g. VS Code's linux-x64 update endpoint.
+export interface JsonAssetArtifact {
+  kind: "json-asset";
+  // Pinned https endpoint returning the update document.
+  url: string;
+  // Hosts the asset URL must resolve to after redirecting.
+  downloadHosts: string[];
+  // Dotted paths inside the document: asset URL, SHA-256 and version.
+  urlField: string;
+  sha256Field: string;
+  versionField: string;
   // Upstream package identity recorded in the metadata document.
   packageName: string;
-  // Upstream .deb name, used for the scratch filename.
-  debName: string;
 }
 
-// A pinned https JSON manifest that is itself the version source, e.g.
-// opencode's update API: {version, metadata: {files: {<name>: {url, sha256,
-// size}}}}. The digest verifies the payload at download time.
-export interface UpdateManifestAdvisory {
+// A Mozilla release tarball plus its detached signature, verified against a
+// pinned release key before the bytes are hashed. No .deb is involved.
+export interface MozillaReleaseArtifact {
+  kind: "mozilla-release";
+  // {version} and the arch tokens substitute.
+  urlTemplate: string;
+  // {url} and the other tokens substitute; e.g. "{url}.asc".
+  signatureTemplate: string;
+  // Upstream package identity recorded in the metadata document.
+  packageName: string;
+  // The pinned release key's fingerprint and repository-relative path.
+  fingerprint: string;
+  keyPath: string;
+}
+
+// A pinned https JSON manifest that publishes the version and per-asset
+// SHA-256/size, e.g. opencode's update API: {version, metadata: {files:
+// {<name>: {url, sha256, size}}}}. The digest verifies the payload at download.
+export interface UpdateManifestArtifact {
   kind: "update-manifest";
   // Pinned https endpoint returning the update manifest.
   repository: string;
@@ -89,12 +81,12 @@ export interface UpdateManifestAdvisory {
   downloadHosts: string[];
 }
 
-// Provider-specific manifest advisory (see advisories/custom/): avakot's
+// Provider-specific manifest artifact (see advisories/custom/): avakot's
 // manifest.json serves {version, artifacts: {<name>: {url, sha256, [size],
 // [version]}}} with static download URLs and no published size, so the
 // version binds through the per-entry version field and the payload is
 // measured from the verified download.
-export interface AvakotAdvisory {
+export interface AvakotArtifact {
   kind: "avakot";
   // Pinned https endpoint returning the avakot manifest.
   repository: string;
@@ -106,21 +98,22 @@ export interface AvakotAdvisory {
   downloadHosts: string[];
 }
 
-export type Advisory =
-  | AptAdvisory
-  | GithubReleaseAdvisory
-  | ElectronFeedAdvisory
-  | CdnRedirectAdvisory
-  | UpdateManifestAdvisory
-  | AvakotAdvisory;
+export type Artifact =
+  | GithubReleaseArtifact
+  | JsonAssetArtifact
+  | MozillaReleaseArtifact
+  | UpdateManifestArtifact
+  | AvakotArtifact;
 
-export type AdvisoryKind = Advisory["kind"];
+export type ArtifactKind = Artifact["kind"];
 
 // ---------------------------------------------------------------------------
 // Payload staging
 // ---------------------------------------------------------------------------
 
 export type PayloadKind = "deb-tree" | "deb-files" | "appimage-tree" | "tarball-tree";
+
+export type PayloadTarget = "root" | "bin";
 
 export interface Payload {
   kind: PayloadKind;
@@ -130,16 +123,20 @@ export interface Payload {
   files?: string[];
   // appimage-tree: entry name -> staged name.
   rename?: Record<string, string>;
-  // appimage-tree: entry names skipped while staging (exact or *.ext glob).
+  // appimage-tree/tarball-tree: top-level entry names (or *.ext globs) skipped
+  // while staging, e.g. upstream docs whose text would trip an updater scan.
   exclude?: string[];
   // appimage-tree: move the payload's vendored usr/ to the AppDir root.
   moveUsrToRoot?: boolean;
-  // tarball-tree: directory inside the tarball holding the bundle (e.g.
-  // "zed.app"). Its contents are staged at the **AppDir root**, not into
-  // AppDir/bin, so a bundle's bin/, libexec/, lib/ and share/ keep the relative
-  // paths its own binaries resolve against ($ORIGIN/../lib, the CLI's
-  // ../libexec/zed-editor).
+  // tarball-tree: directory inside the tarball holding the payload. Absent
+  // when the tarball has exactly one top-level directory, which is then used.
   root?: string;
+  // tarball-tree: "root" (the default) stages the tree at the AppDir root so a
+  // bundle's bin/, libexec/, lib/ and share/ keep the relative paths its own
+  // binaries resolve against ($ORIGIN/../lib, the CLI's ../libexec/zed-editor).
+  // "bin" stages the tree's contents into AppDir/bin, the flat layout an
+  // application tarball uses (Firefox, VS Code, GitComet).
+  target?: PayloadTarget;
 }
 
 // ---------------------------------------------------------------------------
@@ -210,10 +207,14 @@ export interface QuickSharunConfig {
 // ---------------------------------------------------------------------------
 
 export interface IconConfig {
-  // Path to the icon inside the extracted payload.
+  // Path to the icon: inside the extracted payload, or under the app directory
+  // when `base` is "app".
   source: string;
   // hicolor directory: a WxH size, e.g. 512x512, or "scalable" for an SVG.
   size: string;
+  // "payload" (default) or "app" for a repo-owned icon the upstream tarball
+  // does not ship.
+  base?: "payload" | "app";
 }
 // Desktop entry the payload ships: the cask patches its Exec line to the
 // Homebrew-installed binary and installs that file, instead of writing a
@@ -304,7 +305,7 @@ export interface AppDescriptor {
   // there — a sharun wrapper dies outside the mount with "Interpreter not
   // found!"). Absent when the app runs everything inside the mount.
   hostHelpers?: string[];
-  advisory: Advisory;
+  artifact: Artifact;
   payload: Payload;
   icon: IconConfig;
   // Desktop entry template, relative to sourceDir.
@@ -335,14 +336,13 @@ export type GateAction = "build" | "skip" | "repair-cask";
 
 export interface GateInput {
   cask: CaskState;
-  upstreamVersion: string;
+  // The one version this run may build: the API's dispatched version, or the
+  // cask pin for a manual run. There is no second, newest-upstream version.
+  requestedVersion: string;
+  // The version resolve actually found a payload for, or null when resolve
+  // reported not-ready.
+  artifactVersion: string | null;
   releaseExists: boolean;
-  // null when there is no release to compare against.
-  releaseMatchesCask: boolean | null;
-  // The feed version the API decided to build; absent for a manual run. When
-  // it is provably newer than what upstream publishes, the artifact is not
-  // ready and the gate skips rather than builds an older version.
-  requestedVersion?: string | undefined;
 }
 
 export interface GateDecision {

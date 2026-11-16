@@ -34,7 +34,6 @@ interface RecordOverrides {
   message?: string;
   resolved?: string | null;
   cask?: string | null;
-  feed?: string | null;
   retryAfter?: number | null;
   evidence?: Record<string, string>;
 }
@@ -53,7 +52,6 @@ function writeRecord(dir: string, subdir: string, overrides: RecordOverrides = {
     message: overrides.message ?? "boom",
     resolved_version: overrides.resolved === undefined ? "1.0.0" : overrides.resolved,
     cask_version: overrides.cask === undefined ? "1.0.0" : overrides.cask,
-    feed_version: overrides.feed === undefined ? "1.0.0" : overrides.feed,
     finished_at: "2026-10-07T00:00:00.000Z",
   };
   if (phase === "failed") {

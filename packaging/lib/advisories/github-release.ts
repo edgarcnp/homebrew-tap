@@ -1,25 +1,21 @@
-// GitHub release asset advisory: the newest published release carrying the
-// requested architecture's payload with a SHA-256 digest, verified at
-// download. Two flavors:
-//   - legacy `.deb` ("<assetPrefix>-<arch>.deb");
-//   - versioned-asset by tag prefix plus `assetNameTemplate`, `.deb`,
-//     `.AppImage` or `.tar.gz`. AppImage assets additionally cross-check the
-//     release's electron-builder update yml (SHA-512 + size) before
-//     downloading; a `.tar.gz` carries an app bundle tree (Zed) and is verified
-//     by the release's published SHA-256 alone, since nothing upstream
-//     publishes a second checksum for it.
+// GitHub release artifact: the requested version selects the release whose tag
+// normalizes to it, then the declared asset for the architecture. A missing
+// tag, asset or digest is not-ready, never a silent fallback to another
+// release. The asset name is a template (`{version}`, `{arch}`,
+// `{appimage_arch}`); an `.AppImage` additionally cross-checks the release's
+// electron-builder update yml (SHA-512 + size) before downloading, and every
+// other container is verified by the release's published SHA-256.
 
 import * as path from "node:path";
 import { APPIMAGE_ARCH } from "../core/architecture.ts";
+import { NotReadyError, UpstreamConflictError } from "../core/errors.ts";
 import { GITHUB_ASSET_HOSTS, assertMatches, assertPositiveSize, fail } from "../core/guards.ts";
 import { MAX_PAYLOAD_BYTES } from "../core/http.ts";
 import { makeMetadata, writeMetadata } from "../core/metadata.ts";
-import { SAFE_REFERENCE } from "../core/patterns.ts";
+import { DEB_VERSION, SAFE_REFERENCE } from "../core/patterns.ts";
 import { hasPlaceholder, substitutePlaceholders } from "../core/template.ts";
-import type { Architecture, GithubReleaseAdvisory, Metadata } from "../core/types.ts";
-import { ARCHITECTURES } from "../core/types.ts";
+import type { Architecture, GithubReleaseArtifact, Metadata } from "../core/types.ts";
 import { downloadVerified, fetchVerified } from "./download.ts";
-import { parseUpdateYml } from "./electron-feed.ts";
 import {
   assertRepositoryUrl,
   fetchReleaseList,
@@ -30,7 +26,8 @@ import {
   type ReleaseAssetRecord,
 } from "./github-api.ts";
 import { isSha256Digest, normalizeTagVersion, parseSha256Digest } from "./release-common.ts";
-import { prepareOutput, type ResolveRequest } from "./shared.ts";
+import { isNotFound, notReady, prepareOutput, ready, type ResolveOutcome, type ResolveRequest } from "./shared.ts";
+import { parseUpdateYml } from "./update-yml.ts";
 
 interface ReleaseAsset {
   name: string;
@@ -56,28 +53,21 @@ export function isAppImageAsset(name: string): boolean {
   return name.endsWith(".AppImage");
 }
 
-// A tarball carrying an app bundle tree, staged by the tarball-tree pipeline
-// stage: Zed publishes `zed-linux-x86_64.tar.gz` and no dpkg or AppImage
-// artifact at all.
-export function isTarballAsset(name: string): boolean {
-  return name.endsWith(".tar.gz");
-}
-
 // The extension the payload is written with, which also tells the extract
 // stage how to unpack it: dpkg for a `.deb`, its own extraction for an
-// `.AppImage`, `tar` for a `.tar.gz`. Any other container is a layout this
+// `.AppImage`, `tar` for a tarball. Any other container is a layout this
 // pipeline cannot unpack, so it fails here instead of writing a mislabelled
 // file the build would only trip over later.
 export function payloadExtension(name: string): string {
   if (name.endsWith(".deb")) return ".deb";
   if (isAppImageAsset(name)) return ".AppImage";
-  if (isTarballAsset(name)) return ".tar.gz";
-  return fail(`Unsupported release asset, not a .deb, .AppImage or .tar.gz payload: ${name}`);
+  if (name.endsWith(".tar.gz")) return ".tar.gz";
+  if (name.endsWith(".tar.xz")) return ".tar.xz";
+  return fail(`Unsupported release asset, not a .deb, .AppImage or tarball payload: ${name}`);
 }
 
 // The electron-builder update yml shipped alongside an AppImage release
-// asset, per architecture. Mirrors the electron-feed advisory's layout without
-// its feed-redirect step: the tag is already known from the release scan.
+// asset, per architecture.
 export function updateYmlName(architecture: Architecture): string {
   return architecture === "arm64" ? "latest-linux-arm64.yml" : "latest-linux.yml";
 }
@@ -99,41 +89,7 @@ async function fetchUpdateYml(
   return bytes.toString("utf8");
 }
 
-interface ReleaseSelection {
-  tag: string;
-  assets: Record<Architecture, ReleaseAsset>;
-}
-
-export async function selectRelease(
-  repository: string,
-  assetPrefix: string,
-  token: string,
-): Promise<ReleaseSelection> {
-  const releases = await fetchReleaseList(repository, token);
-  for (const release of releases) {
-    if (!isPublishedRelease(release)) continue;
-    const byName = releaseAssetMap(release);
-    const assets = {} as Record<Architecture, ReleaseAsset>;
-    let complete = true;
-    for (const architecture of ARCHITECTURES) {
-      const asset = validatedAsset(byName.get(`${assetPrefix}-${architecture}.deb`));
-      if (asset === null) {
-        complete = false;
-        break;
-      }
-      assets[architecture] = asset;
-    }
-    if (!complete) continue;
-    const tag = releaseTag(release);
-    if (tag === undefined) continue;
-    return { tag, assets };
-  }
-  throw new Error(
-    `No GitHub release found carrying ${assetPrefix}-amd64.deb and ${assetPrefix}-arm64.deb with SHA-256 digests`,
-  );
-}
-
-export interface TemplatedSelection {
+export interface ReleaseSelection {
   tag: string;
   version: string;
   asset: ReleaseAsset;
@@ -146,18 +102,19 @@ function archValues(architecture: Architecture): Record<string, string> {
   return { arch: architecture, appimage_arch: APPIMAGE_ARCH[architecture] };
 }
 
-// Newest non-draft, non-prerelease release whose tag starts with tagPrefix and
-// which carries the templated asset for the requested architecture. An arm64
-// request against an amd64-only upstream (e.g. wfhelper) scans every
-// release and fails with the asset name it never found.
-export async function selectTemplatedRelease(
+// The one release whose tag normalizes to the requested version, carrying the
+// templated asset for the requested architecture. Every other release is
+// irrelevant: no resolver here selects "the newest".
+export async function selectRelease(
   repository: string,
   assetNameTemplate: string,
   tagPrefix: string,
+  requestedVersion: string,
   architecture: Architecture,
   token: string,
-): Promise<TemplatedSelection> {
+): Promise<ReleaseSelection> {
   const prefix = assertMatches(tagPrefix, SAFE_REFERENCE, "tag prefix");
+  const requested = assertMatches(requestedVersion, DEB_VERSION, "requested version");
   if (!hasPlaceholder(assetNameTemplate)) {
     fail(`assetNameTemplate must contain a placeholder: ${assetNameTemplate}`);
   }
@@ -172,17 +129,18 @@ export async function selectTemplatedRelease(
     } catch {
       continue;
     }
+    if (version !== requested) continue;
     const expected = substitutePlaceholders(assetNameTemplate, {
       version,
       ...archValues(architecture),
     });
     const asset = validatedAsset(releaseAssetMap(release).get(expected));
-    if (asset === null) continue;
+    if (asset === null) {
+      throw new NotReadyError(`release ${tag} has no ${expected} with a SHA-256 digest`);
+    }
     return { tag, version, asset };
   }
-  throw new Error(
-    `No GitHub release found carrying ${substitutePlaceholders(assetNameTemplate, archValues(architecture))} with a SHA-256 digest under tag prefix ${prefix}`,
-  );
+  throw new NotReadyError(`no published release carries ${prefix}${requested}`);
 }
 
 interface AppImageResolution {
@@ -196,22 +154,34 @@ interface AppImageResolution {
   size: number;
 }
 
-// AppImage flavor of the templated resolve: the release's update yml supplies
-// the SHA-512 and re-states the size, and the GitHub API supplies the SHA-256.
-// All three must agree before the payload is trusted.
+// AppImage flavor: the release's update yml supplies the SHA-512 and restates
+// the size, and the GitHub API supplies the SHA-256. All three must agree
+// before the payload is trusted.
 async function resolveAppImageAsset(
   request: ResolveRequest,
   resolved: AppImageResolution,
 ): Promise<Metadata> {
   const { outputDir, metadataPath, downloadBase, packageName, tag, version, asset, size } = resolved;
   const ymlName = updateYmlName(request.architecture);
-  const yml = parseUpdateYml(await fetchUpdateYml(downloadBase, tag, ymlName), version, asset.name);
+  let ymlBody: string;
+  try {
+    ymlBody = await fetchUpdateYml(downloadBase, tag, ymlName);
+  } catch (error) {
+    if (isNotFound(error)) {
+      throw new NotReadyError(`release ${tag} has no ${ymlName}`);
+    }
+    throw error;
+  }
+  const yml = parseUpdateYml(ymlBody, version, asset.name);
   if (yml.size !== size) {
-    throw new Error(`Asset size ${size} does not match update yml size ${yml.size}`);
+    throw new UpstreamConflictError(
+      `Asset size ${size} does not match update yml size ${yml.size}`,
+      { reason: "release_asset_size_mismatch" },
+    );
   }
   const packagePath = request.metadataOnly
     ? null
-    : path.join(outputDir, `${packageName}_${version}_${request.architecture}.AppImage`);
+    : path.join(outputDir, `${packageName}_${version}_${request.architecture}${payloadExtension(asset.name)}`);
   const metadata = makeMetadata({
     package: packageName,
     version,
@@ -223,86 +193,92 @@ async function resolveAppImageAsset(
     path: packagePath,
   });
   if (packagePath !== null) {
-    await downloadVerified(
-      `${downloadBase}/${metadata.repositoryPath}`,
-      packagePath,
-      { sha256: asset.digest, sha512: yml.sha512, size },
-      { allowedHosts: GITHUB_ASSET_HOSTS, label: path.basename(packagePath) },
-    );
+    try {
+      await downloadVerified(
+        `${downloadBase}/${metadata.repositoryPath}`,
+        packagePath,
+        { sha256: asset.digest, sha512: yml.sha512, size },
+        { allowedHosts: GITHUB_ASSET_HOSTS, label: path.basename(packagePath) },
+      );
+    } catch (error) {
+      if (isNotFound(error)) throw new NotReadyError(`release asset ${asset.name} is not available`);
+      throw error;
+    }
   }
   writeMetadata(metadataPath, metadata);
   return metadata;
 }
 
+async function downloadAsset(
+  url: string,
+  packagePath: string,
+  asset: ReleaseAsset,
+): Promise<void> {
+  try {
+    await downloadVerified(
+      url,
+      packagePath,
+      { sha256: asset.digest, size: asset.size },
+      { allowedHosts: GITHUB_ASSET_HOSTS, label: path.basename(packagePath) },
+    );
+  } catch (error) {
+    if (isNotFound(error)) throw new NotReadyError(`release asset ${asset.name} is not available`);
+    throw error;
+  }
+}
+
 export async function resolveWithGithubRelease(
-  advisory: GithubReleaseAdvisory,
+  artifact: GithubReleaseArtifact,
   request: ResolveRequest,
-): Promise<Metadata> {
-  const repository = assertRepositoryUrl(advisory.repository);
+): Promise<ResolveOutcome> {
+  const repository = assertRepositoryUrl(artifact.repository);
   const { outputDir, metadataPath } = prepareOutput(request);
   const architecture = request.architecture;
   const downloadBase = githubDownloadBase(repository);
+  const version = request.requestedVersion;
+  const packageName = assertMatches(artifact.packageName, SAFE_REFERENCE, "package name");
 
-  if (advisory.assetNameTemplate !== undefined) {
-    if (advisory.tagPrefix === undefined || advisory.packageName === undefined) {
-      fail("assetNameTemplate requires tagPrefix and packageName");
-    }
-    const packageName = assertMatches(advisory.packageName, SAFE_REFERENCE, "package name");
-    const { tag, version, asset } = await selectTemplatedRelease(
+  let selection: ReleaseSelection;
+  try {
+    selection = await selectRelease(
       repository,
-      advisory.assetNameTemplate,
-      advisory.tagPrefix,
+      artifact.assetNameTemplate,
+      artifact.tagPrefix,
+      version,
       architecture,
       request.token,
     );
-    const size = assertPositiveSize(asset.size, MAX_PAYLOAD_BYTES, `${asset.name} size`);
-    // AppImage payloads (e.g. WFHelper) cross-check the release's
-    // electron-builder update yml: its SHA-512 and size must agree with the
-    // API asset before the payload is trusted, mirroring the electron-feed
-    // advisory minus the feed-redirect step.
-    const extension = payloadExtension(asset.name);
-    if (extension === ".AppImage") {
-      return resolveAppImageAsset(
-        request,
-        { outputDir, metadataPath, downloadBase, packageName, tag, version, asset, size },
-      );
-    }
-    const packagePath = request.metadataOnly
-      ? null
-      : path.join(outputDir, `${packageName}_${version}_${architecture}${extension}`);
-    const metadata = makeMetadata({
-      package: packageName,
-      version,
-      architecture,
-      repositoryPath: `${tag}/${asset.name}`,
-      sha256: asset.digest,
-      size,
-      repository: downloadBase,
-      path: packagePath,
-    });
-    if (packagePath !== null) {
-      await downloadVerified(
-        `${downloadBase}/${metadata.repositoryPath}`,
-        packagePath,
-        { sha256: metadata.sha256, size: metadata.size },
-        { allowedHosts: GITHUB_ASSET_HOSTS, label: path.basename(packagePath) },
-      );
-    }
-    writeMetadata(metadataPath, metadata);
-    return metadata;
+  } catch (error) {
+    if (error instanceof NotReadyError) return notReady(error.message);
+    throw error;
   }
-
-  if (advisory.assetPrefix === undefined) fail("github-release advisory requires assetPrefix or assetNameTemplate");
-  const assetPrefix = assertMatches(advisory.assetPrefix, SAFE_REFERENCE, "asset prefix");
-  const { tag, assets } = await selectRelease(repository, assetPrefix, request.token);
-  const asset = assets[architecture];
-  const version = normalizeTagVersion(tag);
+  const { tag, asset } = selection;
   const size = assertPositiveSize(asset.size, MAX_PAYLOAD_BYTES, `${asset.name} size`);
+  const extension = payloadExtension(asset.name);
+  if (extension === ".AppImage") {
+    try {
+      return ready(
+        await resolveAppImageAsset(request, {
+          outputDir,
+          metadataPath,
+          downloadBase,
+          packageName,
+          tag,
+          version,
+          asset,
+          size,
+        }),
+      );
+    } catch (error) {
+      if (error instanceof NotReadyError) return notReady(error.message);
+      throw error;
+    }
+  }
   const packagePath = request.metadataOnly
     ? null
-    : path.join(outputDir, `${assetPrefix}_${version}_${architecture}.deb`);
+    : path.join(outputDir, `${packageName}_${version}_${architecture}${extension}`);
   const metadata = makeMetadata({
-    package: assetPrefix,
+    package: packageName,
     version,
     architecture,
     repositoryPath: `${tag}/${asset.name}`,
@@ -312,13 +288,13 @@ export async function resolveWithGithubRelease(
     path: packagePath,
   });
   if (packagePath !== null) {
-    await downloadVerified(
-      `${downloadBase}/${metadata.repositoryPath}`,
-      packagePath,
-      { sha256: metadata.sha256, size: metadata.size },
-      { allowedHosts: GITHUB_ASSET_HOSTS, label: path.basename(packagePath) },
-    );
+    try {
+      await downloadAsset(`${downloadBase}/${metadata.repositoryPath}`, packagePath, asset);
+    } catch (error) {
+      if (error instanceof NotReadyError) return notReady(error.message);
+      throw error;
+    }
   }
   writeMetadata(metadataPath, metadata);
-  return metadata;
+  return ready(metadata);
 }

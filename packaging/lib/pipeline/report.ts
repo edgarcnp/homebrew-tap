@@ -98,9 +98,8 @@ export interface ReportInput {
   // for tests, which need a deterministic id.
   eventId?: string | undefined;
   resolvedVersion?: string | null;
-  // The cask pin the gate compared against, and the feed version the tap read.
+  // The cask pin the gate compared against.
   caskVersion?: string | null;
-  feedVersion?: string | null;
   evidence?: Record<string, string>;
   finishedAt?: Date;
 }
@@ -130,7 +129,6 @@ export interface RunReport {
   message: string;
   resolved_version: string | null;
   cask_version: string | null;
-  feed_version: string | null;
   evidence?: Record<string, string>;
   finished_at: string;
 }
@@ -259,7 +257,6 @@ export function buildReport(input: ReportInput): RunReport {
     message,
     resolved_version: optionalString(input.resolvedVersion, "report resolved version"),
     cask_version: optionalString(input.caskVersion, "report cask version"),
-    feed_version: optionalString(input.feedVersion, "report feed version"),
     finished_at: (input.finishedAt ?? new Date()).toISOString(),
   };
   if (input.reason !== undefined) report.reason = input.reason;

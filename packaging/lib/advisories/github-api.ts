@@ -1,6 +1,6 @@
-// GitHub REST access shared by the release-asset and electron-feed advisories: the
-// repository-URL check, download-base derivation, authenticated JSON fetch and
-// release-listing helpers.
+// GitHub REST access shared by the GitHub-release resolver and the release
+// listing it reads: the repository-URL check, download-base derivation,
+// authenticated JSON fetch and release-listing helpers.
 
 import { assertSingleLine, fail, isRecord } from "../core/guards.ts";
 import { fetchOnce, httpFailure } from "../core/http.ts";
@@ -13,28 +13,14 @@ const RELEASES_PER_PAGE = 100;
 // the cap keeps a pathological list bounded.
 const MAX_RELEASE_PAGES = 3;
 
-export interface RepositoryCoordinates {
-  owner: string;
-  repo: string;
-}
-
-// The one repository URL shape every GitHub advisory pins; anything else could
-// point an advisory at an attacker-controlled host.
+// The one repository URL shape every GitHub resolver pins; anything else could
+// point an artifact at an attacker-controlled host.
 export function assertRepositoryUrl(repository: string): string {
   const normalized = repository.replace(/\/+$/, "");
   if (!GITHUB_API_REPOSITORY.test(normalized)) {
     fail(`Unsafe GitHub API repository URL: ${repository}`);
   }
   return normalized;
-}
-
-export function repositoryCoordinates(repository: string): RepositoryCoordinates {
-  const normalized = assertRepositoryUrl(repository);
-  const [owner, repo] = normalized.slice(GITHUB_API_PREFIX.length).split("/");
-  if (owner === undefined || repo === undefined) {
-    fail(`Unsafe GitHub API repository URL: ${repository}`);
-  }
-  return { owner, repo };
 }
 
 // https://api.github.com/repos/<owner>/<repo> -> https://github.com/<owner>/<repo>/releases/download
@@ -61,10 +47,6 @@ export async function fetchReleaseList(
     if (batch.length < RELEASES_PER_PAGE) break;
   }
   return releases;
-}
-
-export function releaseByTagApiUrl(repository: string, tag: string): string {
-  return `${assertRepositoryUrl(repository)}/releases/tags/${encodeURIComponent(tag)}`;
 }
 
 // Authenticated api.github.com JSON fetch: the host and redirect policy are

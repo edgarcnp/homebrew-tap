@@ -24,7 +24,7 @@ cask "vscode" do
   postflight_steps do
     run "{{HOMEBREW_PREFIX}}/bin/code", args: ["--appimage-extract"], chdir: "{{staged_path}}"
     copy "squashfs-root/vscode.png",
-         ".local/share/icons/hicolor/256x256/apps/vscode.png",
+         ".local/share/icons/hicolor/1024x1024/apps/vscode.png",
          target_base: :home
     remove "{{staged_path}}/squashfs-root", recursive: true
     write_file ".local/share/applications/vscode.desktop", <<~EOS, base: :home
@@ -47,7 +47,7 @@ cask "vscode" do
     "~/.cache/Code",
     "~/.config/Code",
     "~/.local/share/applications/vscode.desktop",
-    "~/.local/share/icons/hicolor/256x256/apps/vscode.png",
+    "~/.local/share/icons/hicolor/1024x1024/apps/vscode.png",
     "~/.vscode",
     "~/.vscode-cli",
     "~/.vscode-server",

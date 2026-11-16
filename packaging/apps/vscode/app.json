@@ -20,20 +20,23 @@
   "debloatArgs": "--add-common --prefer-nano ffmpeg-mini gdk-pixbuf2-mini",
   "architectures": ["amd64"],
   "binaryTargets": ["code"],
-  "advisory": {
-    "kind": "apt",
-    "repository": "https://packages.microsoft.com/repos/code",
-    "packageName": "code",
-    "fingerprint": "BC528686B50D79E339D3721CEB3E94ADBE1229CF",
-    "keyBase64Path": "packaging/apps/vscode/assets/microsoft-vscode-repository-key.gpg.base64"
+  "artifact": {
+    "kind": "json-asset",
+    "url": "https://update.code.visualstudio.com/api/update/linux-x64/stable/latest",
+    "downloadHosts": ["update.code.visualstudio.com", "vscode.download.prss.microsoft.com"],
+    "urlField": "url",
+    "sha256Field": "sha256hash",
+    "versionField": "productVersion",
+    "packageName": "code"
   },
   "payload": {
-    "kind": "deb-tree",
-    "tree": "usr/share/code"
+    "kind": "tarball-tree",
+    "root": "VSCode-linux-x64",
+    "target": "bin"
   },
   "icon": {
-    "source": "usr/share/pixmaps/vscode.png",
-    "size": "256x256"
+    "source": "resources/app/resources/linux/code.png",
+    "size": "1024x1024"
   },
   "desktopTemplate": "templates/vscode.desktop",
   "updater": {

@@ -20,11 +20,11 @@ packaging/
   builder/pins.json        the image refs the build workflow reads
   lib/cli.ts               CLI composition root
   lib/core/                primitives: paths, types, guards, patterns, version,
-                           architecture, template, http, deb822, metadata
-  lib/pipeline/            descriptor-driven steps: descriptor, cask, gate, watch,
+                           architecture, template, http, metadata
+  lib/pipeline/            descriptor-driven steps: descriptor, cask, gate,
                            release, neutralize, render, report
-  lib/advisories/          one module per upstream source kind; custom/ holds
-                           provider-specific advisories (e.g. avakot)
+  lib/advisories/          one module per artifact kind; custom/ holds
+                           provider-specific artifacts (e.g. avakot)
   lib/shell/               the bash pipeline
   tests/                   unit suite, mirrors lib/  (bun test)
   scripts/                 repo tooling (tool installer, local style gate)
@@ -36,10 +36,11 @@ cask, `pipeline/` implements the descriptor-driven steps, `advisories/` resolves
 upstream sources. Tests live in `tests/`,
 mirroring those groups.
 
-The advisories share one download path (`advisories/download.ts`) and one GitHub
-API client (`advisories/github-api.ts`), so a resolver only supplies its URL,
-expected content and hosts. Shared regexes, the arch table and name templating
-live in `core/`.
+The artifact resolvers share one download path (`advisories/download.ts`) and
+one GitHub API client (`advisories/github-api.ts`), so a resolver only supplies
+its URL, expected content and hosts. Shared regexes, the arch table and name
+templating live in `core/`. `watch` lives only in the descriptor: the API reads
+it for the version, and the tap never resolves "the newest".
 
 ## Pipeline stages
 
@@ -48,12 +49,17 @@ live in `core/`.
 1. **init** — load and validate the descriptor, resolve the architecture
    (`TARGET_ARCH` → `amd64`/`arm64` + the AppImage arch), set up the scratch and
    AppDir directories with path guards.
-2. **resolve** — `fbr resolve` asks the app's advisory for the upstream version,
-   payload URL, size and SHA-256, and writes `metadata.json`.
-3. **extract** — `dpkg-deb -x` for `.deb` payloads (with an arch assertion), or
-   the upstream AppImage's own `--appimage-extract` (no FUSE needed).
+2. **resolve** — `fbr resolve` asks the app's artifact for the **requested
+   version's** payload URL, size and SHA-256, and writes `metadata.json`. The
+   requested version is the API's dispatched version, or the cask pin for a
+   manual run; a missing artifact is a typed not-ready (CLI exit 8), not a
+   fallback to another release.
+3. **extract** — `dpkg-deb -x` for `.deb` payloads (with an arch assertion), the
+   upstream AppImage's own `--appimage-extract` (no FUSE needed), or `tar` for
+   an application tarball (`.tar.gz`, `.tar.xz`).
 4. **stage** — descriptor-driven staging into `AppDir/bin` (a payload tree, a
-   list of binaries, or an AppImage tree with renames/excludes).
+   list of binaries, an AppImage tree with renames/excludes, or a tarball's
+   `root`/`target`).
 5. **neutralize** — `fbr neutralize` disables the app's own updater, then
    asserts no updater endpoint survived.
 6. **render + icon** — `fbr render-desktop` (literal substitution, no `sed`) and
@@ -84,27 +90,31 @@ record whose `app` does not — `fbr report` refuses such a record first.
 | `buildPackages` | Arch packages CI installs into the build container for this app, beyond the shared toolchain — for libraries that must exist at pack time, e.g. one named in `quickSharun.libraries`. |
 | `architectures` | Arches this app ships; the pipeline builds, publishes and checks only these. |
 | `binaryTargets` | Names the cask must expose on `PATH` (checked by `fbr cask --action check`). |
-| `advisory` | Where the version and payload come from. |
-| `payload` | How the upstream package is staged: `deb-tree`/`deb-files` from a dpkg tree and `appimage-tree` entries into `AppDir/bin`, or `tarball-tree` — a bundle tarball's `root` directory (Zed's `zed.app`) into the AppDir root, so the bundle's own `bin/`, `libexec/`, `lib/` and `share/` keep the relative paths its binaries resolve (`$ORIGIN/../lib`, the CLI's `../libexec/zed-editor`). |
-| `icon` | Icon path in the payload plus its hicolor directory: a `WxH` size for a raster icon, or `scalable` for an SVG. The staged icon keeps the payload file's extension. |
+| `artifact` | Where the **requested version's** payload comes from: `github-release`, `json-asset`, `mozilla-release`, `update-manifest` or `avakot`. The old `advisory` key is accepted for one release as an alias and warns; both keys together are rejected. |
+| `payload` | How the upstream package is staged. `deb-tree`/`deb-files` from a dpkg tree and `appimage-tree` entries go into `AppDir/bin`. `tarball-tree` stages a tarball tree either at the AppDir root (`target: "root"`, the default) so a bundle's own `bin/`, `libexec/`, `lib/` and `share/` keep the relative paths its binaries resolve (`$ORIGIN/../lib`, the CLI's `../libexec/zed-editor`), or into `AppDir/bin` (`target: "bin"`) for a flat application tarball. `root` names the directory inside the tarball; when absent, the tarball must contain exactly one top-level directory. `exclude` skips top-level names/globs while staging (ArtCraft skips its inert `share/` docs, whose text repeats the slug its updater scan rejects). |
+| `icon` | Icon path plus its hicolor directory: a `WxH` size for a raster icon, or `scalable` for an SVG. `base: "payload"` (default) resolves the path inside the extracted payload; `base: "app"` resolves a repo-owned icon under the app directory (GitComet's tarball ships none). The staged icon keeps the source file's extension. |
 | `desktopTemplate` | Desktop entry template, relative to the app dir. |
 | `caskDesktopEntry` | Optional `{from, exec}`: instead of writing a generated entry, the cask rewrites the `Exec=` line of the desktop entry the payload ships and installs that file (Zed's `share/applications/dev.zed.Zed.desktop`), so `Name=`, `Comment=` and `Icon=` come from upstream. `from` is payload-relative; `exec` must be one `Exec=<command>` line. |
 | `updater` | Updater neutralization: JSON key removal, endpoint patch, feed removal, `.env`, runtime hook, residual scan. |
 | `quickSharun` | quick-sharun knobs: `hooks` (`ADD_HOOKS`), `env`, and `libraries` — absolute paths of libraries the app only `dlopen`s at runtime, passed to quick-sharun as deploy targets (an `ldd` scan never surfaces those, so nothing else would bundle them). |
 | `hostHelpers` | Optional AppDir paths under `bin/` the app executes outside the mount. Stashed before quick-sharun and restored after, so they stay host-runnable instead of becoming sharun wrappers. |
 | `extraFiles` | Optional `{source, target}` pairs copied verbatim from the app directory into the AppDir after quick-sharun, e.g. Firefox's default prefs under `bin/defaults/pref/`. `target` is AppDir-relative and unique; an existing target whose bytes differ fails the build instead of overwriting the payload. |
-| `watch` | Optional release-watch block (`feedUrl`, `format`, `versionPattern`, optional `skipPattern`, `repo`, and `versionField` for `"json"`). `format` — `"atom"`, `"json"` or `"github-release"` — must be declared: the API's reader still defaults an absent one to atom, but this validator does not, so a forgotten format fails here instead of silently watching the wrong reader. The pattern matches the feed entry *title* and capture group 1 is the version: the atom entry title, the release `name` for `"github-release"` (falling back to `tag_name` when GitHub left the name empty — what the atom title carried), or the `versionField` value (a dotted path, e.g. `version`) for `"json"`, which reads a single version string from a JSON document for upstreams like avakot that publish no feed. A `"github-release"` feed must be the pinned `https://api.github.com/repos/<owner>/<repo>/releases` URL. |
+| `watch` | Optional release-watch block (`feedUrl`, `format`, `versionPattern`, optional `skipPattern`, `repo`, and `versionField` for `"json"`). `format` — `"atom"`, `"json"` or `"github-release"` — must be declared: the API's reader still defaults an absent one to atom, but this validator does not, so a forgotten format fails here instead of silently watching the wrong reader. The pattern matches the feed entry *title* and capture group 1 is the version: the atom entry title, the release `name` for `"github-release"` (falling back to `tag_name` when GitHub left the name empty — what the atom title carried), or the `versionField` value (a dotted path, e.g. `version`) for `"json"`, which reads a single version string from a JSON document for upstreams like avakot that publish no feed. A `"github-release"` feed must be the pinned `https://api.github.com/repos/<owner>/<repo>/releases` URL. The API reads this block for the version it dispatches; the tap never fetches it, so there is no feed-versus-artifact comparison. |
 
-### Advisory kinds
+### Artifact kinds
+
+The artifact is **declared**, never searched at runtime. The requested version
+is the only version input: no resolver selects "the newest". The preference
+order for choosing a declared artifact (tarball → `.deb` → `.rpm` →
+`.AppImage`) applies when a descriptor is written, not to a build.
 
 | Kind | Version and payload source |
 | --- | --- |
-| `apt` | Signed apt repo: pinned key → `InRelease` (verified with `gpgv` against a pinned fingerprint) → `Packages` SHA-256 → package SHA-256/size. The two index objects are read twice when a republish races the fetch — an edge can serve a fresh `InRelease` with a stale `Packages` — and a mismatch that survives both reads is a transient `UPSTREAM_CONFLICT`, not a checksum failure. Newest entry per architecture wins, by dpkg ordering. Reads the `stable` suite unless the descriptor pins `suite` (Mozilla serves `dists/mozilla`), and strips Mozilla's `~buildN` rebuild marker from the cask version so it matches the release feed. |
-| `github-release` | GitHub release assets. Legacy: newest release carrying both `<assetPrefix>-<arch>.deb`. Versioned-asset: pins a tag prefix plus an `assetNameTemplate` and resolves each shipped architecture separately; the template substitutes `{version}`, `{arch}` (amd64) and `{appimage_arch}` (x86_64), and must carry at least one placeholder. A `.AppImage` asset additionally cross-checks the release's electron-builder update yml (SHA-512 + size) before downloading; a `.tar.gz` bundle (Zed) is verified by the release's published SHA-256 alone. Any other asset container fails the resolve rather than being written under a mislabelled name. |
-| `electron-feed` | An electron-updater feed whose 302 names the release tag. The yml supplies filename, SHA-512 and size; the GitHub API supplies the SHA-256. All three must agree. |
-| `cdn-redirect` | A CDN download redirect that is itself the version source. The target URL shape is pinned and the payload is hashed on download (the CDN publishes no checksums). No app currently consumes it; it is validated and tested as infrastructure for a future CDN-sourced app. |
-| `update-manifest` | A pinned https JSON manifest that publishes the version and per-asset SHA-256/size. The `assetTemplate` entry (`{arch}` substituted) must carry the version as a download-path segment on a pinned host. |
-| `avakot` (in `custom/`) | Provider-specific manifest advisory: avakot's `manifest.json` serves an `artifacts` map with a fixed entry name, static download URLs and no published size. The version binds through the per-entry `version` field and the payload is measured from the verified download (downloaded and discarded in `--metadata-only` mode). |
+| `github-release` | The release whose tag normalizes to the requested version, and the declared asset for the architecture. A `tagPrefix` plus `assetNameTemplate`; the template substitutes `{version}`, `{arch}` (amd64) and `{appimage_arch}` (x86_64), and must carry a placeholder. The asset's `digest` and `size` are required; a missing tag, asset or digest is not-ready. A `.AppImage` asset additionally cross-checks the release's electron-builder update yml (SHA-512 + size); every other container is verified by the release's published SHA-256. |
+| `json-asset` | A pinned https update document (VS Code's `linux-x64` endpoint) naming the asset URL, SHA-256 and version at `urlField`, `sha256Field` and `versionField`. The document's version must equal the requested version; a missing digest is not-ready. The payload is downloaded, verified and measured. |
+| `mozilla-release` | The release tarball at `urlTemplate` plus its detached `.asc` signature at `signatureTemplate` (e.g. `{url}.asc`). The signature is verified with `gpgv` against the pinned release key (`keyPath`, `fingerprint`) before SHA-256 and size are computed from the verified bytes. A missing tarball or signature, or a failed signature, is not-ready. No `.deb`, no package repository. |
+| `update-manifest` | A pinned https JSON manifest publishing the version and per-asset SHA-256/size. The manifest's version must equal the requested version; the `assetTemplate` entry (`{arch}` substituted) must carry that version as a download-path segment on a pinned host. A mismatch, a missing entry or a missing digest is not-ready. |
+| `avakot` (in `custom/`) | Provider-specific manifest: avakot's `manifest.json` serves an `artifacts` map with a fixed entry name, static download URLs and no published size. The manifest and per-entry versions must equal the requested version; the payload is measured from the verified download (downloaded and discarded in `--metadata-only` mode). A missing entry or digest is not-ready. |
 
 ## `fbr` CLI
 
@@ -114,23 +124,20 @@ fbr resolve-app --name X                     app name -> app id
 fbr descriptor --app X [--field a.b]         validated descriptor (or one field)
 fbr descriptor-env --app X [--format env|output]
                                              KEY=VALUE lines for $GITHUB_ENV/$GITHUB_OUTPUT
-fbr resolve --app X --arch A --output-dir D --metadata F
-     [--metadata-only] [--failure-out F]     resolve upstream metadata; a classified
+fbr resolve --app X --arch A --requested-version V
+     --output-dir D --metadata F
+     [--metadata-only] [--failure-out F]     resolve the requested version; a missing
+                                             artifact exits 8 (not-ready), a classified
                                              failure writes its verdict to F
 fbr metadata --file F --field version|sha256|url|path
-fbr gate --app X --upstream-version V [--requested-version V]
-     [--release-exists] [--release-matches-cask true|false] [--tap T]
-                                             cask gate decision; omit the match flag when
-                                             the asset comparison could not run; a
-                                             requested version newer than upstream is a
-                                             not-ready skip
-fbr feed-version --app X [--tap T]           newest version the release feed advertises,
-                                             as feed_version= (advisory; recorded in the
-                                             run record, nothing waits on it)
+fbr gate --app X --requested-version V [--artifact-version V]
+     [--release-exists] [--tap T]            cask gate decision; omit --artifact-version
+                                             when resolve was not-ready, and the gate
+                                             reports the typed not-ready skip
 fbr report --app X --phase P --stage S --message M --run-id N
      --run-attempt A --output F [--code C] [--reason not-ready]
      [--event-id UUID] [--request-id ID] [--public-output F]
-     [--resolved-version V] [--cask-version V] [--feed-version V]
+     [--resolved-version V] [--cask-version V]
      [--evidence k=v]...                     write the machine-readable run record the API
                                              reads; --phase is accepted|succeeded|failed|
                                              skipped, --event-id defaults to a fresh UUID,
@@ -144,8 +151,6 @@ fbr cask --action read|set-version|check     read, re-pin or check casks
      [--app X] [--tap T] [--version V]       set-version takes --version plus the
      [--sha256-x86-64 H] [--sha256-arm-64 H] checksum of each architecture the
                                              descriptor ships
-fbr release-check --app X --asset-dir D      release assets vs the cask pin (true|false,
-     [--tap T]                               or nothing when it could not compare)
 fbr release-prune --prefix P --keep N TAGS   stale release versions to prune, oldest first
 fbr release-notes --app X --asset-dir D      release-notes markdown
      [--upstream arch=SHA=URL]... [--output F]
@@ -160,10 +165,11 @@ fbr version-compare --sort A B [C ...]       dpkg-order a list ascending, one pe
 ```
 
 Every command declares its flags: an unknown or duplicate flag is a usage error
-(exit 2), never silently ignored. A classified failure exits 3 (upstream
-unavailable), 4 (guard violation), 5 (checksum mismatch), 6 (updater residual)
-or 7 (upstream conflict) and, when the caller passed `--failure-out`, leaves the
-run-record fragment there. Every other failure exits 1, which the record reports
+(exit 2), never silently ignored. A typed not-ready verdict exits 8 and writes
+no failure fragment. A classified failure exits 3 (upstream unavailable), 4
+(guard violation), 5 (checksum mismatch), 6 (updater residual) or 7 (upstream
+conflict) and, when the caller passed `--failure-out`, leaves the run-record
+fragment there. Every other failure exits 1, which the record reports
 UNCLASSIFIED.
 
 ## The run record
@@ -191,12 +197,14 @@ permanent. The API accepts tokens only from `refs/heads/main`,
 `workflow_dispatch` runs of `dispatch.yml`, `build.yml` or `build-appimage.yml`.
 
 A manual run has no request id, so it uploads its artifact but stays out of the
-API's inbox. A dispatched run resolves the version the API asked for; when the
-upstream has not published that artifact yet, the gate reports a `skipped`
-record with typed `reason: not-ready` (the human `message` also names it), and
-the API asks again later. The tap does not re-run skips: `retry.yml` consumes
-the public copy and `fbr retry-plan` decides only on failed records, from the
-record's own verdict:
+API's inbox. A manual run with no requested version resolves the cask pin. A
+dispatched run resolves the version the API asked for; when the vendor has not
+published that artifact yet, resolve returns a typed not-ready and the gate
+reports a `skipped` record with `reason: "not-ready"` (the human `message` also
+names it), and the API asks again later. A not-ready is **never** `failed`, and
+the tap never builds an older version instead. The tap does not re-run skips:
+`retry.yml` consumes the public copy and `fbr retry-plan` decides only on failed
+records, from the record's own verdict:
 
 - `phase`/`stage`/`code` — what happened, where, and why. `code` carries its
   own verdict (`class`, `retryable`, `retry_after_seconds`), so the retry plan
@@ -210,8 +218,8 @@ record's own verdict:
   failure-fragment writer refuse it first. The message is clamped at 2 KiB with
   a truncation marker, so an over-long one never costs the record; the whole
   body is capped at 64 KiB.
-- `resolved_version` / `cask_version` / `feed_version` — the three versions the
-  record reports; a not-ready skip names what resolve actually saw.
+- `resolved_version` / `cask_version` — the resolved (requested) version and
+  the cask pin.
 
 A failure site writes a fragment (`{"code","message","stage"?,"evidence"?}`)
 before exiting; the report job downloads the fragments and prefers the site's
@@ -231,12 +239,11 @@ Each check lives in one place:
 - **Hosts** — every download validates the final URL's protocol and host
   against a pinned allow-list (intermediate redirect hops are not inspected; the
   runtime follows the chain). GitHub asset hosts come from one shared list, so
-  an advisory cannot forget an edge host.
-- **Content** — size caps, SHA-256 for apt/GitHub/CDN payloads, a SHA-512
-  cross-check for the electron feed, constant-time digest comparison, atomic
-  writes.
-- **Freshness** — a signed apt index is rejected when its `Valid-Until` has
-  passed or its `Date` is over 14 days old.
+  an artifact resolver cannot forget an edge host.
+- **Content** — size caps, a SHA-256 for every payload, a SHA-512 cross-check
+  for the AppImage update yml, and a detached-signature verification for the
+  Mozilla release tarball, with constant-time digest comparison and atomic
+  writes. A payload with no digest is not-ready, never downloaded on trust.
 - **Paths** — metadata and key paths stay inside their output directory (or, for
   keys, inside the repo); descriptor paths are repo-relative.
 - **Updaters** — descriptor-declared, then verified: a survivor declared
@@ -257,7 +264,7 @@ Each check lives in one place:
 
 ## Adding an app
 
-1. `apps/<app>/app.json` — copy a similar descriptor and adjust the advisory,
+1. `apps/<app>/app.json` — copy a similar descriptor and adjust the artifact,
    payload, icon and updater sections.
 2. `apps/<app>/templates/<name>.desktop`, plus a four-line `build.sh`
    (`exec ../../lib/shell/build-appimage.sh <app>`).
@@ -265,7 +272,9 @@ Each check lives in one place:
    first publish fills both. Never start the cask at the upstream head: the
    watcher dispatches only when the feed is newer than the pinned version, so
    a cask already at the feed version reads as up-to-date and its first build
-   never runs.
+   never runs. A manual first build must name the version explicitly
+   (`requested_version` / `PACKAGE_VERSION`), because `0.0.0` has no artifact
+   and resolve answers not-ready.
 
 Nothing else — the build matrix and the dispatch route read the descriptor
 directory.
@@ -312,7 +321,7 @@ non-FHS and old distros.
   staging `bin/resources/opencode-cli` to userData — ships a helper that dies
   with `Interpreter not found!`.
 - A staged payload tree can keep its libraries beside its binaries (Firefox's
-  `usr/lib/firefox` does, and those libraries carry no `$ORIGIN` rpath). The
+  release tree does, and those libraries carry no `$ORIGIN` rpath). The
   pack stage runs `quick-sharun` with `LD_LIBRARY_PATH=<AppDir>/bin` for exactly
   that call, so the closure scan resolves the siblings instead of aborting on
   "missing libraries".
@@ -361,8 +370,9 @@ both — including what `quick-sharun` downloads for itself at build time. Only
 TARGET_ARCH=amd64 PACKAGE_VERSION=1.137.0 packaging/apps/vscode/build.sh
 ```
 
-`PACKAGE_VERSION` is optional: unset, it comes from the resolved metadata; set,
-the build fails if the resolved version differs (CI always sets it). Requires an
+`PACKAGE_VERSION` is the requested version and is required: the resolver only
+returns that version's artifact, and the build fails if the resolved version
+differs (CI always sets it from the dispatch or the cask pin). Requires an
 Arch Linux system — the builder image (`packaging/builder/Dockerfile`) is the
 supported one — plus `bun` ≥ 1.4.4, `jq`, the app's own tooling (`dpkg-deb`,
 `gpg`/`gpgv`), `quick-sharun` in `PATH` and `APPIMAGETOOL` pointing at the
@@ -399,10 +409,11 @@ on 6.x and `@types/node` on the Node major line Bun implements, both via
 ## Tests and gates
 
 `bun test` runs the unit suite (Bun's runner over `node:test`; no test
-dependencies): dpkg ordering, deb822/InRelease parsing and freshness, HTTP
-timeout/cap/atomic write, guards and metadata validation, descriptor validation,
-cask read/update/consistency, the gate table, updater neutralization, desktop
-rendering, run records, retry plans and the advisory parsers.
+dependencies): dpkg ordering, HTTP timeout/cap/atomic write, guards and metadata
+validation, descriptor validation, cask read/update/consistency, the gate table,
+updater neutralization, desktop rendering, run records, retry plans, the
+artifact parsers, the JSON-asset and Mozilla-signature paths, and the detached
+signature fixture. The signature tests need `gpg`/`gpgv` (the `gnupg` package).
 
 `bun run typecheck` runs `tsc --noEmit` (strict). `bun run style` runs
 `brew style edgarcnp/tap` on its own — RuboCop plus shellcheck, shfmt and

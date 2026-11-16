@@ -2,19 +2,24 @@
 // app, so a new app is data plus templates, not a fork of the pipeline.
 
 import * as fs from "node:fs";
-import { assertSameLength, assertSingleLine, fail } from "../core/guards.ts";
+import {
+  assertHttpsUrl,
+  assertMatches,
+  assertSameLength,
+  assertSingleLine,
+  fail,
+} from "../core/guards.ts";
 import { APPS_DIR, descriptorPath } from "../core/paths.ts";
 import { APP_ID, GITHUB_API_REPOSITORY, GITHUB_RELEASE_FEED, SAFE_REFERENCE } from "../core/patterns.ts";
 import { hasPlaceholder } from "../core/template.ts";
 import { ARCHITECTURES, isArchitecture } from "../core/types.ts";
 import type {
   AppDescriptor,
-  AptAdvisory,
   Architecture,
+  Artifact,
   CaskDesktopEntry,
   ExtraFile,
   IconConfig,
-  Advisory,
   Payload,
   QuickSharunConfig,
   ResidualScan,
@@ -41,6 +46,8 @@ const TOP_LEVEL_KEYS = [
   "buildPackages",
   "architectures",
   "binaryTargets",
+  "artifact",
+  // Deprecated alias accepted for one release; remove it in the next.
   "advisory",
   "payload",
   "icon",
@@ -108,96 +115,102 @@ function relativePath(value: string, label: string): string {
   return value;
 }
 
-function validateAdvisory(raw: unknown, label: string): Advisory {
+const DOTTED_FIELD = /^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$/;
+
+function fieldPath(value: string, label: string): string {
+  if (!DOTTED_FIELD.test(value)) fail(`${label} must be a dotted field path: ${value}`);
+  return value;
+}
+
+function validateArtifact(raw: unknown, label: string): Artifact {
   const source = asObject(raw, label);
   const kind = str(source, "kind", label);
   switch (kind) {
-    case "apt": {
-      rejectUnknownKeys(
-        source,
-        ["kind", "repository", "packageName", "suite", "fingerprint", "keyBase64Path"],
-        label,
-      );
-      // A dists/<suite> path segment only: no slashes, no traversal.
-      const suite = optionalStr(source, "suite", label);
-      if (suite !== undefined && !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(suite)) {
-        fail(`${label}.suite is not a safe dists suite name: ${suite}`);
-      }
-      const apt: AptAdvisory = {
-        kind,
-        repository: str(source, "repository", label),
-        packageName: str(source, "packageName", label),
-        fingerprint: str(source, "fingerprint", label),
-        keyBase64Path: relativePath(str(source, "keyBase64Path", label), `${label}.keyBase64Path`),
-      };
-      if (suite !== undefined) apt.suite = suite;
-      return apt;
-    }
     case "github-release": {
       rejectUnknownKeys(
         source,
-        ["kind", "repository", "assetPrefix", "assetNameTemplate", "tagPrefix", "packageName"],
+        ["kind", "repository", "assetNameTemplate", "tagPrefix", "packageName"],
         label,
       );
       const repository = str(source, "repository", label);
       if (!GITHUB_API_REPOSITORY.test(repository)) {
         fail(`${label}.repository must be a GitHub API repository URL: ${repository}`);
       }
-      const hasPrefix = source["assetPrefix"] !== undefined;
-      const hasTemplate = source["assetNameTemplate"] !== undefined;
-      const hasTag = source["tagPrefix"] !== undefined;
-      const hasPackage = source["packageName"] !== undefined;
-      if (hasTemplate || hasTag || hasPackage) {
-        if (hasPrefix) fail(`${label}: assetPrefix and assetNameTemplate are mutually exclusive`);
-        if (!hasTemplate || !hasTag || !hasPackage) {
-          fail(`${label}: assetNameTemplate, tagPrefix and packageName must be set together`);
-        }
-        const tagPrefix = str(source, "tagPrefix", label);
-        if (!SAFE_REFERENCE.test(tagPrefix)) {
-          fail(`${label}.tagPrefix is not a safe tag prefix: ${tagPrefix}`);
-        }
-        const assetNameTemplate = str(source, "assetNameTemplate", label);
-        if (!hasPlaceholder(assetNameTemplate)) {
-          fail(`${label}.assetNameTemplate must contain a placeholder: ${assetNameTemplate}`);
-        }
-        return {
-          kind,
-          repository,
-          assetNameTemplate,
-          tagPrefix,
-          packageName: str(source, "packageName", label),
-        };
+      const tagPrefix = str(source, "tagPrefix", label);
+      if (!SAFE_REFERENCE.test(tagPrefix)) {
+        fail(`${label}.tagPrefix is not a safe tag prefix: ${tagPrefix}`);
       }
-      return { kind, repository, assetPrefix: str(source, "assetPrefix", label) };
-    }
-    case "electron-feed":
-      rejectUnknownKeys(
-        source,
-        ["kind", "repository", "githubRepository", "tagPrefix", "packageName", "assetNameTemplate"],
-        label,
-      );
+      const assetNameTemplate = str(source, "assetNameTemplate", label);
+      if (!hasPlaceholder(assetNameTemplate)) {
+        fail(`${label}.assetNameTemplate must contain a placeholder: ${assetNameTemplate}`);
+      }
       return {
         kind,
-        repository: str(source, "repository", label),
-        githubRepository: str(source, "githubRepository", label),
-        tagPrefix: str(source, "tagPrefix", label),
+        repository,
+        assetNameTemplate,
+        tagPrefix,
         packageName: str(source, "packageName", label),
-        assetNameTemplate: str(source, "assetNameTemplate", label),
       };
-    case "cdn-redirect": {
+    }
+    case "json-asset": {
       rejectUnknownKeys(
         source,
-        ["kind", "repository", "redirectHosts", "packageName", "debName"],
+        [
+          "kind",
+          "url",
+          "downloadHosts",
+          "urlField",
+          "sha256Field",
+          "versionField",
+          "packageName",
+        ],
         label,
       );
-      const redirectHosts = strArray(source, "redirectHosts", label);
-      if (redirectHosts.length === 0) fail(`${label}.redirectHosts must not be empty`);
+      const downloadHosts = strArray(source, "downloadHosts", label);
+      if (downloadHosts.length === 0) fail(`${label}.downloadHosts must not be empty`);
       return {
         kind,
-        repository: str(source, "repository", label),
-        redirectHosts,
+        url: assertHttpsUrl(str(source, "url", label), `${label}.url`).href,
+        downloadHosts,
+        urlField: fieldPath(str(source, "urlField", label), `${label}.urlField`),
+        sha256Field: fieldPath(str(source, "sha256Field", label), `${label}.sha256Field`),
+        versionField: fieldPath(str(source, "versionField", label), `${label}.versionField`),
         packageName: str(source, "packageName", label),
-        debName: str(source, "debName", label),
+      };
+    }
+    case "mozilla-release": {
+      rejectUnknownKeys(
+        source,
+        [
+          "kind",
+          "urlTemplate",
+          "signatureTemplate",
+          "packageName",
+          "fingerprint",
+          "keyPath",
+        ],
+        label,
+      );
+      const urlTemplate = str(source, "urlTemplate", label);
+      assertHttpsUrl(urlTemplate, `${label}.urlTemplate`);
+      if (!urlTemplate.includes("{version}")) {
+        fail(`${label}.urlTemplate must contain {version}: ${urlTemplate}`);
+      }
+      const signatureTemplate = str(source, "signatureTemplate", label);
+      if (!signatureTemplate.includes("{url}")) {
+        fail(`${label}.signatureTemplate must contain {url}: ${signatureTemplate}`);
+      }
+      return {
+        kind,
+        urlTemplate,
+        signatureTemplate,
+        packageName: str(source, "packageName", label),
+        fingerprint: assertMatches(
+          str(source, "fingerprint", label),
+          /^[0-9A-Fa-f]{40}$/,
+          `${label}.fingerprint`,
+        ),
+        keyPath: relativePath(str(source, "keyPath", label), `${label}.keyPath`),
       };
     }
     case "update-manifest": {
@@ -239,7 +252,7 @@ function validateAdvisory(raw: unknown, label: string): Advisory {
       };
     }
     default:
-      return fail(`Unknown resolver kind: ${kind}`);
+      return fail(`Unknown artifact kind: ${kind}`);
   }
 }
 
@@ -284,11 +297,25 @@ function validatePayload(raw: unknown, label: string): Payload {
     };
   }
   if (kind === "tarball-tree") {
-    rejectUnknownKeys(source, ["kind", "root"], label);
-    return {
-      kind,
-      root: relativePath(str(source, "root", label).replace(/^\/+/, ""), `${label}.root`),
-    };
+    rejectUnknownKeys(source, ["kind", "root", "target", "exclude"], label);
+    const root = optionalStr(source, "root", label);
+    const target = optionalStr(source, "target", label);
+    if (target !== undefined && target !== "root" && target !== "bin") {
+      fail(`${label}.target must be "root" or "bin"`);
+    }
+    const exclude = strArray(source, "exclude", label).map((entry) => {
+      if (entry.includes("/") || entry.includes("..")) {
+        fail(`${label}.exclude entry must be a top-level name or glob: ${entry}`);
+      }
+      return entry;
+    });
+    const payload: Payload = { kind };
+    if (root !== undefined) {
+      payload.root = relativePath(root.replace(/^\/+/, ""), `${label}.root`);
+    }
+    if (target !== undefined) payload.target = target;
+    if (exclude.length > 0) payload.exclude = exclude;
+    return payload;
   }
   return fail(`Unknown payload kind: ${kind}`);
 }
@@ -498,16 +525,22 @@ function validateExtraFiles(raw: unknown, label: string): ExtraFile[] | undefine
 
 function validateIcon(raw: unknown, label: string): IconConfig {
   const source = asObject(raw, label);
-  rejectUnknownKeys(source, ["source", "size"], label);
+  rejectUnknownKeys(source, ["source", "size", "base"], label);
   const size = str(source, "size", label);
   // A raster icon declares its hicolor WxH directory; an SVG the scalable one.
   if (!/^\d+x\d+$/.test(size) && size !== "scalable") {
     fail(`${label}.size must look like 512x512, or be "scalable" for an SVG`);
   }
-  return {
+  const base = optionalStr(source, "base", label);
+  if (base !== undefined && base !== "payload" && base !== "app") {
+    fail(`${label}.base must be "payload" or "app"`);
+  }
+  const icon: IconConfig = {
     source: relativePath(str(source, "source", label), `${label}.source`),
     size,
   };
+  if (base !== undefined) icon.base = base;
+  return icon;
 }
 
 // A payload-owned desktop entry (Zed) replaces the cask's generated one: the
@@ -601,6 +634,21 @@ export function validateDescriptor(raw: unknown, expectedId: string): AppDescrip
   const hostHelpers = validateHostHelpers(source["hostHelpers"], `${label}.hostHelpers`);
   const extraFiles = validateExtraFiles(source["extraFiles"], `${label}.extraFiles`);
   const caskDesktopEntry = validateCaskDesktopEntry(source["caskDesktopEntry"], `${label}.caskDesktopEntry`);
+  // `advisory` is the old name, accepted for one release as an alias. Both at
+  // once is ambiguous, so it fails rather than picking one.
+  const artifactRaw = source["artifact"];
+  const legacyArtifactRaw = source["advisory"];
+  if (artifactRaw !== undefined && legacyArtifactRaw !== undefined) {
+    fail(`${label}: use "artifact"; the deprecated "advisory" alias cannot be combined with it`);
+  }
+  if (artifactRaw === undefined && legacyArtifactRaw === undefined) {
+    fail(`${label}.artifact must be an object`);
+  }
+  if (artifactRaw === undefined) {
+    process.stderr.write(
+      `[WARN] ${label}.advisory is deprecated; rename it to "artifact"\n`,
+    );
+  }
   const descriptor: AppDescriptor = {
     id,
     appName: str(source, "appName", label),
@@ -617,7 +665,7 @@ export function validateDescriptor(raw: unknown, expectedId: string): AppDescrip
     buildPackages: strArray(source, "buildPackages", label),
     architectures: validateArchitectures(source["architectures"], label),
     binaryTargets: strArray(source, "binaryTargets", label),
-    advisory: validateAdvisory(source["advisory"], `${label}.advisory`),
+    artifact: validateArtifact(artifactRaw ?? legacyArtifactRaw, `${label}.artifact`),
     payload: validatePayload(source["payload"], `${label}.payload`),
     icon: validateIcon(source["icon"], `${label}.icon`),
     desktopTemplate: relativePath(str(source, "desktopTemplate", label), `${label}.desktopTemplate`),

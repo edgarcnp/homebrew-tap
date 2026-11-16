@@ -68,12 +68,22 @@ pipeline_init() {
 pipeline_resolve() {
   info "Resolving ${APP_ID} for ${DEB_ARCH}"
   METADATA_PATH="${WORK_DIR}/metadata.json"
+  # The requested version is the only version this build may produce: the
+  # workflow passes the API's dispatched version as PACKAGE_VERSION (or
+  # REQUESTED_VERSION), a local run passes PACKAGE_VERSION.
+  local requested_version="${PACKAGE_VERSION:-${REQUESTED_VERSION:-}}"
+  [[ -n "${requested_version}" ]] || error "PACKAGE_VERSION or REQUESTED_VERSION must name the version to resolve"
+  if [[ -n "${PACKAGE_VERSION:-}" && -n "${REQUESTED_VERSION:-}" && "${PACKAGE_VERSION}" != "${REQUESTED_VERSION}" ]]
+  then
+    error "PACKAGE_VERSION ${PACKAGE_VERSION} != REQUESTED_VERSION ${REQUESTED_VERSION}"
+  fi
   # Forward the workflow's fragment path the way pipeline_neutralize does: a
   # classified resolve failure (upstream outage, checksum mismatch, guard) must
   # name itself in the run record instead of falling back to BUILD_FAILED.
   local -a resolve_args=(resolve
     --app "${APP_ID}"
     --arch "${DEB_ARCH}"
+    --requested-version "${requested_version}"
     --output-dir "${WORK_DIR}"
     --metadata "${METADATA_PATH}")
   if [[ -n "${FBR_FAILURE_OUT:-}" ]]
@@ -84,13 +94,9 @@ pipeline_resolve() {
 
   local resolved_version
   resolved_version="$(fbr metadata --file "${METADATA_PATH}" --field version)"
-  if [[ -n "${PACKAGE_VERSION:-}" ]]
-  then
-    [[ "${resolved_version}" = "${PACKAGE_VERSION}" ]] || error "Resolved version ${resolved_version} != PACKAGE_VERSION ${PACKAGE_VERSION}"
-  else
-    PACKAGE_VERSION="${resolved_version}"
-    validate_package_version "${PACKAGE_VERSION}"
-  fi
+  [[ "${resolved_version}" = "${requested_version}" ]] || error "Resolved version ${resolved_version} != requested ${requested_version}"
+  PACKAGE_VERSION="${resolved_version}"
+  validate_package_version "${PACKAGE_VERSION}"
   info "Resolved version ${PACKAGE_VERSION}"
 }
 
@@ -119,17 +125,42 @@ pipeline_extract() {
       PAYLOAD_ROOT="${deb_payload}"
       ;;
     tarball-tree)
-      # A bundle tarball (Zed) is unpacked whole; the descriptor's `root` is
-      # the directory inside it that pipeline_stage stages at the AppDir root.
+      # Any tarball compression: an application tarball (.tar.gz) and a
+      # Mozilla release tarball (.tar.xz) both land here. `tar -f` detects the
+      # compression from the archive itself.
       local tar_payload="${WORK_DIR}/tar-payload"
       mkdir -p -- "${tar_payload}"
-      tar -xzf "${PAYLOAD_PATH}" -C "${tar_payload}"
+      tar -xf "${PAYLOAD_PATH}" -C "${tar_payload}"
       PAYLOAD_ROOT="${tar_payload}"
       ;;
     *)
       error "Unknown payload kind in descriptor: ${kind}"
       ;;
   esac
+}
+
+# The directory inside a tarball payload that pipeline_stage stages. An
+# explicit payload.root wins; otherwise the tarball must contain exactly one
+# top-level directory (GitComet and ArtCraft name it after the version).
+payload_tarball_root() {
+  local root
+  root="$(descriptor_field '.payload.root // empty')"
+  if [[ -n "${root}" ]]
+  then
+    printf '%s\n' "${root}"
+    return 0
+  fi
+  local -a entries=()
+  local entry
+  while IFS= read -r -d '' entry
+  do
+    entries+=("${entry}")
+  done < <(find "${PAYLOAD_ROOT}" -mindepth 1 -maxdepth 1 -print0)
+  if [[ ${#entries[@]} -ne 1 ]] || [[ ! -d "${entries[0]:-}" ]]
+  then
+    error "Tarball payload must have exactly one top-level directory, or declare payload.root"
+  fi
+  basename -- "${entries[0]}"
 }
 
 is_excluded_payload_entry() {
@@ -229,13 +260,36 @@ pipeline_stage() {
       assert_bin_elf_arch
       ;;
     tarball-tree)
-      # The bundle keeps its own layout: bin/, libexec/, lib/ and share/ land at
-      # the AppDir root, so its binaries keep resolving $ORIGIN/../lib and the
-      # CLI keeps finding ../libexec/zed-editor beside itself.
-      local root
-      root="$(descriptor_field '.payload.root')"
+      local root target
+      root="$(payload_tarball_root)"
+      target="$(descriptor_field '.payload.target // "root"')"
       [[ -d "${PAYLOAD_ROOT}/${root}" ]] || error "Missing payload tree: ${PAYLOAD_ROOT}/${root}"
-      cp -a -- "${PAYLOAD_ROOT}/${root}/." "${APPDIR}/"
+      local source_dir destination entry name
+      source_dir="${PAYLOAD_ROOT}/${root}"
+      case "${target}" in
+        root)
+          # A bundle keeps its own layout: bin/, libexec/, lib/ and share/ land
+          # at the AppDir root, so its binaries keep resolving $ORIGIN/../lib
+          # and the CLI keeps finding ../libexec/zed-editor beside itself.
+          destination="${APPDIR}"
+          ;;
+        bin)
+          # An application tarball is a flat install tree: its contents become
+          # AppDir/bin, the same layout the old .deb tree produced.
+          destination="${APPDIR}/bin"
+          ;;
+        *)
+          error "Unknown tarball target in descriptor: ${target}"
+          ;;
+      esac
+      # Entry by entry so descriptor-declared names/globs can be skipped (an
+      # upstream docs tree that repeats a slug the updater scan rejects).
+      while IFS= read -r -d '' entry
+      do
+        name="$(basename -- "${entry}")"
+        is_excluded_payload_entry "${name}" && continue
+        cp -a -- "${entry}" "${destination}/"
+      done < <(find "${source_dir}" -mindepth 1 -maxdepth 1 -print0)
       assert_bin_elf_arch
       # The editor lives outside bin/, so nothing else would check its arch.
       if [[ -d "${APPDIR}/libexec" ]]
@@ -272,9 +326,23 @@ pipeline_render_desktop() {
 }
 
 pipeline_install_icon() {
-  local size upstream_icon name extension
+  local size base upstream_icon name extension root
   size="$(descriptor_field '.icon.size')"
-  upstream_icon="${PAYLOAD_ROOT}/$(descriptor_field '.icon.source')"
+  base="$(descriptor_field '.icon.base // "payload"')"
+  if [[ "${base}" = "app" ]]
+  then
+    # A repo-owned icon for an upstream tarball that ships none (GitComet).
+    upstream_icon="${PIPELINE_REPO_DIR}/$(descriptor_field '.sourceDir')/$(descriptor_field '.icon.source')"
+  else
+    upstream_icon="${PAYLOAD_ROOT}/$(descriptor_field '.icon.source')"
+    if [[ ! -f "${upstream_icon}" && "$(descriptor_field '.payload.kind')" = "tarball-tree" ]]
+    then
+      # The icon path is relative to the payload's own tree, not the tarball's
+      # wrapper directory.
+      root="$(payload_tarball_root)"
+      upstream_icon="${PAYLOAD_ROOT}/${root}/$(descriptor_field '.icon.source')"
+    fi
+  fi
   ensure_file_exists "${upstream_icon}" "upstream icon"
   # Keep the payload icon's own extension: a raster icon lands in its WxH
   # hicolor directory, an SVG in the scalable one. A dotless basename keeps

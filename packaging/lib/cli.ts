@@ -8,6 +8,7 @@ import { APPIMAGE_ARCH, resolveArchitecture } from "./core/architecture.ts";
 import {
   ChecksumMismatchError,
   GuardViolationError,
+  NotReadyError,
   UpdaterResidualError,
   UpstreamConflictError,
   UpstreamUnavailableError,
@@ -31,10 +32,8 @@ import {
   type ReportStage,
 } from "./pipeline/report.ts";
 import { readRetryPlan, RETRY_CONCLUSIONS, type RetryConclusion } from "./pipeline/retry.ts";
-import { fetchFeedVersion } from "./pipeline/watch.ts";
 import { readMetadataField } from "./core/metadata.ts";
 import {
-  compareReleasedAssets,
   planReleasePrune,
   renderReleaseNotes,
   type UpstreamRecord,
@@ -103,15 +102,6 @@ class Flags {
 
 const APP = { type: "string" } as const;
 const TAP = { type: "string" } as const;
-
-// The gate's asset comparison is tri-state: the workflow omits the flag when
-// the comparison could not run, and passes "true" or "false" when it did.
-function parseReleaseMatch(value: string | undefined): boolean | null {
-  if (value === undefined) return null;
-  if (value === "true") return true;
-  if (value === "false") return false;
-  throw new UsageError(`Flag --release-matches-cask must be "true" or "false", got "${value}"`);
-}
 
 // --upstream <arch>=<sha256>=<url>, one per shipped architecture.
 function parseUpstreamSpec(spec: string): [Architecture, UpstreamRecord] {
@@ -304,10 +294,11 @@ const COMMANDS: Command[] = [
   },
   {
     name: "resolve",
-    summary: `Resolve upstream metadata (--app, --arch <${ARCHITECTURES.join("|")}>, --output-dir, --metadata, [--metadata-only], [--failure-out F])`,
+    summary: `Resolve the requested version's metadata (--app, --arch <${ARCHITECTURES.join("|")}>, --requested-version, --output-dir, --metadata, [--metadata-only], [--failure-out F])`,
     options: {
       app: APP,
       arch: { type: "string" },
+      "requested-version": { type: "string" },
       "output-dir": { type: "string" },
       metadata: { type: "string" },
       "metadata-only": { type: "boolean" },
@@ -319,14 +310,16 @@ const COMMANDS: Command[] = [
       if (!isArchitecture(architecture)) {
         throw new UsageError(`--arch must be one of ${ARCHITECTURES.join(", ")}`);
       }
-      const metadata = await resolveWith(descriptor.advisory, {
+      const outcome = await resolveWith(descriptor.artifact, {
         architecture,
+        requestedVersion: flags.str("requested-version"),
         outputDir: flags.str("output-dir"),
         metadataPath: flags.str("metadata"),
         metadataOnly: flags.bool("metadata-only"),
         token: process.env["GITHUB_TOKEN"] ?? process.env["GH_TOKEN"] ?? "",
       });
-      process.stdout.write(`${metadata.path ?? flags.str("metadata")}\n`);
+      if (outcome.status === "not-ready") throw new NotReadyError(outcome.detail);
+      process.stdout.write(`${outcome.metadata.path ?? flags.str("metadata")}\n`);
       return 0;
     },
   },
@@ -342,24 +335,22 @@ const COMMANDS: Command[] = [
   {
     name: "gate",
     summary:
-      "Print the cask gate decision (--app, --upstream-version, [--requested-version V], [--release-exists], [--release-matches-cask true|false], [--tap])",
+      "Print the cask gate decision (--app, --requested-version V, [--artifact-version V], [--release-exists], [--tap])",
     options: {
       app: APP,
       tap: TAP,
-      "upstream-version": { type: "string" },
       "requested-version": { type: "string" },
+      "artifact-version": { type: "string" },
       "release-exists": { type: "boolean" },
-      "release-matches-cask": { type: "string" },
     },
     run: (flags) => {
       const descriptor = descriptorFor(flags);
       const cask = readCaskFile(caskFileFor(flags, descriptor));
       const decision = planGate({
         cask,
-        upstreamVersion: flags.str("upstream-version"),
-        requestedVersion: flags.optStr("requested-version"),
+        requestedVersion: flags.str("requested-version"),
+        artifactVersion: flags.optStr("artifact-version") ?? null,
         releaseExists: flags.bool("release-exists"),
-        releaseMatchesCask: parseReleaseMatch(flags.optStr("release-matches-cask")),
       });
       // Emitted as $GITHUB_OUTPUT lines; the workflow consumes them directly.
       for (const line of [
@@ -376,26 +367,9 @@ const COMMANDS: Command[] = [
     },
   },
   {
-    name: "feed-version",
-    summary:
-      "Newest version the release feed advertises (--app, [--tap]); prints feed_version=. Advisory: the caller compares it against resolved_version and cask_version",
-    options: {
-      app: APP,
-      tap: TAP,
-    },
-    run: async (flags) => {
-      const descriptor = descriptorFor(flags);
-      const feedVersion =
-        descriptor.watch === undefined ? null : await fetchFeedVersion(descriptor.watch);
-      // One KEY=VALUE line; the workflow parses it out of stdout.
-      process.stdout.write(`feed_version=${feedVersion ?? ""}\n`);
-      return 0;
-    },
-  },
-  {
     name: "report",
     summary:
-      "Write the machine-readable run record (--app, --phase, --stage, --message, --run-id, --run-attempt, --output, [--code], [--reason], [--event-id ID], [--request-id ID], [--public-output F], [--resolved-version], [--cask-version], [--feed-version], [--evidence k=v]...)",
+      "Write the machine-readable run record (--app, --phase, --stage, --message, --run-id, --run-attempt, --output, [--code], [--reason], [--event-id ID], [--request-id ID], [--public-output F], [--resolved-version], [--cask-version], [--evidence k=v]...)",
     options: {
       app: APP,
       phase: { type: "string" },
@@ -409,7 +383,6 @@ const COMMANDS: Command[] = [
       "run-attempt": { type: "string" },
       "resolved-version": { type: "string" },
       "cask-version": { type: "string" },
-      "feed-version": { type: "string" },
       evidence: { type: "string", multiple: true },
       output: { type: "string" },
       "public-output": { type: "string" },
@@ -500,7 +473,6 @@ const COMMANDS: Command[] = [
         eventId: optional(flags.optStr("event-id")),
         resolvedVersion: version(flags.optStr("resolved-version")),
         caskVersion: version(flags.optStr("cask-version")),
-        feedVersion: version(flags.optStr("feed-version")),
         evidence,
       });
       process.stdout.write(`${writeReport(output, report)}\n`);
@@ -537,23 +509,6 @@ const COMMANDS: Command[] = [
         conclusion as RetryConclusion,
       );
       process.stdout.write(`${JSON.stringify(plan, null, 2)}\n`);
-      return 0;
-    },
-  },
-  {
-    name: "release-check",
-    summary:
-      "Compare downloaded release assets to the cask pin (--app, --asset-dir, [--tap]); prints true|false, or nothing when it could not compare",
-    options: { app: APP, tap: TAP, "asset-dir": { type: "string" } },
-    run: (flags) => {
-      const descriptor = descriptorFor(flags);
-      const cask = readCaskFile(caskFileFor(flags, descriptor));
-      const { matches, notes } = compareReleasedAssets(descriptor, cask, flags.str("asset-dir"));
-      for (const note of notes) process.stderr.write(`[WARN] ${note}\n`);
-      // No output means the comparison could not run; the gate reads that as
-      // "no evidence" and catches the cask up rather than trusting it.
-      if (matches === null) return 0;
-      process.stdout.write(`${matches}\n`);
       return 0;
     },
   },
@@ -730,10 +685,12 @@ function classifyFailure(error: unknown): FailureVerdict | undefined {
   return undefined;
 }
 
-// The process exit code for a failed command: usage errors keep 2, classified
-// failures use their own code (3-7), everything else is the generic 1.
+// The process exit code for a failed command: usage errors keep 2, a typed
+// not-ready verdict uses 8, classified failures use their own code (3-7),
+// everything else is the generic 1.
 export function errorExitCode(error: unknown): number {
   if (isUsageError(error)) return error.exitCode;
+  if (error instanceof NotReadyError) return 8;
   return classifyFailure(error)?.exitCode ?? 1;
 }
 

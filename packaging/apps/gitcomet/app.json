@@ -20,20 +20,21 @@
   "debloatArgs": "--add-common",
   "architectures": ["amd64"],
   "binaryTargets": ["gitcomet"],
-  "advisory": {
-    "kind": "apt",
-    "repository": "https://apt.gitcomet.dev",
+  "artifact": {
+    "kind": "github-release",
+    "repository": "https://api.github.com/repos/Auto-Explore/GitComet",
     "packageName": "gitcomet",
-    "fingerprint": "2115CEF160DC4127D59B1AFA14DBABA25C3A181D",
-    "keyBase64Path": "packaging/apps/gitcomet/assets/gitcomet-archive-keyring.gpg.base64"
+    "tagPrefix": "v",
+    "assetNameTemplate": "gitcomet-v{version}-linux-x86_64.tar.gz"
   },
   "payload": {
-    "kind": "deb-files",
-    "files": ["usr/bin/gitcomet"]
+    "kind": "tarball-tree",
+    "target": "bin"
   },
   "icon": {
-    "source": "usr/share/icons/hicolor/512x512/apps/gitcomet.png",
-    "size": "512x512"
+    "source": "templates/gitcomet.png",
+    "size": "512x512",
+    "base": "app"
   },
   "desktopTemplate": "templates/gitcomet.desktop",
   "updater": {

@@ -66,7 +66,6 @@ describe("run records", () => {
       stage: "detect",
       message: "not-ready: upstream publishes 1.0.0; requested 1.1.0",
       resolvedVersion: "1.0.0",
-      feedVersion: null,
       eventId: EVENT_ID,
     });
     assert.equal(report.code, undefined);
@@ -74,7 +73,6 @@ describe("run records", () => {
     assert.equal(report.retryable, undefined);
     assert.equal(report.retry_after_seconds, undefined);
     assert.equal(report.resolved_version, "1.0.0");
-    assert.equal(report.feed_version, null);
   });
 
   it("carries the typed not-ready reason on a skipped record", () => {
@@ -256,7 +254,6 @@ describe("run records", () => {
       "message",
       "resolved_version",
       "cask_version",
-      "feed_version",
       "evidence",
       "finished_at",
     ];
@@ -493,8 +490,6 @@ describe("fbr report command", () => {
       "1.139.0",
       "--cask-version",
       "1.138.0",
-      "--feed-version",
-      "",
       "--evidence",
       "http_status=503",
       "--output",
@@ -519,8 +514,6 @@ describe("fbr report command", () => {
     assert.equal(record["resolved_version"], "1.139.0");
     // The cask pin is the API's truth and must survive the round trip.
     assert.equal(record["cask_version"], "1.138.0");
-    // An empty flag value means "unknown", not the empty string.
-    assert.equal(record["feed_version"], null);
     assert.deepEqual(record["evidence"], { http_status: "503" });
     fs.rmSync(dir, { recursive: true, force: true });
   });

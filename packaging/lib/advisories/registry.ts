@@ -1,47 +1,43 @@
-// Advisory dispatch. The switch is exhaustive, so adding a resolver kind without
-// handling it here is a type error rather than a runtime surprise.
+// Artifact dispatch. The switch is exhaustive, so adding a resolver kind
+// without handling it here is a type error rather than a runtime surprise.
 
 import { fail } from "../core/guards.ts";
-import type { Metadata, Advisory, AdvisoryKind } from "../core/types.ts";
-import { resolveWithApt } from "./apt.ts";
-import { resolveWithCdnRedirect } from "./cdn-redirect.ts";
+import type { Artifact, ArtifactKind } from "../core/types.ts";
 import { resolveWithAvakot } from "./custom/avakot.ts";
-import { resolveWithElectronFeed } from "./electron-feed.ts";
 import { resolveWithGithubRelease } from "./github-release.ts";
-import type { ResolveRequest } from "./shared.ts";
+import { resolveWithJsonAsset } from "./json-asset.ts";
+import { resolveWithMozillaRelease } from "./mozilla-release.ts";
+import type { ResolveOutcome, ResolveRequest } from "./shared.ts";
 import { resolveWithUpdateManifest } from "./update-manifest.ts";
 
-export type AdvisoryResolver<K extends AdvisoryKind> = (
-  advisory: Extract<Advisory, { kind: K }>,
+export type ArtifactResolver<K extends ArtifactKind> = (
+  artifact: Extract<Artifact, { kind: K }>,
   request: ResolveRequest,
-) => Promise<Metadata>;
+) => Promise<ResolveOutcome>;
 
-type Registry = { [K in AdvisoryKind]: AdvisoryResolver<K> };
+type Registry = { [K in ArtifactKind]: ArtifactResolver<K> };
 
-export const ADVISORY_RESOLVERS: Registry = {
-  apt: resolveWithApt,
+export const ARTIFACT_RESOLVERS: Registry = {
   "github-release": resolveWithGithubRelease,
-  "electron-feed": resolveWithElectronFeed,
-  "cdn-redirect": resolveWithCdnRedirect,
+  "json-asset": resolveWithJsonAsset,
+  "mozilla-release": resolveWithMozillaRelease,
   "update-manifest": resolveWithUpdateManifest,
   avakot: resolveWithAvakot,
 };
 
-export function resolveWith(advisory: Advisory, request: ResolveRequest): Promise<Metadata> {
-  switch (advisory.kind) {
-    case "apt":
-      return ADVISORY_RESOLVERS.apt(advisory, request);
+export function resolveWith(artifact: Artifact, request: ResolveRequest): Promise<ResolveOutcome> {
+  switch (artifact.kind) {
     case "github-release":
-      return ADVISORY_RESOLVERS["github-release"](advisory, request);
-    case "electron-feed":
-      return ADVISORY_RESOLVERS["electron-feed"](advisory, request);
-    case "cdn-redirect":
-      return ADVISORY_RESOLVERS["cdn-redirect"](advisory, request);
+      return ARTIFACT_RESOLVERS["github-release"](artifact, request);
+    case "json-asset":
+      return ARTIFACT_RESOLVERS["json-asset"](artifact, request);
+    case "mozilla-release":
+      return ARTIFACT_RESOLVERS["mozilla-release"](artifact, request);
     case "update-manifest":
-      return ADVISORY_RESOLVERS["update-manifest"](advisory, request);
+      return ARTIFACT_RESOLVERS["update-manifest"](artifact, request);
     case "avakot":
-      return ADVISORY_RESOLVERS.avakot(advisory, request);
+      return ARTIFACT_RESOLVERS.avakot(artifact, request);
   }
-  const exhaustive: never = advisory;
-  return fail(`Unsupported resolver kind: ${JSON.stringify(exhaustive)}`);
+  const exhaustive: never = artifact;
+  return fail(`Unsupported artifact kind: ${JSON.stringify(exhaustive)}`);
 }

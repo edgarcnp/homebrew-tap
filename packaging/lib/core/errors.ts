@@ -7,6 +7,30 @@
 // UNCLASSIFIED, which the retry workflow re-runs within its attempt cap rather
 // than dropping a failure nobody classified.
 
+// The requested artifact is not published yet. This is a verdict, not a
+// failure: the CLI exits 8, writes no failure fragment, and the workflow
+// reports a skipped record with reason "not-ready". It never reaches the
+// retry plan, which acts on failed records only.
+export class NotReadyError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "NotReadyError";
+  }
+}
+
+// A non-retryable HTTP response (4xx other than a rate-limited 403). The
+// status is kept so a resolver can treat 404 as "not published yet" while
+// every other client error stays a failure.
+export class HttpStatusError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "HttpStatusError";
+    this.status = status;
+  }
+}
+
 export class UpstreamUnavailableError extends Error {
   // Transport-level hints the retry plan can time a re-run with, e.g.
   // http_status, retry_after_seconds or reason. Strings only: the CLI copies

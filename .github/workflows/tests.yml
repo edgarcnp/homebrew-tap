@@ -106,12 +106,14 @@ jobs:
         env:
           TAP_REPO: ${{ github.repository }}
         run: |
+          # gnupg carries gpg/gpgv, which the Mozilla detached-signature tests
+          # exercise against the committed fixture key.
           if command -v sudo >/dev/null 2>&1; then
             sudo apt-get update
-            sudo apt-get install -y shellcheck
+            sudo apt-get install -y shellcheck gnupg
           else
             apt-get update
-            apt-get install -y shellcheck
+            apt-get install -y shellcheck gnupg
           fi
           cd "$(brew --repository "$TAP_REPO")"
           # Globbed, so a new script is linted automatically; -x follows the

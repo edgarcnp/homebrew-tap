@@ -49,7 +49,6 @@ export interface RetryItem {
   readonly retryable: boolean;
   readonly resolved_version: string | null;
   readonly cask_version: string | null;
-  readonly feed_version: string | null;
   readonly retry_after_seconds: number | null;
 }
 
@@ -200,7 +199,6 @@ function readRecord(file: string): ParsedRecord | null {
   const message = stringField(parsed, "message", file);
   const resolvedVersion = optionalVersion(parsed, "resolved_version", file);
   const caskVersion = optionalVersion(parsed, "cask_version", file);
-  const feedVersion = optionalVersion(parsed, "feed_version", file);
 
   // A succeeded record needs no action, and the API owns re-asking after a
   // skipped one; only a failed record carries a retry verdict.
@@ -221,7 +219,6 @@ function readRecord(file: string): ParsedRecord | null {
       retryable,
       resolved_version: resolvedVersion,
       cask_version: caskVersion,
-      feed_version: feedVersion,
       retry_after_seconds: retryDelay(parsed, file),
     },
   };

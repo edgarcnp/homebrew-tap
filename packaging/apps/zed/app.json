@@ -20,7 +20,7 @@
   "architectures": ["amd64"],
   "buildPackages": ["alsa-lib"],
   "binaryTargets": ["zed"],
-  "advisory": {
+  "artifact": {
     "kind": "github-release",
     "repository": "https://api.github.com/repos/zed-industries/zed",
     "packageName": "zed",

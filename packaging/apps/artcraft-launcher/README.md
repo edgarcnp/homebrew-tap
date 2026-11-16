@@ -5,30 +5,36 @@ the [pipeline README](../../README.md).
 
 Built from ArtCraft Launcher's GitHub releases
 ([`storytold/craft-launcher`](https://github.com/storytold/craft-launcher)): the
-Linux x86_64 `.deb` asset is staged and repacked as this tap's AppImage.
+Linux x86_64 `.tar.gz` asset is staged and repacked as this tap's AppImage.
 
 ## Trust model
 
-GitHub release assets: the advisory pins the repository and the asset-name
-template, and verifies the downloaded `.deb` against the SHA-256 the releases
-API publishes for that exact asset. The cask starts with a placeholder
-checksum that the first publish replaces with the built AppImage's SHA-256.
+GitHub release assets: the artifact pins the repository, tag prefix and
+asset-name template, and verifies the downloaded tarball against the SHA-256
+the releases API publishes for that exact asset. A missing tag, asset or digest
+is a typed not-ready. The cask starts with a placeholder checksum that the
+first publish replaces with the built AppImage's SHA-256.
 
 ## App-specific
 
 - **Version source** — `github-release`: tag `v<version>`, release title
-  `ArtCraft Launcher v<version>`. The asset template hardcodes `-linux-x86_64`
-  because upstream names its packages with the upstream machine spelling
-  (`x86_64`, `aarch64`) while `{arch}` substitutes the deb arch (`amd64`,
-  `arm64`); the app is amd64-only here, matching the tap.
+  `ArtCraft Launcher v<version>`. The asset template is
+  `artcraft-launcher-{version}-linux-x86_64.tar.gz`; upstream uses the machine
+  spelling (`x86_64`, `aarch64`) in the asset name. The app is amd64-only here,
+  matching the tap.
 - **Release watch** — the pattern matches the release *title*, not the tag, so
   capture group 1 is the version. Upstream marks every `-suffix` version
   (`1.2.3-rc.1`) as a GitHub prerelease, but the feed reader lists titles and
   never sees that flag, so `skipPattern` drops those titles instead; without it
   the watcher would advertise a version `resolve` (which skips prerelease
   releases) can never reach.
-- **Payload** — `deb-files`: `usr/bin/artcraft-launcher` is staged into
-  `AppDir/bin`, and the icon comes from the `scalable` hicolor tree.
+- **Payload** — `tarball-tree` with the default `target: "root"`: the tarball's
+  single versioned top-level directory is detected, so its `bin/` lands at the
+  AppDir root. `exclude: ["share"]` skips the tarball's inert
+  `share/doc`/`share/metainfo` files, which repeat `storytold/craft-launcher`
+  and would otherwise trip the error-level residual scan; the icon stage reads
+  the tarball's `share/icons` tree directly from the extracted payload. The
+  binary is `bin/artcraft-launcher`.
 - **dlopen libraries** — the binary links only libc/libgcc/libm; the whole
   windowing stack (X11/XCB/cursor/Xi, xkbcommon, Wayland, EGL) is loaded with
   `dlopen`, so no `ldd` closure would find it. `quickSharun.libraries` names

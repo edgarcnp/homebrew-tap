@@ -3,7 +3,7 @@
 
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
-import { GuardViolationError, UpstreamUnavailableError } from "./errors.ts";
+import { GuardViolationError, HttpStatusError, UpstreamUnavailableError } from "./errors.ts";
 
 export const MAX_PAYLOAD_BYTES = 512 * 1024 * 1024;
 
@@ -77,7 +77,9 @@ export function httpFailure(response: Response, message: string): Error {
   const rateLimited =
     status === 403 &&
     (response.headers.get("x-ratelimit-remaining") === "0" || retryAfter !== null);
-  if (status !== 429 && !rateLimited && status < 500) return new Error(message);
+  if (status !== 429 && !rateLimited && status < 500) {
+    return new HttpStatusError(message, status);
+  }
   const evidence: Record<string, string> = { http_status: String(status) };
   if (rateLimited) evidence["rate_limited"] = "true";
   if (retryAfter !== null) evidence["retry_after_seconds"] = String(retryAfter);
@@ -209,10 +211,6 @@ export function sha256Hex(data: Buffer | string): string {
 
 export function sha256Digest(data: Buffer): Buffer {
   return crypto.createHash("sha256").update(data).digest();
-}
-
-export function sha512Base64(data: Buffer): string {
-  return crypto.createHash("sha512").update(data).digest("base64");
 }
 
 export function sha512Digest(data: Buffer): Buffer {

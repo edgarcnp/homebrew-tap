@@ -9,7 +9,7 @@ This file is a map, not the terrain: where it and the code disagree, the code
 wins and this file is stale — say so instead of following it.
 
 The deep reference is [`packaging/README.md`](packaging/README.md): the layout,
-every descriptor field, the advisory kinds, the `fbr` CLI, the run record, the
+every descriptor field, the artifact kinds, the `fbr` CLI, the run record, the
 verification and build models, and the steps for adding an app. Read the
 section you are about to change rather than guessing at it.
 
@@ -46,8 +46,9 @@ is **data** (`packaging/apps/<app>/app.json`), never a forked script.
 
 ## Prerequisites
 
-- `bun` 1.4.4 (the version CI pins), `shellcheck`, and a Homebrew install for
-  `brew style` and `brew audit`.
+- `bun` 1.4.4 (the version CI pins), `shellcheck`, `gnupg` (`gpg`/`gpgv` for
+  the Mozilla detached-signature tests), and a Homebrew install for `brew
+  style` and `brew audit`.
 - JS dev dependencies: `bun install --frozen-lockfile --ignore-scripts`.
 - A *local AppImage build* additionally needs an Arch Linux system or the
   pkgforge container, plus `jq`, `dpkg-deb`, `gpg`/`gpgv`, `quick-sharun` on
@@ -110,7 +111,7 @@ memory or habit.
 - Adding an app needs three things — descriptor, desktop template plus a
   four-line `build.sh`, and a cask with placeholder checksums. The build matrix
   and dispatch route read the descriptor directory, so no workflow edit.
-- Keep the docs true when behavior changes: descriptor fields, advisory kinds,
+- Keep the docs true when behavior changes: descriptor fields, artifact kinds,
   CLI flags and gates belong in `packaging/README.md`; the root README's cask
   table stays complete and sorted by cask name.
 - Report findings outside the requested scope instead of fixing them.

@@ -22,12 +22,10 @@ function validMetadata(): Metadata {
   return {
     package: "code",
     version: "1.137.0",
-    packageVersion: "1.137.0-1786487972",
     architecture: "amd64",
     repositoryPath: "pool/main/c/code/code_1.137.0-1786487972_amd64.deb",
     sha256: "a".repeat(64),
     size: 1234,
-    depends: "libc6 (>= 2.17)",
     repository: "https://packages.microsoft.com/repos/code",
     path: "/tmp/code.deb",
   };

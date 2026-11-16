@@ -3,30 +3,32 @@
 Descriptor: [`app.json`](app.json). Shared stages and the field reference are in
 the [pipeline README](../../README.md).
 
-Built from the signed `.deb` Mozilla publishes on
-`https://packages.mozilla.org/apt` (suite `mozilla`).
+Built from the signed release tarball Mozilla publishes on
+`ftp.mozilla.org`, with its detached `.asc` signature verified before the bytes
+are hashed.
 
 ## Trust model
 
-GPG chain: the repository key is pinned in [`assets/`](assets) by fingerprint,
-`InRelease` is verified against it, and both the `Packages` index and the
-downloaded `.deb` are checked against the SHA-256 and size the signed index
-records. The repository host is pinned too — the downloader accepts no edge
-host.
+Release signature: the pinned Mozilla release key in [`assets/`](assets) is
+checked by fingerprint, then `gpgv` verifies the detached signature over the
+exact tarball bytes. The SHA-256 and size recorded in the metadata are computed
+from those verified bytes, so the payload has no second trust root to drift
+from.
 
 ## App-specific
 
-- **Version source** — `apt`: the index's versions carry Mozilla's rebuild
-  marker (`157.0~build1`), which `normalizeUpstreamVersion` strips, so the cask
-  version is `157.0`. The release feed
+- **Version source** — `mozilla-release`: the tarball URL is built from the
+  requested version
+  (`https://ftp.mozilla.org/pub/firefox/releases/{version}/linux-x86_64/en-US/firefox-{version}.tar.xz`)
+  and `{url}.asc` is its signature. A missing tarball or signature, or a
+  signature that does not verify, is a typed not-ready. The release feed
   (`product-details.mozilla.org/1.0/firefox_versions.json`,
-  `LATEST_FIREFOX_VERSION`) announces the same string, so the watcher never sees
-  a rebuild marker as "newer" than the pin.
-- **Payload** — `deb-tree`: the whole `usr/lib/firefox` tree is staged into
-  `AppDir/bin`, unchanged. Firefox's own libraries (including `libxul.so`)
-  carry no `$ORIGIN` rpath and are loaded next to the binary through
-  `dependentlibs.list`, so the pack stage puts `AppDir/bin` on `LD_LIBRARY_PATH`
-  for quick-sharun's closure scan (see the pipeline README).
+  `LATEST_FIREFOX_VERSION`) is the API's watch source; the tap never reads it.
+- **Payload** — `tarball-tree` with `target: "bin"`: the whole `firefox/` tree
+  is staged into `AppDir/bin`, unchanged. Firefox's own libraries (including
+  `libxul.so`) carry no `$ORIGIN` rpath and are loaded next to the binary
+  through `dependentlibs.list`, so the pack stage puts `AppDir/bin` on
+  `LD_LIBRARY_PATH` for quick-sharun's closure scan (see the pipeline README).
 - **Codecs** — Firefox ships its own decoders in `libmozavcodec.so` and
   `libgkcodecs.so` (H.264, HEVC, VP9, AV1, MP3, FLAC, Opus, Vorbis, …). The
   codecs it does not ship (AAC, AC-3/E-AC-3, MPEG-4, VC-1, TrueHD, …) come from
@@ -98,9 +100,9 @@ host.
   the NVIDIA issues are open (2054380 fails with NVIDIA, 2072790 crash in
   `cuVDPAUCtxCreate`). The shipped defaults stay on VA-API, which decodes all
   five codecs, until the upstream switch is ready.
-- **Locales** — the deb carries en-US only. Other languages are separate
-  `firefox-l10n-*` packages that the one-deb pipeline does not stage; a language
-  can still be added at runtime from addons.mozilla.org.
+- **Locales** — the release tarball carries en-US only. Other languages are
+  separate language packs that this pipeline does not stage; a language can
+  still be added at runtime from addons.mozilla.org.
 - **Updater** — the update service endpoint (`https://aus5.mozilla.org`) lives
   in `application.ini`, `firefox-bin` and `libxul.so`, which are patched
   same-length, and in `omni.ja`, which is a CRC-checked archive and cannot be
@@ -112,9 +114,9 @@ host.
 
 ## Local run
 
-`PACKAGE_VERSION` is optional; set, it must match the resolved version
-(CI always sets it).
+`PACKAGE_VERSION` is the requested version and is required; the build fails
+if the resolved version differs (CI always sets it).
 
 ```sh
-TARGET_ARCH=amd64 ./build.sh
+TARGET_ARCH=amd64 PACKAGE_VERSION=160.0 ./build.sh
 ```

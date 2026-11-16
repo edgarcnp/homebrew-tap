@@ -15,7 +15,7 @@ on:
         required: false
         type: string
       requested_version:
-        description: Feed version the API decided to build; empty for manual runs
+        description: Feed version the API decided to build; empty for manual runs, which use the cask pin
         required: false
         type: string
 
@@ -45,12 +45,12 @@ jobs:
       architectures: ${{ steps.app.outputs.architectures }}
       build_matrix: ${{ steps.matrix.outputs.matrix }}
       version: ${{ steps.resolve.outputs.version }}
+      requested_version: ${{ steps.resolve.outputs.requested_version }}
       skipped: ${{ steps.resolve.outputs.skipped }}
       repair_cask: ${{ steps.resolve.outputs.repair_cask }}
       reason: ${{ steps.resolve.outputs.reason }}
       not_ready: ${{ steps.resolve.outputs.not_ready }}
       cask_version: ${{ steps.resolve.outputs.cask_version }}
-      feed_version: ${{ steps.resolve.outputs.feed_version }}
       source: ${{ steps.source.outputs.repo }}
       upstream_sha256_amd64: ${{ steps.resolve.outputs.upstream_sha256_amd64 }}
       upstream_sha256_arm64: ${{ steps.resolve.outputs.upstream_sha256_arm64 }}
@@ -126,24 +126,29 @@ jobs:
           repository: ${{ steps.source.outputs.repo }}
           path: source
           persist-credentials: false
-      - name: Resolve upstream version and gate
+      - name: Resolve the requested version and gate
         id: resolve
         env:
           GH_TOKEN: ${{ github.token }}
           REQUESTED_VERSION: ${{ inputs.requested_version }}
         run: |
-          # Only the apt resolver verifies a signed index with gpg.
-          if [[ "$(bun source/packaging/bin/fbr.ts descriptor --app "${APP_ID}" --field advisory.kind)" == "apt" ]]; then
+          # A Mozilla release tarball is verified with gpgv against a pinned key.
+          if [[ "$(bun source/packaging/bin/fbr.ts descriptor --app "${APP_ID}" --field artifact.kind)" == "mozilla-release" ]]; then
             sudo apt-get update
             sudo apt-get install -y gnupg
           fi
           cd source
-          # The descriptor's watch feed and the advisory resolve asks publish on
-          # their own schedules (opencode's update manifest lagged its own
-          # release feed by ~1min on 2.0.14, and that run gated on the stale
-          # read and skipped). Read the feed once and record what it advertises;
-          # nothing waits here, and the API re-asks after a not-ready skip.
+
+          # The API dispatches the version its watch decided to build. A manual
+          # run with no requested version rebuilds the version the cask pins;
+          # there is no second version source.
+          cask_json="$(bun tap/packaging/bin/fbr.ts cask --action read --app "${APP_ID}" --tap "${GITHUB_WORKSPACE}/tap")"
+          cask_version="$(jq -r '.version' <<<"${cask_json}")"
+          requested="${REQUESTED_VERSION:-${cask_version}}"
+          [ -n "${requested}" ] || { echo "::error::no requested version and no cask pin" >&2; exit 1; }
+
           version=""
+          not_ready=false
           upstream_sha256_amd64=""
           upstream_sha256_arm64=""
           upstream_url_amd64=""
@@ -157,10 +162,16 @@ jobs:
             # and writes the fragment, so this loop never has to guess from an
             # exit code.
             bun packaging/bin/fbr.ts resolve \
-              --app "${APP_ID}" --arch "${arch}" --metadata-only \
+              --app "${APP_ID}" --arch "${arch}" \
+              --requested-version "${requested}" --metadata-only \
               --output-dir upstream --metadata "${file}" \
               --failure-out "${GITHUB_WORKSPACE}/report-code.json" || resolve_rc=$?
-            if [ "${resolve_rc}" -eq 2 ]; then
+            if [ "${resolve_rc}" -eq 8 ]; then
+              # Typed not-ready: the vendor has not published this version yet.
+              # Never build another one; the gate writes the skipped record.
+              not_ready=true
+              break
+            elif [ "${resolve_rc}" -eq 2 ]; then
               # A usage error is our own bug: classify it so it is never retried.
               printf '{"code":"USAGE","message":"fbr resolve rejected its inputs"}\n' > "${GITHUB_WORKSPACE}/report-code.json"
               exit 2
@@ -170,6 +181,11 @@ jobs:
               exit "${resolve_rc}"
             fi
             arch_version="$(jq -r '.version' "${file}")"
+            if [ "${arch_version}" != "${requested}" ]; then
+              echo "resolved ${arch_version} != requested ${requested}" >&2
+              printf '{"code":"UPSTREAM_CONFLICT","message":"resolved version does not match the requested version"}\n' > "${GITHUB_WORKSPACE}/report-code.json"
+              exit 1
+            fi
             if [ -z "${version}" ]; then
               version="${arch_version}"
             elif [ "${version}" != "${arch_version}" ]; then
@@ -195,90 +211,49 @@ jobs:
                 ;;
             esac
           done < <(jq -r '.[]' <<<"${APP_ARCHITECTURES}")
-          [ -n "${version}" ] || { echo "no architectures resolved" >&2; exit 1; }
-          # Tags and asset names are single path segments. '+' is legal in a
-          # git ref and the toolchain allows it; '~' is not representable in a
-          # ref, and whitespace/separators are never valid. A version this
-          # guard rejects is permanent, not retryable.
-          if [[ ! "${version}" =~ ^[0-9A-Za-z.+-]+$ ]]
-          then
-            echo "::error::upstream version is not tag-safe: ${version}" >&2
-            printf '{"code":"GUARD_VIOLATION","message":"upstream version is not tag-safe"}\n' > "${GITHUB_WORKSPACE}/report-code.json"
-            exit 1
+
+          if [ "${not_ready}" = "true" ]; then
+            version=""
+          fi
+          if [ -n "${version}" ]; then
+            # Tags and asset names are single path segments. '+' is legal in a
+            # git ref and the toolchain allows it; '~' is not representable in
+            # a ref, and whitespace/separators are never valid. A version this
+            # guard rejects is permanent, not retryable.
+            if [[ ! "${version}" =~ ^[0-9A-Za-z.+-]+$ ]]
+            then
+              echo "::error::requested version is not tag-safe: ${version}" >&2
+              printf '{"code":"GUARD_VIOLATION","message":"requested version is not tag-safe"}\n' > "${GITHUB_WORKSPACE}/report-code.json"
+              exit 1
+            fi
           fi
 
-          feed_version=""
-          feed_rc=0
-          feed_report="$(bun "${GITHUB_WORKSPACE}/tap/packaging/bin/fbr.ts" feed-version \
-            --app "${APP_ID}" --tap "${GITHUB_WORKSPACE}/tap")" || feed_rc=$?
-          if [ "${feed_rc}" -eq 2 ]; then
-            # A usage error is our own bug: fail rather than gate blind.
-            printf '{"code":"USAGE","message":"fbr feed-version rejected its inputs"}\n' > "${GITHUB_WORKSPACE}/report-code.json"
-            exit "${feed_rc}"
-          elif [ "${feed_rc}" -ne 0 ]; then
-            # The cross-check is advisory: a feed outage must not fail a run
-            # that resolve is perfectly able to plan.
-            echo "::warning::release feed unavailable (exit ${feed_rc}); recording without the feed cross-check" >&2
-          else
-            feed_version="$(sed -n 's/^feed_version=//p' <<<"${feed_report}")"
-          fi
-          cd "${GITHUB_WORKSPACE}"
-          {
-            echo "feed_version=${feed_version}"
-            echo "upstream_sha256_amd64=${upstream_sha256_amd64}"
-            echo "upstream_sha256_arm64=${upstream_sha256_arm64}"
-            echo "upstream_url_amd64=${upstream_url_amd64}"
-            echo "upstream_url_arm64=${upstream_url_arm64}"
-            echo "version=${version}"
-          } >> "${GITHUB_OUTPUT}"
-
-          # The gate decision is a unit-tested pure function; the rest of this
-          # step gathers its inputs (cask pin, release existence, and whether
-          # the published assets still match the cask pin).
-          cask_json="$(bun tap/packaging/bin/fbr.ts cask --action read --app "${APP_ID}" --tap "${GITHUB_WORKSPACE}/tap")"
-          cask_version="$(jq -r '.version' <<<"${cask_json}")"
-
-          # Distinguish "no such release" (404) from a failed lookup. Reading a
+          # The tap's own release for this version (not the vendor's artifact).
+          # Distinguish "no such release" (404) from a failed lookup: reading a
           # transient gh/API error as absence would rebuild an already
           # published version, and the publish job's cleanup would then delete
           # that release.
-          release_status="$(gh api --include \
-            "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG_PREFIX}${version}" 2>/dev/null \
-            | head -n 1 || true)"
           release_exists=false
-          case "${release_status}" in
-            *" 200 "*)
-              release_exists=true
-              ;;
-            *" 404 "*)
-              ;;
-            *)
-              echo "::error::could not determine whether release ${TAG_PREFIX}${version} exists" >&2
-              printf '{"code":"UPSTREAM_UNAVAILABLE","message":"could not determine whether release %s%s exists"}\n' \
-                "${TAG_PREFIX}" "${version}" > "${GITHUB_WORKSPACE}/report-code.json"
-              exit 1
-              ;;
-          esac
-
-          matches=""
-          if [[ "${release_exists}" = "true" && "${cask_version}" = "${version}" ]]; then
-            # release-check prints true|false, or nothing when it could not
-            # compare (a shipped arch with no single asset).
-            tmp_dir="$(mktemp -d)"
-            if timeout 60 gh release download "${TAG_PREFIX}${version}" \
-              --repo "${GITHUB_REPOSITORY}" \
-              --pattern "${ASSET_PREFIX}-*.AppImage" \
-              --dir "${tmp_dir}" --clobber
-            then
-              matches="$(bun tap/packaging/bin/fbr.ts release-check \
-                --app "${APP_ID}" --tap "${GITHUB_WORKSPACE}/tap" --asset-dir "${tmp_dir}")"
-            else
-              echo "failed to download release ${TAG_PREFIX}${version}" >&2
-            fi
-            rm -rf -- "${tmp_dir}"
+          if [ -n "${version}" ]; then
+            release_status="$(gh api --include \
+              "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG_PREFIX}${version}" 2>/dev/null \
+              | head -n 1 || true)"
+            case "${release_status}" in
+              *" 200 "*)
+                release_exists=true
+                ;;
+              *" 404 "*)
+                ;;
+              *)
+                echo "::error::could not determine whether release ${TAG_PREFIX}${version} exists" >&2
+                printf '{"code":"UPSTREAM_UNAVAILABLE","message":"could not determine whether release %s%s exists"}\n' \
+                  "${TAG_PREFIX}" "${version}" > "${GITHUB_WORKSPACE}/report-code.json"
+                exit 1
+                ;;
+            esac
           fi
 
-          if [[ "${release_exists}" = "true" && "${cask_version}" != "${version}" ]]; then
+          if [[ "${release_exists}" = "true" && -n "${version}" && "${cask_version}" != "${version}" ]]; then
             # A queued duplicate run may have been queued against a stale
             # branch; re-read the cask from origin/main before deciding.
             if git -C tap fetch --quiet origin main; then
@@ -287,17 +262,24 @@ jobs:
             fi
           fi
 
-          gate_args=(--app "${APP_ID}" --tap "${GITHUB_WORKSPACE}/tap" --upstream-version "${version}")
-          # The API's decided version: the gate vetoes a build when upstream has
-          # not published it yet and answers not-ready instead.
-          if [[ -n "${REQUESTED_VERSION}" ]]; then
-            gate_args+=(--requested-version "${REQUESTED_VERSION}")
+          {
+            echo "upstream_sha256_amd64=${upstream_sha256_amd64}"
+            echo "upstream_sha256_arm64=${upstream_sha256_arm64}"
+            echo "upstream_url_amd64=${upstream_url_amd64}"
+            echo "upstream_url_arm64=${upstream_url_arm64}"
+            echo "version=${version}"
+            echo "requested_version=${requested}"
+          } >> "${GITHUB_OUTPUT}"
+
+          # The gate decision is a unit-tested pure function; the rest of this
+          # step gathers its inputs (cask pin, release existence). A not-ready
+          # resolve omits --artifact-version and the gate answers skipped.
+          gate_args=(--app "${APP_ID}" --tap "${GITHUB_WORKSPACE}/tap" --requested-version "${requested}")
+          if [[ -n "${version}" ]]; then
+            gate_args+=(--artifact-version "${version}")
           fi
           if [[ "${release_exists}" = "true" ]]; then
             gate_args+=(--release-exists)
-          fi
-          if [[ -n "${matches}" ]]; then
-            gate_args+=(--release-matches-cask "${matches}")
           fi
           bun tap/packaging/bin/fbr.ts gate "${gate_args[@]}" | tee -a "${GITHUB_OUTPUT}"
 
@@ -389,6 +371,7 @@ jobs:
         env:
           TARGET_ARCH: ${{ matrix.architecture }}
           PACKAGE_VERSION: ${{ needs.detect.outputs.version }}
+          REQUESTED_VERSION: ${{ needs.detect.outputs.requested_version }}
           # quick-sharun drives appimagetool via env vars, not CLI args; the
           # builder image installs it on PATH.
           APPIMAGETOOL: /usr/local/bin/appimagetool
@@ -683,7 +666,6 @@ jobs:
           NOT_READY: ${{ needs.detect.outputs.not_ready }}
           RESOLVED_VERSION: ${{ needs.detect.outputs.version }}
           CASK_VERSION: ${{ needs.detect.outputs.cask_version }}
-          FEED_VERSION: ${{ needs.detect.outputs.feed_version }}
           APP_ID: ${{ needs.detect.outputs.app_id }}
           REQUESTED_APP: ${{ inputs.app }}
           REQUEST_ID: ${{ inputs.request_id }}
@@ -785,7 +767,6 @@ jobs:
             --request-id "${REQUEST_ID}"
             --resolved-version "${RESOLVED_VERSION}"
             --cask-version "${CASK_VERSION}"
-            --feed-version "${FEED_VERSION}"
             --public-output "${RUNNER_TEMP}/run-report-public.json"
             --output "${RUNNER_TEMP}/run-report.json"
           )

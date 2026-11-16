@@ -10,13 +10,13 @@ extract step).
 
 ## App-specific
 
-- **Version source** — `github-release`, versioned-asset flavor for an
-  `.AppImage`: the newest release whose tag starts with `v` and carries
+- **Version source** — `github-release` for an `.AppImage`: the release whose
+  tag normalizes to the requested version must carry
   `WFHelper-{version}.AppImage` with a SHA-256 digest. The release's
   electron-builder `latest-linux.yml` is cross-checked (SHA-512 and size
-  against the API asset) before downloading, mirroring the `electron-feed`
-  advisory minus its feed-redirect step. An arm64 resolve finds no yml and fails
-  rather than packaging the wrong architecture.
+  against the API asset) before downloading. A missing tag, asset or digest is
+  a typed not-ready; an arm64 request finds no yml and never packages the wrong
+  architecture.
 - **Watch** — the normal atom block over `WFHelper/WFHelper` releases; the
   entry titles are `v2.1.0`-style tags.
 - **Single-arch** — `architectures: ["amd64"]`: the only linux target upstream
@@ -46,8 +46,8 @@ extract step).
 
 ## Local run
 
-`PACKAGE_VERSION` is optional; set, it must match the resolved version
-(CI always sets it).
+`PACKAGE_VERSION` is the requested version and is required; the build fails
+if the resolved version differs (CI always sets it).
 
 ```sh
 TARGET_ARCH=amd64 ./build.sh

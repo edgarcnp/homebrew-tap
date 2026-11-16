@@ -20,19 +20,19 @@
   "debloatArgs": "--add-common",
   "architectures": ["amd64"],
   "binaryTargets": ["artcraft-launcher"],
-  "advisory": {
+  "artifact": {
     "kind": "github-release",
     "repository": "https://api.github.com/repos/storytold/craft-launcher",
     "packageName": "artcraft-launcher",
     "tagPrefix": "v",
-    "assetNameTemplate": "artcraft-launcher-{version}-linux-x86_64.deb"
+    "assetNameTemplate": "artcraft-launcher-{version}-linux-x86_64.tar.gz"
   },
   "payload": {
-    "kind": "deb-files",
-    "files": ["usr/bin/artcraft-launcher"]
+    "kind": "tarball-tree",
+    "exclude": ["share"]
   },
   "icon": {
-    "source": "usr/share/icons/hicolor/scalable/apps/ai.storyteller.artcraft-launcher.svg",
+    "source": "share/icons/hicolor/scalable/apps/ai.storyteller.artcraft-launcher.svg",
     "size": "scalable"
   },
   "desktopTemplate": "templates/artcraft-launcher.desktop",

@@ -106,19 +106,3 @@ export function sortDebVersions(versions: readonly string[]): string[] {
   for (const version of versions) parseDebVersion(version);
   return [...versions].sort(compareDebVersions);
 }
-
-// Strips the Debian epoch and a build suffix so a cask/tag version stays stable
-// across package rebuilds: a trailing numeric revision (`1.133.0-1786487972`)
-// or Mozilla's apt `~buildN` marker (`157.0~build1`, which would otherwise sort
-// before the `157.0` its release feed announces). The epoch is kept in
-// metadata's packageVersion (it matters for apt ordering) but cannot reach the
-// cask: DEB_VERSION has no ':'.
-export function normalizeUpstreamVersion(version: string): string {
-  let upstream = version.replace(/^[0-9]+:/, "");
-  if (/^[0-9][0-9A-Za-z.+~]*-[0-9]+$/.test(upstream)) {
-    upstream = upstream.slice(0, upstream.indexOf("-"));
-  }
-  // Only the `~buildN` rebuild marker is stripped; other '~' suffixes are
-  // pre-release markers and are part of the version.
-  return upstream.replace(/~build[0-9]+$/i, "");
-}

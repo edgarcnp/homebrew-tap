@@ -3,22 +3,20 @@
 Descriptor: [`app.json`](app.json). Shared stages and the field reference are in
 the [pipeline README](../../README.md).
 
-Built from Microsoft's signed APT repository, so the full verification chain
-applies.
+Built from Microsoft's `linux-x64` tarball, named by the stable update JSON and
+verified against its published SHA-256.
 
 ## App-specific
 
-- **Pinned key** — `assets/microsoft-vscode-repository-key.gpg.base64` is
-  Microsoft's release key (`BC528686B50D79E339D3721CEB3E94ADBE1229CF`). It is the
-  `gpg --export` keyring, not the raw `microsoft.asc`, whose old-format packet
-  modern `gpgv` rejects.
-- **Version source** — `apt`: `InRelease` is verified with `gpgv` against the
-  pinned key, `Packages` is checked against the signed index, and the newest
-  `code` entry per architecture is selected by dpkg ordering. The `.deb` is then
-  checked against the index SHA-256/size. The cask uses the upstream version
-  (e.g. `1.133.0`), not the build-epoch suffix (`1.133.0-1786487972`), which
-  differs per architecture.
-- **Payload** — `deb-tree`: the `usr/share/code` tree is staged into `AppDir/bin`.
+- **Version source** — `json-asset`: the pinned
+  `https://update.code.visualstudio.com/api/update/linux-x64/stable/latest`
+  document carries `productVersion`, the asset `url` and `sha256hash`. Its
+  version must equal the requested version; the download is restricted to the
+  declared hosts, verified against the digest and measured. The `url` points at
+  `vscode.download.prss.microsoft.com`, which is why both hosts are declared.
+- **Payload** — `tarball-tree` with `target: "bin"`: the `VSCode-linux-x64`
+  tree is staged into `AppDir/bin`, the same layout the old `.deb` produced.
+  The icon is the tarball's 1024×1024 `resources/app/resources/linux/code.png`.
 - **Debloated GTK pairing** — `gdk-pixbuf2-mini` is requested alongside
   `--add-common` on purpose. The debloated `glycin-mini` ships glycin-ng, which
   lacks the glycin 2.2 symbols (`gly_pixel_density_new`) that Arch's current
@@ -45,9 +43,9 @@ binary:
 
 ## Local run
 
-`PACKAGE_VERSION` is optional; set, it must match the resolved version
-(CI always sets it).
+`PACKAGE_VERSION` is the requested version and is required; the build fails
+if the resolved version differs (CI always sets it).
 
 ```sh
-TARGET_ARCH=amd64 ./build.sh
+TARGET_ARCH=amd64 PACKAGE_VERSION=1.146.0 ./build.sh
 ```

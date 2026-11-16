@@ -21,20 +21,21 @@
   "buildPackages": ["libcanberra", "libxss", "speech-dispatcher"],
   "architectures": ["amd64"],
   "binaryTargets": ["firefox"],
-  "advisory": {
-    "kind": "apt",
-    "repository": "https://packages.mozilla.org/apt",
-    "suite": "mozilla",
+  "artifact": {
+    "kind": "mozilla-release",
+    "urlTemplate": "https://ftp.mozilla.org/pub/firefox/releases/{version}/linux-x86_64/en-US/firefox-{version}.tar.xz",
+    "signatureTemplate": "{url}.asc",
     "packageName": "firefox",
-    "fingerprint": "35BAA0B33E9EB396F59CA838C0BA5CE6DC6315A3",
-    "keyBase64Path": "packaging/apps/firefox/assets/mozilla-packages-key.gpg.base64"
+    "fingerprint": "14F26682D0916CDD81E37B6D61B7B526D98F0353",
+    "keyPath": "packaging/apps/firefox/assets/mozilla-release-key.asc"
   },
   "payload": {
-    "kind": "deb-tree",
-    "tree": "usr/lib/firefox"
+    "kind": "tarball-tree",
+    "root": "firefox",
+    "target": "bin"
   },
   "icon": {
-    "source": "usr/share/icons/hicolor/128x128/apps/firefox.png",
+    "source": "browser/chrome/icons/default/default128.png",
     "size": "128x128"
   },
   "desktopTemplate": "templates/firefox.desktop",

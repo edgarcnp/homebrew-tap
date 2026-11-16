@@ -1,9 +1,11 @@
-// Update-manifest advisory: a pinned https JSON endpoint is the version source
-// ({version, metadata: {files: {<name>: {url, sha256, size}}}}), e.g.
-// opencode's update API. Unlike cdn-redirect it publishes the digest, so
-// --metadata-only resolve needs no download.
+// Update-manifest artifact: a pinned https JSON endpoint publishes a version
+// and per-asset URL/SHA-256/size, e.g. opencode's update API. The manifest's
+// version must equal the requested version; a mismatch, a missing asset or a
+// missing digest is not-ready. The manifest publishes the digest, so
+// --metadata-only resolve needs no payload download.
 
 import * as path from "node:path";
+import { NotReadyError } from "../core/errors.ts";
 import {
   assertHostAllowed,
   assertHttpsUrl,
@@ -17,9 +19,16 @@ import { MAX_PAYLOAD_BYTES } from "../core/http.ts";
 import { makeMetadata, writeMetadata } from "../core/metadata.ts";
 import { DEB_VERSION } from "../core/patterns.ts";
 import { substitutePlaceholders } from "../core/template.ts";
-import type { Metadata, UpdateManifestAdvisory } from "../core/types.ts";
+import type { Metadata, UpdateManifestArtifact } from "../core/types.ts";
 import { downloadVerified, fetchVerified } from "./download.ts";
-import { prepareOutput, type ResolveRequest } from "./shared.ts";
+import {
+  isNotFound,
+  notReady,
+  prepareOutput,
+  ready,
+  type ResolveOutcome,
+  type ResolveRequest,
+} from "./shared.ts";
 
 const MAX_MANIFEST_BYTES = 1024 * 1024;
 
@@ -42,26 +51,36 @@ export interface SelectedManifest {
 }
 
 // Parses the manifest and selects the asset named by assetName, validating
-// every trusted field (version, url, host, sha256, size). Pure, for testing.
+// every trusted field (version, url, host, sha256, size). A missing or
+// mismatched artifact is a typed NotReadyError; a malformed document is a
+// plain failure. Pure, for testing.
 export function selectManifestAsset(
   body: unknown,
   assetName: string,
   downloadHosts: readonly string[],
+  requestedVersion: string,
 ): SelectedManifest {
   if (!isRecord(body)) fail("Update manifest is not an object");
   const version = body["version"];
   if (typeof version !== "string" || !DEB_VERSION.test(version)) {
     fail(`Update manifest has no sane version: ${String(version)}`);
   }
+  if (version !== requestedVersion) {
+    throw new NotReadyError(
+      `update manifest publishes ${version}; requested ${requestedVersion}`,
+    );
+  }
   const metadata = body["metadata"];
   if (!isRecord(metadata)) fail("Update manifest has no metadata object");
   const files = metadata["files"];
   if (!isRecord(files)) fail("Update manifest has no metadata.files map");
   const entry = files[assetName];
-  if (!isRecord(entry)) fail(`Update manifest has no entry for ${assetName}`);
+  if (!isRecord(entry)) {
+    throw new NotReadyError(`update manifest has no entry for ${assetName}`);
+  }
   const rawUrl = entry["url"];
   if (typeof rawUrl !== "string" || rawUrl === "") {
-    fail(`Update manifest ${assetName} has no url`);
+    throw new NotReadyError(`update manifest ${assetName} has no url`);
   }
   const url = assertHttpsUrl(rawUrl, `Update manifest ${assetName} url`);
   assertHostAllowed(url, downloadHosts, "update manifest asset");
@@ -72,9 +91,12 @@ export function selectManifestAsset(
   }
   const sha256 = entry["sha256"];
   if (typeof sha256 !== "string" || sha256 === "") {
-    fail(`Update manifest ${assetName} has no sha256`);
+    throw new NotReadyError(`update manifest ${assetName} has no sha256`);
   }
   assertSha256Hex(sha256, `Update manifest ${assetName} sha256`);
+  if (entry["size"] === undefined) {
+    throw new NotReadyError(`update manifest ${assetName} has no size`);
+  }
   const size = assertPositiveSize(
     entry["size"] as number,
     MAX_PAYLOAD_BYTES,
@@ -88,7 +110,7 @@ export function selectManifestAsset(
   };
 }
 
-// Shared with the provider-specific manifest advisories under custom/: fetch
+// Shared with the provider-specific manifest artifacts under custom/: fetch
 // and parse a pinned JSON manifest with the same size cap. The manifest is the
 // version and digest trust root, so fetchVerified pins the final URL after any
 // redirect to the host the descriptor declared.
@@ -104,49 +126,61 @@ export async function fetchManifest(repository: string): Promise<unknown> {
 }
 
 export async function resolveWithUpdateManifest(
-  advisory: UpdateManifestAdvisory,
+  artifact: UpdateManifestArtifact,
   request: ResolveRequest,
-): Promise<Metadata> {
-  const repository = validateManifestEndpoint(advisory.repository);
-  if (advisory.downloadHosts.length === 0) fail("downloadHosts must not be empty");
-  for (const host of advisory.downloadHosts) assertSafeName(host, "download host");
-  const packageName = assertSafeName(advisory.packageName, "package name");
-  if (!advisory.assetTemplate.includes("{arch}")) {
-    fail("update-manifest advisory requires an assetTemplate containing {arch}");
+): Promise<ResolveOutcome> {
+  const repository = validateManifestEndpoint(artifact.repository);
+  if (artifact.downloadHosts.length === 0) fail("downloadHosts must not be empty");
+  for (const host of artifact.downloadHosts) assertSafeName(host, "download host");
+  const packageName = assertSafeName(artifact.packageName, "package name");
+  if (!artifact.assetTemplate.includes("{arch}")) {
+    fail("update-manifest artifact requires an assetTemplate containing {arch}");
   }
-  const assetName = substitutePlaceholders(advisory.assetTemplate, {
+  const assetName = substitutePlaceholders(artifact.assetTemplate, {
     arch: request.architecture,
   });
   const { outputDir, metadataPath } = prepareOutput(request);
-  const manifest = selectManifestAsset(
-    await fetchManifest(repository),
-    assetName,
-    advisory.downloadHosts,
-  );
+  let selected: SelectedManifest;
+  try {
+    selected = selectManifestAsset(
+      await fetchManifest(repository),
+      assetName,
+      artifact.downloadHosts,
+      request.requestedVersion,
+    );
+  } catch (error) {
+    if (error instanceof NotReadyError) return notReady(error.message);
+    throw error;
+  }
 
   const packagePath = request.metadataOnly
     ? null
-    : path.join(outputDir, `${packageName}_${manifest.version}_${request.architecture}.deb`);
-  const metadata = makeMetadata({
+    : path.join(outputDir, `${packageName}_${selected.version}_${request.architecture}.deb`);
+  const metadata: Metadata = makeMetadata({
     package: packageName,
-    version: manifest.version,
+    version: selected.version,
     architecture: request.architecture,
-    repositoryPath: manifest.repositoryPath,
-    sha256: manifest.asset.sha256,
-    size: manifest.asset.size,
-    repository: manifest.repository,
+    repositoryPath: selected.repositoryPath,
+    sha256: selected.asset.sha256,
+    size: selected.asset.size,
+    repository: selected.repository,
     path: packagePath,
   });
 
   if (packagePath !== null) {
-    await downloadVerified(
-      manifest.asset.url,
-      packagePath,
-      { sha256: manifest.asset.sha256, size: manifest.asset.size },
-      { allowedHosts: advisory.downloadHosts, label: path.basename(packagePath) },
-    );
+    try {
+      await downloadVerified(
+        selected.asset.url,
+        packagePath,
+        { sha256: selected.asset.sha256, size: selected.asset.size },
+        { allowedHosts: artifact.downloadHosts, label: path.basename(packagePath) },
+      );
+    } catch (error) {
+      if (isNotFound(error)) return notReady(`update manifest asset ${assetName} is not available`);
+      throw error;
+    }
   }
 
   writeMetadata(metadataPath, metadata);
-  return metadata;
+  return ready(metadata);
 }

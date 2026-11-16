@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { compareDebVersions, sortDebVersions, normalizeUpstreamVersion, parseDebVersion } from "../../lib/core/version.ts";
+import { compareDebVersions, sortDebVersions, parseDebVersion } from "../../lib/core/version.ts";
 import { DEB_VERSION } from "../../lib/core/patterns.ts";
 
 describe("compareDebVersions", () => {
@@ -76,36 +76,6 @@ describe("sortDebVersions", () => {
     assert.deepEqual(sortDebVersions(versions), ["0.9.0", "1.0.0"]);
     assert.deepEqual(versions, ["1.0.0", "0.9.0"]);
     assert.throws(() => sortDebVersions(["v1.0.0"]), /Invalid package version/);
-  });
-});
-
-describe("normalizeUpstreamVersion", () => {
-  it("strips a numeric build-epoch suffix", () => {
-    assert.equal(normalizeUpstreamVersion("1.133.0-1786487972"), "1.133.0");
-    assert.equal(normalizeUpstreamVersion("0.22.3-3215"), "0.22.3");
-  });
-
-  it("keeps versions that carry no build epoch", () => {
-    assert.equal(normalizeUpstreamVersion("0.0.109"), "0.0.109");
-    assert.equal(normalizeUpstreamVersion("1.18.30"), "1.18.30");
-  });
-
-  it("strips a Debian epoch, which a cask version cannot carry", () => {
-    assert.equal(normalizeUpstreamVersion("1:1.133.0-1786487972"), "1.133.0");
-    assert.equal(normalizeUpstreamVersion("2:0.22.3"), "0.22.3");
-  });
-
-  it("strips Mozilla's apt ~buildN rebuild marker", () => {
-    assert.equal(normalizeUpstreamVersion("157.0~build1"), "157.0");
-    assert.equal(normalizeUpstreamVersion("157.0.1~build1"), "157.0.1");
-    assert.equal(normalizeUpstreamVersion("157.0~build12"), "157.0");
-    assert.equal(normalizeUpstreamVersion("1:157.0~build1"), "157.0");
-  });
-
-  it("keeps a '~' pre-release marker that is not a ~buildN rebuild", () => {
-    assert.equal(normalizeUpstreamVersion("1.0~rc1"), "1.0~rc1");
-    assert.equal(normalizeUpstreamVersion("1.0~build"), "1.0~build");
-    assert.equal(normalizeUpstreamVersion("1.0~build1.1"), "1.0~build1.1");
   });
 });
 

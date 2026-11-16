@@ -1,5 +1,6 @@
-// The one download path every advisory shares: single-attempt fetch, enforce the
-// host allow-list and size cap, verify the digest(s), write atomically.
+// The one download path every artifact resolver shares: single-attempt fetch,
+// enforce the host allow-list and size cap, verify the digest(s), write
+// atomically.
 
 import { assertHostAllowed } from "../core/guards.ts";
 import { ChecksumMismatchError, GuardViolationError } from "../core/errors.ts";
@@ -15,9 +16,9 @@ import {
   writeFileAtomic,
 } from "../core/http.ts";
 
-// What the caller knows before downloading. All optional: the CDN advisory has
-// no checksum, while the GitHub-backed ones carry a SHA-256 (the electron feed
-// also a SHA-512).
+// What the caller knows before downloading. All optional: a manifest may omit
+// the size, while a GitHub asset carries a SHA-256 (an AppImage also its yml
+// SHA-512).
 export interface PayloadExpectation {
   sha256?: string;
   sha512?: string;
@@ -38,7 +39,7 @@ export interface FetchVerifiedOptions {
 
 export interface FetchedPayload {
   bytes: Buffer;
-  // Final URL after redirects; the CDN advisory parses it as its version source.
+  // Final URL after redirects; a resolver may record it as the source.
   finalUrl: URL;
 }
 

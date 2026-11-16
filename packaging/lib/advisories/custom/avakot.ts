@@ -1,14 +1,14 @@
-// Avakot manifest advisory. Provider-specific, so it lives under
-// advisories/custom/ rather than with the generic advisories: manifest.json serves
-// {version, artifacts: {<name>: {url, sha256, [size], [version]}}} (e.g.
-// Little Genius). The download URL is static (no version path segment) and no
-// size is published, so the version binds through the per-entry version field
-// and the payload is measured from the verified download — downloaded and
-// discarded in --metadata-only mode, mirroring the cdn-redirect advisory.
+// Avakot manifest artifact. Provider-specific, so it lives under
+// advisories/custom/ rather than with the generic artifacts: manifest.json
+// serves {version, artifacts: {<name>: {url, sha256, [size], [version]}}} (e.g.
+// Little Genius). The manifest's version and the per-entry version must both
+// equal the requested version. The download URL is static (no version path
+// segment) and no size is published, so the payload is measured from the
+// verified download — downloaded and discarded in --metadata-only mode.
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { ChecksumMismatchError } from "../../core/errors.ts";
+import { ChecksumMismatchError, NotReadyError } from "../../core/errors.ts";
 import {
   assertHostAllowed,
   assertHttpsUrl,
@@ -27,9 +27,16 @@ import {
 import { makeMetadata, writeMetadata } from "../../core/metadata.ts";
 import { DEB_VERSION } from "../../core/patterns.ts";
 import { substitutePlaceholders } from "../../core/template.ts";
-import type { AvakotAdvisory, Metadata } from "../../core/types.ts";
+import type { AvakotArtifact, Metadata } from "../../core/types.ts";
 import { fetchVerified } from "../download.ts";
-import { prepareOutput, type ResolveRequest } from "../shared.ts";
+import {
+  isNotFound,
+  notReady,
+  prepareOutput,
+  ready,
+  type ResolveOutcome,
+  type ResolveRequest,
+} from "../shared.ts";
 import { fetchManifest, validateManifestEndpoint } from "../update-manifest.ts";
 
 export interface AvakotAsset {
@@ -46,44 +53,53 @@ export interface SelectedAvakot {
   asset: AvakotAsset;
 }
 
-// Parses the manifest and selects the asset named by assetName, validating
-// every trusted field (version, url, host, sha256, size). Pure, for testing.
+// Parses the manifest and selects the asset named by assetName. A missing or
+// mismatched artifact is a typed NotReadyError; a malformed document is a plain
+// failure. Pure, for testing.
 export function selectAvakotAsset(
   body: unknown,
   assetName: string,
   downloadHosts: readonly string[],
+  requestedVersion: string,
 ): SelectedAvakot {
   if (!isRecord(body)) fail("Avakot manifest is not an object");
   const version = body["version"];
   if (typeof version !== "string" || !DEB_VERSION.test(version)) {
     fail(`Avakot manifest has no sane version: ${String(version)}`);
   }
+  if (version !== requestedVersion) {
+    throw new NotReadyError(`avakot manifest publishes ${version}; requested ${requestedVersion}`);
+  }
   const artifacts = body["artifacts"];
   if (!isRecord(artifacts)) fail("Avakot manifest has no artifacts map");
   const entry = artifacts[assetName];
-  if (!isRecord(entry)) fail(`Avakot manifest has no entry for ${assetName}`);
+  if (!isRecord(entry)) {
+    throw new NotReadyError(`avakot manifest has no entry for ${assetName}`);
+  }
   // The download URL is static, so the per-entry version is the version
   // binding and is required: without it the manifest's version claim is not
   // bound to the payload at all.
   const entryVersion = entry["version"];
   if (typeof entryVersion !== "string" || entryVersion !== version) {
-    fail(`Avakot manifest ${assetName} version ${String(entryVersion)} does not match ${version}`);
+    throw new NotReadyError(
+      `avakot manifest ${assetName} version ${String(entryVersion)} does not match ${version}`,
+    );
   }
   const rawUrl = entry["url"];
   if (typeof rawUrl !== "string" || rawUrl === "") {
-    fail(`Avakot manifest ${assetName} has no url`);
+    throw new NotReadyError(`avakot manifest ${assetName} has no url`);
   }
   const url = assertHttpsUrl(rawUrl, `Avakot manifest ${assetName} url`);
   assertHostAllowed(url, downloadHosts, "update manifest asset");
   // The digest field also accepts the platforms-map alias "deb_sha256".
   const digest = entry["sha256"] ?? entry["deb_sha256"];
   if (typeof digest !== "string" || digest === "") {
-    fail(`Avakot manifest ${assetName} has no sha256`);
+    throw new NotReadyError(`avakot manifest ${assetName} has no sha256`);
   }
   assertSha256Hex(digest, `Avakot manifest ${assetName} sha256`);
   const rawSize = entry["size"];
   const asset: AvakotAsset = { url: rawUrl, sha256: digest };
-  if (rawSize !== undefined) {
+  if (rawSize !== undefined && rawSize !== null) {
     asset.size = assertPositiveSize(
       rawSize as number,
       MAX_PAYLOAD_BYTES,
@@ -99,28 +115,41 @@ export function selectAvakotAsset(
 }
 
 export async function resolveWithAvakot(
-  advisory: AvakotAdvisory,
+  artifact: AvakotArtifact,
   request: ResolveRequest,
-): Promise<Metadata> {
-  const repository = validateManifestEndpoint(advisory.repository);
-  if (advisory.downloadHosts.length === 0) fail("downloadHosts must not be empty");
-  for (const host of advisory.downloadHosts) assertSafeName(host, "download host");
-  const packageName = assertSafeName(advisory.packageName, "package name");
-  const assetName = substitutePlaceholders(advisory.assetTemplate, {
+): Promise<ResolveOutcome> {
+  const repository = validateManifestEndpoint(artifact.repository);
+  if (artifact.downloadHosts.length === 0) fail("downloadHosts must not be empty");
+  for (const host of artifact.downloadHosts) assertSafeName(host, "download host");
+  const packageName = assertSafeName(artifact.packageName, "package name");
+  const assetName = substitutePlaceholders(artifact.assetTemplate, {
     arch: request.architecture,
   });
   const { outputDir, metadataPath } = prepareOutput(request);
-  const selected = selectAvakotAsset(
-    await fetchManifest(repository),
-    assetName,
-    advisory.downloadHosts,
-  );
+  let selected: SelectedAvakot;
+  try {
+    selected = selectAvakotAsset(
+      await fetchManifest(repository),
+      assetName,
+      artifact.downloadHosts,
+      request.requestedVersion,
+    );
+  } catch (error) {
+    if (error instanceof NotReadyError) return notReady(error.message);
+    throw error;
+  }
   const label = `${packageName}_${selected.version}_${request.architecture}.deb`;
-  const { bytes } = await fetchVerified(selected.asset.url, {
-    allowedHosts: advisory.downloadHosts,
-    label,
-    timeoutMs: 60000,
-  });
+  let bytes: Buffer;
+  try {
+    ({ bytes } = await fetchVerified(selected.asset.url, {
+      allowedHosts: artifact.downloadHosts,
+      label,
+      timeoutMs: 60000,
+    }));
+  } catch (error) {
+    if (isNotFound(error)) return notReady(`avakot asset ${assetName} is not available`);
+    throw error;
+  }
   const digest = sha256Digest(bytes);
   if (!digestMatchesHex(selected.asset.sha256, digest)) {
     throw new ChecksumMismatchError(
@@ -145,7 +174,7 @@ export async function resolveWithAvakot(
       );
     }
   }
-  const metadata = makeMetadata({
+  const metadata: Metadata = makeMetadata({
     package: packageName,
     version: selected.version,
     architecture: request.architecture,
@@ -156,5 +185,5 @@ export async function resolveWithAvakot(
     path: packagePath,
   });
   writeMetadata(metadataPath, metadata);
-  return metadata;
+  return ready(metadata);
 }

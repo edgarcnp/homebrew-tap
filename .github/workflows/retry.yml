@@ -154,7 +154,6 @@ jobs:
                 "- **retryable**: `\(.retryable)`",
                 "- **resolved version**: `\(.resolved_version // "unknown")`",
                 "- **cask version**: `\(.cask_version // "unknown")`",
-                "- **feed version**: `\(.feed_version // "unknown")`",
                 "- **attempt**: \($attempt)",
                 "- **reason for no re-run**: `\($reason)`",
                 "- **run**: \($url)",

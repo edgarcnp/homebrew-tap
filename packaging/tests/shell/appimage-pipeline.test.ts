@@ -601,7 +601,17 @@ describe("pipeline_resolve", () => {
         "-c",
         `set -Eeuo pipefail; . "$PIPELINE_LIB"; APP_ID=vscode; DEB_ARCH=amd64; WORK_DIR="$WORK"; fbr() { if [ "$1" = "resolve" ]; then printf '%s\\n' "$*" >> "$ARGS_LOG"; printf '%s\\n' "/work/payload.AppImage"; else printf '1.2.3\\n'; fi; }; pipeline_resolve`,
       ],
-      { encoding: "utf8", env: { ...process.env, PIPELINE_LIB, ARGS_LOG: log, WORK: workDir, ...env } },
+      {
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          PIPELINE_LIB,
+          ARGS_LOG: log,
+          WORK: workDir,
+          PACKAGE_VERSION: "1.2.3",
+          ...env,
+        },
+      },
     );
     return {
       status: result.status,
@@ -610,10 +620,11 @@ describe("pipeline_resolve", () => {
     };
   }
 
-  it("hands the workflow's fragment path to fbr", () => {
+  it("hands the requested version and the workflow's fragment path to fbr", () => {
     const result = resolve({ FBR_FAILURE_OUT: "/tmp/failure-fragment.json" });
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.args, /resolve --app vscode --arch amd64/);
+    assert.match(result.args, /--requested-version 1\.2\.3/);
     assert.match(result.args, /--failure-out \/tmp\/failure-fragment\.json/);
   });
 
@@ -621,6 +632,18 @@ describe("pipeline_resolve", () => {
     const result = resolve({});
     assert.equal(result.status, 0, result.stderr);
     assert.equal(result.args.includes("--failure-out"), false);
+  });
+
+  it("refuses to resolve without a requested version", () => {
+    const result = resolve({ PACKAGE_VERSION: "" });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /PACKAGE_VERSION or REQUESTED_VERSION/);
+  });
+
+  it("refuses two different requested versions", () => {
+    const result = resolve({ PACKAGE_VERSION: "1.2.3", REQUESTED_VERSION: "1.2.4" });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /!= REQUESTED_VERSION/);
   });
 });
 

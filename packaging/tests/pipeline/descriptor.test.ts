@@ -98,12 +98,27 @@ describe("descriptor loading", () => {
 });
 
 describe("descriptor contents (regression against the previous per-app scripts)", () => {
-  it("keeps vscode's apt pin, staging and updater neutralization", () => {
+  it("keeps vscode's JSON asset, tarball staging and updater neutralization", () => {
     const descriptor = loadDescriptor("vscode");
-    assert.equal(descriptor.advisory.kind, "apt");
-    assert.equal(descriptor.payload.kind, "deb-tree");
-    assert.equal(descriptor.payload.tree, "usr/share/code");
-    assert.equal(descriptor.icon.size, "256x256");
+    assert.equal(descriptor.artifact.kind, "json-asset");
+    if (descriptor.artifact.kind === "json-asset") {
+      assert.equal(
+        descriptor.artifact.url,
+        "https://update.code.visualstudio.com/api/update/linux-x64/stable/latest",
+      );
+      assert.equal(descriptor.artifact.urlField, "url");
+      assert.equal(descriptor.artifact.sha256Field, "sha256hash");
+      assert.equal(descriptor.artifact.versionField, "productVersion");
+      assert.deepEqual(descriptor.artifact.downloadHosts, [
+        "update.code.visualstudio.com",
+        "vscode.download.prss.microsoft.com",
+      ]);
+    }
+    assert.equal(descriptor.payload.kind, "tarball-tree");
+    assert.equal(descriptor.payload.kind === "tarball-tree" ? descriptor.payload.root : "", "VSCode-linux-x64");
+    assert.equal(descriptor.payload.kind === "tarball-tree" ? descriptor.payload.target : "", "bin");
+    assert.equal(descriptor.icon.size, "1024x1024");
+    assert.equal(descriptor.icon.source, "resources/app/resources/linux/code.png");
     assert.equal(descriptor.updater.removeJsonKeys?.keys.join(","), "updateUrl,checksums");
     assert.equal(descriptor.updater.patchEndpoint?.from, "update.code.visualstudio.com");
     assert.equal(descriptor.updater.patchEndpoint?.targets, "all");
@@ -113,14 +128,14 @@ describe("descriptor contents (regression against the previous per-app scripts)"
 
   it("keeps opencode-desktop's update-manifest, required feed removal and warning-level scan", () => {
     const descriptor = loadDescriptor("opencode-desktop");
-    assert.equal(descriptor.advisory.kind, "update-manifest");
-    if (descriptor.advisory.kind === "update-manifest") {
+    assert.equal(descriptor.artifact.kind, "update-manifest");
+    if (descriptor.artifact.kind === "update-manifest") {
       assert.equal(
-        descriptor.advisory.repository,
+        descriptor.artifact.repository,
         "https://opencode.ai/update/api/latest/desktop/opencode",
       );
-      assert.equal(descriptor.advisory.assetTemplate, "opencode-desktop-linux-{arch}.deb");
-      assert.deepEqual(descriptor.advisory.downloadHosts, ["opencode.ai"]);
+      assert.equal(descriptor.artifact.assetTemplate, "opencode-desktop-linux-{arch}.deb");
+      assert.deepEqual(descriptor.artifact.downloadHosts, ["opencode.ai"]);
     }
     assert.equal(descriptor.payload.tree, "opt/OpenCode");
     assert.equal(descriptor.updater.removeFeed?.required, true);
@@ -134,13 +149,29 @@ describe("descriptor contents (regression against the previous per-app scripts)"
     assert.deepEqual(descriptor.hostHelpers, ["bin/resources/opencode-cli"]);
   });
 
-  it("keeps gitcomet's signed apt advisory and single-binary file list", () => {
+  it("keeps gitcomet's release tarball and repo-owned icon", () => {
     const descriptor = loadDescriptor("gitcomet");
-    assert.equal(descriptor.advisory.kind, "apt");
+    assert.equal(descriptor.artifact.kind, "github-release");
+    if (descriptor.artifact.kind === "github-release") {
+      assert.equal(descriptor.artifact.repository, "https://api.github.com/repos/Auto-Explore/GitComet");
+      assert.equal(descriptor.artifact.tagPrefix, "v");
+      assert.equal(
+        descriptor.artifact.assetNameTemplate,
+        "gitcomet-v{version}-linux-x86_64.tar.gz",
+      );
+      assert.equal(descriptor.artifact.packageName, "gitcomet");
+    }
     assert.equal(descriptor.debloatArgs, "--add-common");
     assert.deepEqual(descriptor.architectures, ["amd64"]);
-    assert.deepEqual(descriptor.payload.files, ["usr/bin/gitcomet"]);
+    assert.equal(descriptor.payload.kind, "tarball-tree");
+    assert.equal(descriptor.payload.kind === "tarball-tree" ? descriptor.payload.root : "", undefined);
+    assert.equal(descriptor.payload.kind === "tarball-tree" ? descriptor.payload.target : "", "bin");
     assert.equal(descriptor.icon.size, "512x512");
+    assert.deepEqual(descriptor.icon, {
+      source: "templates/gitcomet.png",
+      size: "512x512",
+      base: "app",
+    });
     // The upstream check is a read-only toast, so upstream's supported switch
     // (seeded into the AppDir .env) is the whole neutralization: no endpoint to
     // patch, no residual scan and no runtime hook.
@@ -152,7 +183,7 @@ describe("descriptor contents (regression against the previous per-app scripts)"
 
   it("keeps little-genius' avakot advisory, file list and error-level scan", () => {
     const descriptor = loadDescriptor("little-genius");
-    assert.equal(descriptor.advisory.kind, "avakot");
+    assert.equal(descriptor.artifact.kind, "avakot");
     assert.deepEqual(descriptor.architectures, ["amd64"]);
     assert.deepEqual(descriptor.binaryTargets, ["little-genius", "lg-linux-compat"]);
     assert.equal(descriptor.payload.kind, "deb-files");
@@ -174,17 +205,17 @@ describe("descriptor contents (regression against the previous per-app scripts)"
 
   it("keeps wfhelper's AppImage advisory, tree staging and required feed removal", () => {
     const descriptor = loadDescriptor("wfhelper");
-    assert.equal(descriptor.advisory.kind, "github-release");
+    assert.equal(descriptor.artifact.kind, "github-release");
     assert.equal(
-      descriptor.advisory.kind === "github-release" ? descriptor.advisory.assetNameTemplate : "",
+      descriptor.artifact.kind === "github-release" ? descriptor.artifact.assetNameTemplate : "",
       "WFHelper-{version}.AppImage",
     );
     assert.equal(
-      descriptor.advisory.kind === "github-release" ? descriptor.advisory.tagPrefix : "",
+      descriptor.artifact.kind === "github-release" ? descriptor.artifact.tagPrefix : "",
       "v",
     );
     assert.equal(
-      descriptor.advisory.kind === "github-release" ? descriptor.advisory.packageName : "",
+      descriptor.artifact.kind === "github-release" ? descriptor.artifact.packageName : "",
       "wfhelper",
     );
     assert.deepEqual(descriptor.architectures, ["amd64"]);
@@ -201,9 +232,9 @@ describe("descriptor contents (regression against the previous per-app scripts)"
 
   it("keeps zed's bundle tarball layout and tarball advisory", () => {
     const descriptor = loadDescriptor("zed");
-    assert.equal(descriptor.advisory.kind, "github-release");
+    assert.equal(descriptor.artifact.kind, "github-release");
     assert.equal(
-      descriptor.advisory.kind === "github-release" ? descriptor.advisory.assetNameTemplate : "",
+      descriptor.artifact.kind === "github-release" ? descriptor.artifact.assetNameTemplate : "",
       "zed-linux-{appimage_arch}.tar.gz",
     );
     assert.equal(descriptor.payload.kind, "tarball-tree");
@@ -254,7 +285,7 @@ describe("descriptor contents (regression against the previous per-app scripts)"
     );
   });
 
-  it("rejects a bundle tarball payload without a containable root", () => {
+  it("validates a bundle tarball payload's root and target", () => {
     assert.throws(
       () =>
         validateDescriptor(
@@ -265,15 +296,38 @@ describe("descriptor contents (regression against the previous per-app scripts)"
         ),
       /must be a repository-relative path/,
     );
+    // An omitted root is valid: the pipeline uses the tarball's single
+    // top-level directory.
+    const withoutRoot = validateDescriptor(
+      mutated("artcraft-launcher", (copy) => {
+        delete nested(copy, "payload")["root"];
+      }),
+      "artcraft-launcher",
+    );
+    assert.equal(withoutRoot.payload.kind === "tarball-tree" ? withoutRoot.payload.root : "x", undefined);
+    assert.deepEqual(
+      withoutRoot.payload.kind === "tarball-tree" ? withoutRoot.payload.exclude : undefined,
+      ["share"],
+    );
     assert.throws(
       () =>
         validateDescriptor(
-          mutated("zed", (copy) => {
-            delete nested(copy, "payload")["root"];
+          mutated("artcraft-launcher", (copy) => {
+            nested(copy, "payload")["exclude"] = ["../evil"];
           }),
-          "zed",
+          "artcraft-launcher",
         ),
-      /payload\.root must be a non-empty string/,
+      /payload\.exclude entry must be a top-level name or glob/,
+    );
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("vscode", (copy) => {
+            nested(copy, "payload")["target"] = "usr";
+          }),
+          "vscode",
+        ),
+      /payload\.target must be "root" or "bin"/,
     );
     assert.throws(
       () =>
@@ -287,24 +341,29 @@ describe("descriptor contents (regression against the previous per-app scripts)"
     );
   });
 
-  it("keeps firefox's Mozilla apt suite, tree staging and codec dlopens", () => {
+  it("keeps firefox's signed release tarball, flat staging and codec dlopens", () => {
     const descriptor = loadDescriptor("firefox");
-    assert.equal(descriptor.advisory.kind, "apt");
-    if (descriptor.advisory.kind === "apt") {
-      assert.equal(descriptor.advisory.repository, "https://packages.mozilla.org/apt");
-      // The suite is what makes the advisory read dists/mozilla instead of dists/stable.
-      assert.equal(descriptor.advisory.suite, "mozilla");
-      assert.equal(descriptor.advisory.packageName, "firefox");
-      assert.equal(descriptor.advisory.fingerprint, "35BAA0B33E9EB396F59CA838C0BA5CE6DC6315A3");
+    assert.equal(descriptor.artifact.kind, "mozilla-release");
+    if (descriptor.artifact.kind === "mozilla-release") {
+      assert.equal(
+        descriptor.artifact.urlTemplate,
+        "https://ftp.mozilla.org/pub/firefox/releases/{version}/linux-x86_64/en-US/firefox-{version}.tar.xz",
+      );
+      assert.equal(descriptor.artifact.signatureTemplate, "{url}.asc");
+      assert.equal(descriptor.artifact.packageName, "firefox");
+      assert.equal(
+        descriptor.artifact.fingerprint,
+        "14F26682D0916CDD81E37B6D61B7B526D98F0353",
+      );
+      assert.equal(descriptor.artifact.keyPath, "packaging/apps/firefox/assets/mozilla-release-key.asc");
     }
     assert.deepEqual(descriptor.architectures, ["amd64"]);
     assert.deepEqual(descriptor.binaryTargets, ["firefox"]);
-    assert.equal(descriptor.payload.kind, "deb-tree");
-    assert.equal(
-      descriptor.payload.kind === "deb-tree" ? descriptor.payload.tree : "",
-      "usr/lib/firefox",
-    );
+    assert.equal(descriptor.payload.kind, "tarball-tree");
+    assert.equal(descriptor.payload.kind === "tarball-tree" ? descriptor.payload.root : "", "firefox");
+    assert.equal(descriptor.payload.kind === "tarball-tree" ? descriptor.payload.target : "", "bin");
     assert.equal(descriptor.icon.size, "128x128");
+    assert.equal(descriptor.icon.source, "browser/chrome/icons/default/default128.png");
     assert.equal(
       descriptor.debloatArgs,
       "--add-common --prefer-nano ffmpeg-mini intel-media-driver-mini gdk-pixbuf2-mini",
@@ -750,14 +809,14 @@ describe("descriptor validation", () => {
     );
   });
 
-  it("rejects unknown advisory and payload kinds", () => {
+  it("rejects unknown artifact and payload kinds", () => {
     assert.throws(
       () =>
         validateDescriptor(
-          mutated("vscode", (copy) => { nested(copy, "advisory")["kind"] = "ftp"; }),
+          mutated("vscode", (copy) => { nested(copy, "artifact")["kind"] = "ftp"; }),
           "vscode",
         ),
-      /Unknown resolver kind/,
+      /Unknown artifact kind/,
     );
     assert.throws(
       () =>
@@ -831,16 +890,100 @@ describe("descriptor validation", () => {
     );
   });
 
-  it("accepts an apt suite and rejects one that would escape dists/", () => {
-    const accepted = mutated("vscode", () => {});
-    const acceptedAdvisory = nested(accepted, "advisory");
-    acceptedAdvisory["suite"] = "mozilla";
-    assert.doesNotThrow(() => validateDescriptor(accepted, "vscode"));
+  it("accepts the deprecated advisory alias for one release and rejects both keys", () => {
+    const aliased = mutated("vscode", (copy) => {
+      copy["advisory"] = copy["artifact"];
+      delete copy["artifact"];
+    });
+    assert.equal(validateDescriptor(aliased, "vscode").artifact.kind, "json-asset");
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("vscode", (copy) => {
+            copy["advisory"] = copy["artifact"];
+          }),
+          "vscode",
+        ),
+      /deprecated "advisory" alias cannot be combined/,
+    );
+  });
 
-    const rejected = mutated("vscode", () => {});
-    const rejectedAdvisory = nested(rejected, "advisory");
-    rejectedAdvisory["suite"] = "../evil";
-    assert.throws(() => validateDescriptor(rejected, "vscode"), /suite is not a safe dists suite name/);
+  it("rejects the removed apt and redirect artifact kinds", () => {
+    for (const kind of ["apt", "cdn-redirect", "electron-feed"]) {
+      assert.throws(
+        () =>
+          validateDescriptor(
+            mutated("vscode", (copy) => {
+              nested(copy, "artifact")["kind"] = kind;
+            }),
+            "vscode",
+          ),
+        /Unknown artifact kind/,
+      );
+    }
+  });
+
+  it("validates the JSON-asset and Mozilla artifact fields", () => {
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("vscode", (copy) => {
+            nested(copy, "artifact")["url"] = "http://update.example/json";
+          }),
+          "vscode",
+        ),
+      /must be https/,
+    );
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("vscode", (copy) => {
+            nested(copy, "artifact")["sha256Field"] = "not a field";
+          }),
+          "vscode",
+        ),
+      /must be a dotted field path/,
+    );
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("firefox", (copy) => {
+            nested(copy, "artifact")["urlTemplate"] = "https://ftp.mozilla.org/fixed.tar.xz";
+          }),
+          "firefox",
+        ),
+      /urlTemplate must contain \{version\}/,
+    );
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("firefox", (copy) => {
+            nested(copy, "artifact")["signatureTemplate"] = "signature.asc";
+          }),
+          "firefox",
+        ),
+      /signatureTemplate must contain \{url\}/,
+    );
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("firefox", (copy) => {
+            nested(copy, "artifact")["fingerprint"] = "nope";
+          }),
+          "firefox",
+        ),
+      /fingerprint/,
+    );
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("firefox", (copy) => {
+            nested(copy, "artifact")["keyPath"] = "../../etc/key";
+          }),
+          "firefox",
+        ),
+      /repository-relative path/,
+    );
   });
 
   it("rejects unknown keys instead of dropping a typo", () => {
@@ -912,17 +1055,15 @@ describe("descriptor validation", () => {
         ),
       /severity must be/,
     );
-    // No descriptor declares cdn-redirect since GitButler took the only one
-    // with it, so build that advisory shape inline rather than mutating an app.
     assert.throws(
       () =>
         validateDescriptor(
-          mutated("vscode", (copy) => {
-            copy["advisory"] = { kind: "cdn-redirect", redirectHosts: [] };
+          mutated("opencode-desktop", (copy) => {
+            nested(copy, "artifact")["downloadHosts"] = [];
           }),
-          "vscode",
+          "opencode-desktop",
         ),
-      /redirectHosts must not be empty/,
+      /downloadHosts must not be empty/,
     );
     assert.throws(
       () =>
@@ -945,6 +1086,14 @@ describe("descriptor validation", () => {
     );
     assert.equal(descriptor.icon.size, "scalable");
     assert.equal(descriptor.icon.source, "usr/share/icons/hicolor/scalable/apps/vscode.svg");
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("vscode", (copy) => { nested(copy, "icon")["base"] = "remote"; }),
+          "vscode",
+        ),
+      /icon\.base must be "payload" or "app"/,
+    );
   });
 
   it("defaults to dual-arch and rejects bad architecture lists", () => {
@@ -964,38 +1113,38 @@ describe("descriptor validation", () => {
     );
   });
 
-  it("requires the versioned-asset advisory fields together and exclusively", () => {
+  it("requires the GitHub-release template fields", () => {
     assert.throws(
       () =>
         validateDescriptor(
-          mutated("wfhelper", (copy) => { delete nested(copy, "advisory")["tagPrefix"]; }),
+          mutated("wfhelper", (copy) => { delete nested(copy, "artifact")["tagPrefix"]; }),
           "wfhelper",
         ),
-      /must be set together/,
+      /artifact\.tagPrefix must be a non-empty string/,
     );
     assert.throws(
       () =>
         validateDescriptor(
-          mutated("wfhelper", (copy) => { nested(copy, "advisory")["assetPrefix"] = "x"; }),
+          mutated("wfhelper", (copy) => { nested(copy, "artifact")["assetPrefix"] = "x"; }),
           "wfhelper",
         ),
-      /mutually exclusive/,
+      /artifact\.assetPrefix is not a known field/,
     );
     assert.throws(
       () =>
         validateDescriptor(
-          mutated("wfhelper", (copy) => { nested(copy, "advisory")["assetNameTemplate"] = "no-version-here.deb"; }),
+          mutated("wfhelper", (copy) => { nested(copy, "artifact")["assetNameTemplate"] = "no-version-here.deb"; }),
           "wfhelper",
         ),
       /must contain a placeholder/,
     );
   });
 
-  it("rejects malformed update-manifest advisories", () => {
+  it("rejects malformed update-manifest artifacts", () => {
     assert.throws(
       () =>
         validateDescriptor(
-          mutated("opencode-desktop", (copy) => { delete nested(copy, "advisory")["assetTemplate"]; }),
+          mutated("opencode-desktop", (copy) => { delete nested(copy, "artifact")["assetTemplate"]; }),
           "opencode-desktop",
         ),
       /assetTemplate must be a non-empty string/,
@@ -1003,7 +1152,7 @@ describe("descriptor validation", () => {
     assert.throws(
       () =>
         validateDescriptor(
-          mutated("opencode-desktop", (copy) => { nested(copy, "advisory")["assetTemplate"] = "opencode.desb"; }),
+          mutated("opencode-desktop", (copy) => { nested(copy, "artifact")["assetTemplate"] = "opencode.desb"; }),
           "opencode-desktop",
         ),
       /must contain \{arch\}/,
@@ -1011,7 +1160,7 @@ describe("descriptor validation", () => {
     assert.throws(
       () =>
         validateDescriptor(
-          mutated("opencode-desktop", (copy) => { nested(copy, "advisory")["downloadHosts"] = []; }),
+          mutated("opencode-desktop", (copy) => { nested(copy, "artifact")["downloadHosts"] = []; }),
           "opencode-desktop",
         ),
       /downloadHosts must not be empty/,
@@ -1019,7 +1168,7 @@ describe("descriptor validation", () => {
     assert.throws(
       () =>
         validateDescriptor(
-          mutated("opencode-desktop", (copy) => { nested(copy, "advisory")["downloadHosts"] = "opencode.ai"; }),
+          mutated("opencode-desktop", (copy) => { nested(copy, "artifact")["downloadHosts"] = "opencode.ai"; }),
           "opencode-desktop",
         ),
       /downloadHosts must be an array/,
@@ -1095,18 +1244,18 @@ describe("descriptor validation", () => {
     });
   });
 
-  it("validates the provider-specific avakot advisory", () => {
+  it("validates the provider-specific avakot artifact", () => {
     const descriptor = loadDescriptor("little-genius");
-    assert.equal(descriptor.advisory.kind, "avakot");
-    if (descriptor.advisory.kind === "avakot") {
-      assert.equal(descriptor.advisory.repository, "https://api.avakot.org/lg/manifest.json");
-      assert.equal(descriptor.advisory.assetTemplate, "linux_x86_64_deb");
-      assert.deepEqual(descriptor.advisory.downloadHosts, ["api.avakot.org"]);
+    assert.equal(descriptor.artifact.kind, "avakot");
+    if (descriptor.artifact.kind === "avakot") {
+      assert.equal(descriptor.artifact.repository, "https://api.avakot.org/lg/manifest.json");
+      assert.equal(descriptor.artifact.assetTemplate, "linux_x86_64_deb");
+      assert.deepEqual(descriptor.artifact.downloadHosts, ["api.avakot.org"]);
     }
     assert.throws(
       () =>
         validateDescriptor(
-          mutated("little-genius", (copy) => { nested(copy, "advisory")["downloadHosts"] = []; }),
+          mutated("little-genius", (copy) => { nested(copy, "artifact")["downloadHosts"] = []; }),
           "little-genius",
         ),
       /downloadHosts must not be empty/,
@@ -1116,7 +1265,7 @@ describe("descriptor validation", () => {
     assert.throws(
       () =>
         validateDescriptor(
-          mutated("little-genius", (copy) => { nested(copy, "advisory")["kind"] = "update-manifest"; }),
+          mutated("little-genius", (copy) => { nested(copy, "artifact")["kind"] = "update-manifest"; }),
           "little-genius",
         ),
       /must contain \{arch\}/,
