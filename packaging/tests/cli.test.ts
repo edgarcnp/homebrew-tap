@@ -267,6 +267,53 @@ describe("build workflow contract", () => {
     "utf8",
   );
 
+  // A workflow step's body: from `- name:` to the next less-indented line.
+  function stepBody(name: string): string {
+    const lines = workflow.split("\n");
+    const start = lines.findIndex((line) => line.includes(`- name: ${name}`));
+    assert.ok(start >= 0, `build-appimage.yml has no "${name}" step`);
+    const body: string[] = [];
+    for (const [index, line] of lines.entries()) {
+      if (index < start) continue;
+      if (index > start && /^ {0,6}\S/.test(line)) break;
+      body.push(line);
+    }
+    return body.join("\n");
+  }
+
+  it("reaches the tap checkout from the source working directory", () => {
+    // The resolve step changes into source/ to write upstream metadata there,
+    // so a bare tap/... resolves under source/ and dies as a missing module
+    // before the cask is read (the firefox dispatch did exactly that). Every
+    // tap reference is workspace-absolute instead.
+    const resolve = stepBody("Resolve the requested version and gate");
+    assert.match(resolve, /^\s*cd source$/m, "the resolve step no longer runs in source/");
+    const relative = resolve
+      .replaceAll("${GITHUB_WORKSPACE}/tap", "")
+      .split("\n")
+      .filter((line) => /(^|[\s"'(=])tap\//.test(line) || /\bgit -C tap\b/.test(line))
+      .map((line) => line.trim());
+    assert.deepEqual(relative, [], `tap paths relative to source/: ${relative.join(" | ")}`);
+  });
+
+  it("runs every resolve-step fbr call from the tap checkout", () => {
+    // The tap is the dispatched ref; the source/ clone is the app source and
+    // may lag it. Mixing the two put an older CLI (or none at all) in the
+    // detect job, so every fbr call in the step comes from the tap.
+    const resolve = stepBody("Resolve the requested version and gate");
+    const calls = resolve
+      .split("\n")
+      .filter((line) => line.includes("fbr.ts"))
+      .map((line) => line.trim());
+    assert.ok(calls.length >= 4, "the resolve step lost its fbr calls");
+    for (const line of calls) {
+      assert.ok(
+        line.includes("${GITHUB_WORKSPACE}/tap/packaging/bin/fbr.ts"),
+        `fbr call outside the tap checkout: ${line}`,
+      );
+    }
+  });
+
   it("resolves and gates the single requested version", () => {
     assert.match(workflow, /--requested-version "\$\{requested\}"/);
     assert.match(workflow, /"\$\{resolve_rc\}" -eq 8/);

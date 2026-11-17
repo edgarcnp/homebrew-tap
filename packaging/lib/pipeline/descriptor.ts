@@ -734,8 +734,6 @@ export interface DescriptorExport {
   id: string;
   name: string;
   cask: string;
-  // The release-watch block as compact JSON, or "" when the app has none.
-  watch: string;
   asset_prefix: string;
   tag_prefix: string;
   source_repo: string;
@@ -753,7 +751,6 @@ export function descriptorExport(descriptor: AppDescriptor): DescriptorExport {
     id: descriptor.id,
     name: descriptor.appName,
     cask: descriptor.cask,
-    watch: descriptor.watch === undefined ? "" : JSON.stringify(descriptor.watch),
     asset_prefix: descriptor.assetPrefix,
     tag_prefix: descriptor.tagPrefix,
     source_repo: descriptor.sourceRepo,
@@ -780,7 +777,6 @@ export function descriptorLines(
     `APP_ID=${values.id}`,
     `APP_NAME=${values.name}`,
     `APP_CASK=${values.cask}`,
-    `WATCH=${values.watch}`,
     `ASSET_PREFIX=${values.asset_prefix}`,
     `TAG_PREFIX=${values.tag_prefix}`,
     `SOURCE_REPO=${values.source_repo}`,

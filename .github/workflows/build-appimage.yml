@@ -15,7 +15,7 @@ on:
         required: false
         type: string
       requested_version:
-        description: Feed version the API decided to build; empty for manual runs, which use the cask pin
+        description: Requested version the API decided to build; empty for manual runs, which use the cask pin
         required: false
         type: string
 
@@ -133,7 +133,7 @@ jobs:
           REQUESTED_VERSION: ${{ inputs.requested_version }}
         run: |
           # A Mozilla release tarball is verified with gpgv against a pinned key.
-          if [[ "$(bun source/packaging/bin/fbr.ts descriptor --app "${APP_ID}" --field artifact.kind)" == "mozilla-release" ]]; then
+          if [[ "$(bun "${GITHUB_WORKSPACE}/tap/packaging/bin/fbr.ts" descriptor --app "${APP_ID}" --field artifact.kind)" == "mozilla-release" ]]; then
             sudo apt-get update
             sudo apt-get install -y gnupg
           fi
@@ -142,7 +142,7 @@ jobs:
           # The API dispatches the version its watch decided to build. A manual
           # run with no requested version rebuilds the version the cask pins;
           # there is no second version source.
-          cask_json="$(bun tap/packaging/bin/fbr.ts cask --action read --app "${APP_ID}" --tap "${GITHUB_WORKSPACE}/tap")"
+          cask_json="$(bun "${GITHUB_WORKSPACE}/tap/packaging/bin/fbr.ts" cask --action read --app "${APP_ID}" --tap "${GITHUB_WORKSPACE}/tap")"
           cask_version="$(jq -r '.version' <<<"${cask_json}")"
           requested="${REQUESTED_VERSION:-${cask_version}}"
           [ -n "${requested}" ] || { echo "::error::no requested version and no cask pin" >&2; exit 1; }
@@ -161,7 +161,7 @@ jobs:
             # outage, a guard violation, a checksum mismatch, a republish race)
             # and writes the fragment, so this loop never has to guess from an
             # exit code.
-            bun packaging/bin/fbr.ts resolve \
+            bun "${GITHUB_WORKSPACE}/tap/packaging/bin/fbr.ts" resolve \
               --app "${APP_ID}" --arch "${arch}" \
               --requested-version "${requested}" --metadata-only \
               --output-dir upstream --metadata "${file}" \
@@ -256,9 +256,9 @@ jobs:
           if [[ "${release_exists}" = "true" && -n "${version}" && "${cask_version}" != "${version}" ]]; then
             # A queued duplicate run may have been queued against a stale
             # branch; re-read the cask from origin/main before deciding.
-            if git -C tap fetch --quiet origin main; then
-              git -C tap reset --hard --quiet FETCH_HEAD
-              cask_version="$(bun tap/packaging/bin/fbr.ts cask --action read --app "${APP_ID}" --tap "${GITHUB_WORKSPACE}/tap" | jq -r '.version')"
+            if git -C "${GITHUB_WORKSPACE}/tap" fetch --quiet origin main; then
+              git -C "${GITHUB_WORKSPACE}/tap" reset --hard --quiet FETCH_HEAD
+              cask_version="$(bun "${GITHUB_WORKSPACE}/tap/packaging/bin/fbr.ts" cask --action read --app "${APP_ID}" --tap "${GITHUB_WORKSPACE}/tap" | jq -r '.version')"
             fi
           fi
 
@@ -281,7 +281,7 @@ jobs:
           if [[ "${release_exists}" = "true" ]]; then
             gate_args+=(--release-exists)
           fi
-          bun tap/packaging/bin/fbr.ts gate "${gate_args[@]}" | tee -a "${GITHUB_OUTPUT}"
+          bun "${GITHUB_WORKSPACE}/tap/packaging/bin/fbr.ts" gate "${gate_args[@]}" | tee -a "${GITHUB_OUTPUT}"
 
       # A step above classified its own failure in report-code.json; publish it
       # so the report job can prefer the precise verdict over the stage fallback.

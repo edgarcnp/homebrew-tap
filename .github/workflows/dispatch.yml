@@ -1,7 +1,7 @@
 name: Dispatch build
 
 # Entry point for programmatic builds: a workflow_dispatch run names the app
-# and feed version the API decided to build, plus the request id it minted.
+# and requested version the API decided to build, plus the request id it minted.
 # The API does not need the dispatch response's run id: the run itself posts an
 # `accepted` report, and that is how the API binds the attempt to this run.
 # Routing lives in the build workflow's plan job, so an unknown or missing app
@@ -19,7 +19,7 @@ on:
         required: true
         type: string
       version:
-        description: Feed version the API decided to build
+        description: Requested version the API decided to build
         required: true
         type: string
 

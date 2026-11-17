@@ -181,7 +181,7 @@ describe("descriptor contents (regression against the previous per-app scripts)"
     assert.deepEqual(descriptor.quickSharun, { hooks: ["fix-namespaces.hook"] });
   });
 
-  it("keeps little-genius' avakot advisory, file list and error-level scan", () => {
+  it("keeps little-genius' avakot artifact, file list and error-level scan", () => {
     const descriptor = loadDescriptor("little-genius");
     assert.equal(descriptor.artifact.kind, "avakot");
     assert.deepEqual(descriptor.architectures, ["amd64"]);
@@ -203,7 +203,7 @@ describe("descriptor contents (regression against the previous per-app scripts)"
     assert.equal(descriptor.updater.residualScan?.severity, "error");
   });
 
-  it("keeps wfhelper's AppImage advisory, tree staging and required feed removal", () => {
+  it("keeps wfhelper's AppImage artifact, tree staging and required feed removal", () => {
     const descriptor = loadDescriptor("wfhelper");
     assert.equal(descriptor.artifact.kind, "github-release");
     assert.equal(
@@ -230,7 +230,7 @@ describe("descriptor contents (regression against the previous per-app scripts)"
     assert.equal(descriptor.updater.residualScan?.severity, "warning");
   });
 
-  it("keeps zed's bundle tarball layout and tarball advisory", () => {
+  it("keeps zed's bundle tarball layout and tarball artifact", () => {
     const descriptor = loadDescriptor("zed");
     assert.equal(descriptor.artifact.kind, "github-release");
     assert.equal(
@@ -1393,7 +1393,9 @@ describe("descriptor env and output lines", () => {
     );
     assert.equal(env.get("APP_ID"), "little-genius");
     assert.equal(env.get("APP_CASK"), "little-genius");
-    assert.equal(env.get("WATCH"), JSON.stringify(loadDescriptor("little-genius").watch));
+    // The watch block is the API's input; the tap never reads it, so it is not
+    // exported to CI.
+    assert.equal(env.has("WATCH"), false);
     assert.equal(env.get("TAG_PREFIX"), "little-genius-v");
     assert.equal(env.get("SOURCE_DIR"), "packaging/apps/little-genius");
     assert.equal(env.get("BUILD_COMMAND"), "./build.sh");
@@ -1414,7 +1416,6 @@ describe("descriptor env and output lines", () => {
     const lines = descriptorLines(littleGenius, "output");
     assert.ok(lines.includes("id=little-genius"));
     assert.ok(lines.includes("cask=little-genius"));
-    assert.ok(lines.includes(`watch=${JSON.stringify(littleGenius.watch)}`));
     assert.ok(lines.includes("asset_prefix=little-genius"));
     assert.ok(lines.every((line) => /^[a-z_]+=/.test(line)));
   });

@@ -18,7 +18,7 @@ on:
         required: false
         type: string
       requested_version:
-        description: Feed version the API decided to build; empty for manual runs, which use the cask pin
+        description: Requested version the API decided to build; empty for manual runs, which use the cask pin
         required: false
         type: string
   workflow_call:
@@ -32,7 +32,7 @@ on:
         required: false
         type: string
       requested_version:
-        description: Feed version the API decided to build; empty for manual runs, which use the cask pin
+        description: Requested version the API decided to build; empty for manual runs, which use the cask pin
         required: false
         type: string
 
