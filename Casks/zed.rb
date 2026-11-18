@@ -1,6 +1,6 @@
 cask "zed" do
-  version "1.29.1"
-  sha256 "ee35995225abc8079232a0eacf360beaa736ce14aa4fed9a58cce4a638d8fce1"
+  version "1.29.2"
+  sha256 "dd3c03a50ffb4f328293744f08937a23a11b71f507f1d53d492c6a8e60a70cd2"
 
   url "https://github.com/edgarcnp/homebrew-tap/releases/download/zed-v#{version}/zed-#{version}-x86_64.AppImage"
   name "Zed"
