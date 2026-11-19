@@ -34,7 +34,7 @@
 FROM ghcr.io/pkgforge-dev/archlinux:v2026.11.16@sha256:3bac892a0e7c584a9bbe3affd5113a7918324ce5e01e802474dc034f03a15bba
 
 # renovate: datasource=npm depName=bun
-ARG BUN_VERSION=1.4.4
+ARG BUN_VERSION=1.4.5
 
 RUN pacman-key --init \
  && pacman -Syy --noconfirm archlinux-keyring \
