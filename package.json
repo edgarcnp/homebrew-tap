@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "description": "Build tooling for the AppImage casks in this tap. Bun runs the TypeScript directly; no build step, no runtime dependencies.",
-  "packageManager": "bun@1.4.4",
+  "packageManager": "bun@1.4.5",
   "scripts": {
     "fbr": "bun packaging/bin/fbr.ts",
     "test": "bun test packaging/tests",
