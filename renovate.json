@@ -173,7 +173,7 @@
       "allowedVersions": ">=24 <25"
     },
     {
-      "description": "Actions are SHA-pinned; one PR per digest bump keeps the review small",
+      "description": "Actions are SHA-pinned; one grouped PR keeps the review small",
       "matchManagers": [
         "github-actions"
       ],

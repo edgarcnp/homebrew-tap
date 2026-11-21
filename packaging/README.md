@@ -408,6 +408,8 @@ update on the same group branch, so a later update joins that open PR rather
 than opening a second one. A major version still gets its own
 `major-builder-image` PR (Renovate's `separateMajorMinor`), and vulnerability
 fixes stay ungrouped because `vulnerabilityAlerts` sets `groupName` to null.
+A `GitHub Actions` PR that updates an action used by `builder.yml` also
+triggers one rebuild: the workflow file is itself a path trigger.
 
 Casks are not Renovate's: versions and checksums are produced by this pipeline
 through `fbr cask`.
