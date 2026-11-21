@@ -395,6 +395,20 @@ grouped rules in `renovate.json` for routine bumps:
 | actionlint, pkgforge `appimagetool` | workflow (actionlint), builder Dockerfile (appimagetool) | regex custom managers |
 | `quick-sharun`, `get-debloated-pkgs` | `install-anylinux-tools.sh` | git-refs custom manager |
 
+The inputs baked into the builder image — the `pkgforge-dev/archlinux` base,
+the Bun runtime, pkgforge `appimagetool`, and the `Anylinux-AppImages` commit
+behind `quick-sharun`/`get-debloated-pkgs` — are one Renovate group
+(`builder image`), matched by the two files that trigger the rebuild (plus
+Bun, which is also pinned in `packageManager` and each workflow), so a tool
+added to either file joins the group without a rule change. A merge touching
+`packaging/builder/Dockerfile` or `install-anylinux-tools.sh` rebuilds and
+re-pins the image, so a grouped PR produces one rebuild and one digest
+instead of one per dependency. `groupSingleUpdates` keeps a lone member's
+update on the same group branch, so a later update joins that open PR rather
+than opening a second one. A major version still gets its own
+`major-builder-image` PR (Renovate's `separateMajorMinor`), and vulnerability
+fixes stay ungrouped because `vulnerabilityAlerts` sets `groupName` to null.
+
 Casks are not Renovate's: versions and checksums are produced by this pipeline
 through `fbr cask`.
 

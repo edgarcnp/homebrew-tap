@@ -210,16 +210,6 @@
       "groupName": "GitHub Actions"
     },
     {
-      "description": "The Bun runtime pins (packageManager, the setup-bun inputs, the builder Dockerfile) are reviewed together",
-      "matchDatasources": [
-        "npm"
-      ],
-      "matchPackageNames": [
-        "bun"
-      ],
-      "groupName": "bun runtime"
-    },
-    {
       "description": "The builder image is pinned by the builder workflow's pin job, not Renovate",
       "matchDatasources": [
         "docker"
@@ -230,16 +220,30 @@
       "enabled": false
     },
     {
-      "description": "Hand-pinned upstream tools whose version is addressed by a URL Renovate rewrites",
+      "description": "actionlint is addressed by a URL Renovate rewrites, so its PR carries no local SHA-256",
       "matchPackageNames": [
-        "rhysd/actionlint",
-        "pkgforge-dev/appimagetool",
-        "pkgforge-dev/Anylinux-AppImages"
+        "rhysd/actionlint"
       ],
-      "groupName": "pinned upstream build tools",
       "prBodyNotes": [
-        "No dependency in this group carries a local SHA-256: actionlint and pkgforge-dev/appimagetool are downloaded from a URL addressed by the version Renovate bumps, so no pin needs updating in this PR. pkgforge-dev/Anylinux-AppImages needs no such update either: its tools are fetched from a URL addressed by the commit digest Renovate bumps."
+        "actionlint is downloaded from a URL addressed by the version Renovate bumps, so no local SHA-256 needs updating in this PR."
       ]
+    },
+    {
+      "description": "Bun is pinned in packageManager, every workflow, and the builder Dockerfile; all pins move in the builder-image PR so the runtime and the image stay in step",
+      "matchPackageNames": [
+        "bun"
+      ],
+      "groupName": "builder image",
+      "groupSingleUpdates": true
+    },
+    {
+      "description": "Every dependency declared in the builder Dockerfile or its tool install script shares one PR: a merge that changes either file rebuilds fbr-builder-base, so one PR means one rebuild and one image digest",
+      "matchFileNames": [
+        "packaging/builder/Dockerfile",
+        "packaging/scripts/install-anylinux-tools.sh"
+      ],
+      "groupName": "builder image",
+      "groupSingleUpdates": true
     }
   ]
 }
