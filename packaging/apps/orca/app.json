@@ -5,8 +5,8 @@
   "comment": "Next-gen IDE for parallel agentic development",
   "cask": "orca",
   "watch": {
-    "feedUrl": "https://api.github.com/repos/stablyai/orca/releases",
-    "format": "github-release",
+    "feedUrl": "https://github.com/stablyai/orca/tags.atom",
+    "format": "atom",
     "versionPattern": "^v(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
     "repo": "stablyai/orca"
   },

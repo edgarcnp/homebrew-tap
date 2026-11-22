@@ -14,6 +14,10 @@ exposes, so it does not shadow the `orca` CLI launcher the app registers under
   requested version, asset `orca-ide_{version}_{arch}.deb`, with the SHA-256 and
   size GitHub publishes for that asset. Tag prefix is `v`; the tap's own release
   tag is `orca-v<version>`.
+- **Version watch** — the API reads the `tags.atom` feed, not the releases API,
+  so a tag is seen before its release exists. Until Stably attaches the
+  `orca-ide_{version}_{arch}.deb`, resolve answers not-ready and the dispatch is
+  skipped.
 - **Payload** — `deb-tree`: the whole `opt/Orca` tree is staged into `AppDir/bin`
   (the Electron main binary, `resources/`, locales and the node modules). The
   build asserts the `.deb` `Architecture` matches the request.
