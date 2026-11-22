@@ -33,11 +33,19 @@ concurrency:
   group: pipeline-smoke-${{ github.ref }}
   cancel-in-progress: true
 
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
   smoke:
+    # The called build workflow declares these scopes on its build/publish/
+    # report jobs. GitHub compiles the whole reusable workflow before it skips
+    # publish, so the caller's ceiling must include them or the run fails with
+    # startup_failure and no jobs. publish is skipped by `publish: false`; the
+    # build itself only reads contents.
+    permissions:
+      attestations: write
+      contents: write
+      id-token: write
     strategy:
       fail-fast: false
       matrix:
