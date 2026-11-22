@@ -1,6 +1,6 @@
 cask "orca" do
   version "1.4.271"
-  sha256 "91abe853907b6b36e1f618cbeba420f61eaa4b973eef329de3c763672e046306"
+  sha256 "48b81dbd61a92a619cb742aceb9a5c31081cd6f06cfa9c7b6e1784ba715bc65b"
 
   url "https://github.com/edgarcnp/homebrew-tap/releases/download/orca-v#{version}/orca-#{version}-x86_64.AppImage"
   name "Orca"
