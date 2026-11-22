@@ -329,6 +329,29 @@ describe("descriptor contents (regression against the previous per-app scripts)"
     );
   });
 
+  it("validates an optional desktop id that renames the entry and the icon", () => {
+    assert.equal(loadDescriptor("orca").desktopId, "orca-ide");
+    // Absent means the cask token stands, as for every other app.
+    assert.equal(loadDescriptor("gitcomet").desktopId, undefined);
+
+    const assertRejects = (value: unknown, expected: RegExp): void => {
+      assert.throws(
+        () =>
+          validateDescriptor(
+            mutated("orca", (copy) => {
+              copy["desktopId"] = value;
+            }),
+            "orca",
+          ),
+        expected,
+      );
+    };
+    // A desktop file name, not a display name: no space, no separator.
+    assertRejects("Orca IDE", /desktopId: must be a lowercase app id/);
+    assertRejects("orca/ide", /desktopId: must be a lowercase app id/);
+    assertRejects("", /desktopId: must be a lowercase app id/);
+  });
+
   it("validates a bundle tarball payload's root and target", () => {
     assert.throws(
       () =>

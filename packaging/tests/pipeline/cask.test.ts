@@ -168,6 +168,27 @@ describe("checkCask", () => {
     assert.match(commentDrift.join("; "), /desktop entry Comment does not match/);
   });
 
+  it("installs the desktop entry and icon under the descriptor's desktop id", () => {
+    const descriptor = loadDescriptor("orca");
+    assert.equal(descriptor.desktopId, "orca-ide");
+    const source = fs.readFileSync(caskPath(descriptor.cask), "utf8");
+    assert.deepEqual(checkCask(descriptor, source), []);
+    assert.match(source, /Name=Orca IDE/);
+    assert.match(source, /Icon=orca-ide/);
+    assert.match(source, /\.local\/share\/applications\/orca-ide\.desktop/);
+    assert.match(source, /hicolor\/512x512\/apps\/orca-ide\.png/);
+
+    // Without the field the entry and icon fall back to the cask token, which
+    // is what every other app relies on.
+    const { desktopId: removed, ...withoutDesktopId } = descriptor;
+    assert.equal(removed, "orca-ide");
+    const fallback = checkCask(withoutDesktopId, source);
+    assert.match(fallback.join("; "), /postflight does not write .*applications\/orca\.desktop/);
+
+    const drift = checkCask({ ...descriptor, desktopId: "orca-launcher" }, source);
+    assert.match(drift.join("; "), /applications\/orca-launcher\.desktop/);
+  });
+
   it("checks a payload-owned desktop entry instead of a generated one", () => {
     const zed = loadDescriptor("zed");
     const source = fs.readFileSync(caskPath(zed.cask), "utf8");

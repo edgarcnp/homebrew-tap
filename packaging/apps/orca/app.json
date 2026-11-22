@@ -1,9 +1,10 @@
 {
   "id": "orca",
   "appName": "Orca",
-  "displayName": "Orca",
+  "displayName": "Orca IDE",
   "comment": "Next-gen IDE for parallel agentic development",
   "cask": "orca",
+  "desktopId": "orca-ide",
   "watch": {
     "feedUrl": "https://github.com/stablyai/orca/tags.atom",
     "format": "atom",

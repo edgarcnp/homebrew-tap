@@ -97,6 +97,7 @@ record whose `app` does not — `fbr report` refuses such a record first.
 | --- | --- |
 | `id`, `cask`, `assetPrefix`, `tagPrefix` | Identity. The three names above are the same string; the release tag is `<tagPrefix><version>`. |
 | `appName`, `displayName`, `comment` | Release title and desktop entry `Name=`/`Comment=`. |
+| `desktopId` | Desktop entry file name and icon name, when the generic name is already taken on a user's desktop — Orca the IDE would otherwise share `orca.desktop` and `orca.png` with the GNOME Orca screen reader. Absent means the cask token. |
 | `sourceRepo`, `sourceOwner` | Upstream repo to build from, and the owner of the fallback fork. |
 | `sourceDir`, `buildCommand` | Where CI `cd`s before building. `sourceDir` must be `packaging/apps/<app>`: the app id, directory, cask token and asset prefix are one name end to end. |
 | `debloatArgs` | pkgforge debloat flags. |

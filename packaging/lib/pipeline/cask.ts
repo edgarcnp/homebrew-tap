@@ -236,7 +236,10 @@ export function checkCask(descriptor: AppDescriptor, source: string): string[] {
   require(source.includes("auto_updates false"), "missing auto_updates false");
   require(source.includes("postflight_steps do"), "missing postflight_steps");
 
-  const iconTarget = `.local/share/icons/hicolor/${descriptor.icon.size}/apps/${descriptor.cask}${iconExtension(descriptor)}`;
+  // The desktop entry and icon are named by desktopId when the app needs a
+  // launcher name of its own, else by the cask token.
+  const launcherId = descriptor.desktopId ?? descriptor.cask;
+  const iconTarget = `.local/share/icons/hicolor/${descriptor.icon.size}/apps/${launcherId}${iconExtension(descriptor)}`;
   require(source.includes(iconTarget), `postflight does not install the icon to ${iconTarget}`);
   require(source.includes(`~/${iconTarget}`), `zap does not remove ~/${iconTarget}`);
 
@@ -249,7 +252,7 @@ export function checkCask(descriptor: AppDescriptor, source: string): string[] {
 
   const caskDesktopEntry = descriptor.caskDesktopEntry;
   if (caskDesktopEntry === undefined) {
-    const desktopTarget = `.local/share/applications/${descriptor.cask}.desktop`;
+    const desktopTarget = `.local/share/applications/${launcherId}.desktop`;
     require(source.includes(desktopTarget), `postflight does not write ${desktopTarget}`);
     require(source.includes(`~/${desktopTarget}`), `zap does not remove ~/${desktopTarget}`);
     require(
@@ -261,8 +264,8 @@ export function checkCask(descriptor: AppDescriptor, source: string): string[] {
       `desktop entry Comment does not match comment "${descriptor.comment}"`,
     );
     require(
-      source.includes(`Icon=${descriptor.cask}`),
-      `desktop entry Icon does not match "${descriptor.cask}"`,
+      source.includes(`Icon=${launcherId}`),
+      `desktop entry Icon does not match "${launcherId}"`,
     );
   } else {
     // The payload owns the entry text (Name, Comment and Icon come from
