@@ -110,13 +110,14 @@ jobs:
           cd "$(brew --repository "$TAP_REPO")"
           bun run test
 
-      - name: Check casks against their app descriptors
+      - name: Check packaging tools
         env:
           TAP_REPO: ${{ github.repository }}
         run: |
-          # One parser for Casks/*.rb; fails when a cask drifts from its app.json.
+          # Every descriptor, its env/output projections, the JSON Schema
+          # command, and every cask against its app.json. No AppImage build.
           cd "$(brew --repository "$TAP_REPO")"
-          bun packaging/bin/fbr.ts cask --action check
+          bun run check:tools
 
       - name: Shellcheck packaging scripts
         env:
@@ -155,10 +156,11 @@ jobs:
         env:
           TAP_REPO: ${{ github.repository }}
         run: |
-          # The tap is already checked out by setup-homebrew. No --fix:
-          # sandbox corrections are discarded and would mask regressions. The
-          # script passes authored files explicitly, so dependencies under
-          # node_modules are not linted.
+          # The tap is already checked out by setup-homebrew under the brew
+          # repository, not $GITHUB_WORKSPACE. No --fix: sandbox corrections
+          # are discarded and would mask regressions. The script passes
+          # authored files explicitly, so node_modules is not linted.
+          cd "$(brew --repository "$TAP_REPO")"
           packaging/scripts/style.sh
           tap_dir="$(brew --repository "$TAP_REPO")"
           for cask in "$tap_dir"/Casks/*.rb; do
