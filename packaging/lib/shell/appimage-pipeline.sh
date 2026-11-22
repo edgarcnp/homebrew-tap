@@ -4,7 +4,7 @@
 # build.sh calls these stages in order; per-app behavior lives in app.json.
 #
 # Globals produced here (consumed below and by the caller):
-#   APP_ID APP_JSON PACKAGE_NAME PACKAGE_VERSION
+#   APP_ID APP_JSON PACKAGE_NAME LAUNCHER_NAME PACKAGE_VERSION
 #   TARGET_ARCH DEB_ARCH APPIMAGE_ARCH
 #   WORK_DIR DIST_DIR APPDIR METADATA_PATH PAYLOAD_PATH PAYLOAD_ROOT
 #
@@ -29,6 +29,22 @@ descriptor_field() {
   jq -r "$1" <<<"${APP_JSON}"
 }
 
+# Name of the desktop entry packed into the AppImage: the descriptor's
+# desktopId when it sets one, else the cask token. The cask installs its own
+# entry under the same name, so an app whose generic name belongs to something
+# else (Orca the IDE versus the GNOME Orca screen reader) does not ship a
+# second "<cask>.desktop" for the app's own desktop integration to install
+# beside it.
+launcher_name() {
+  local name
+  name="$(descriptor_field '.desktopId // .cask')"
+  if [[ ! "${name}" =~ ^[a-z0-9][a-z0-9-]{0,63}$ ]]
+  then
+    error "unsafe desktop entry name: ${name}"
+  fi
+  printf '%s\n' "${name}"
+}
+
 # Loads and validates the descriptor, then resolves the build environment.
 # Usage: pipeline_init <app-id>
 pipeline_init() {
@@ -39,6 +55,7 @@ pipeline_init() {
   APP_JSON="$(fbr descriptor --app "${APP_ID}")"
 
   PACKAGE_NAME="$(descriptor_field '.cask')"
+  LAUNCHER_NAME="$(launcher_name)"
   TARGET_ARCH="${TARGET_ARCH:-$(uname -m)}"
 
   # The one arch mapping lives in fbr arch (core/architecture.ts).
@@ -345,7 +362,7 @@ pipeline_render_desktop() {
     --app "${APP_ID}" \
     --version "${PACKAGE_VERSION}" \
     --appdir "${APPDIR}")"
-  cp -- "${desktop_file}" "${APPDIR}/share/applications/${PACKAGE_NAME}.desktop"
+  cp -- "${desktop_file}" "${APPDIR}/share/applications/${LAUNCHER_NAME}.desktop"
 }
 
 pipeline_install_icon() {
@@ -376,6 +393,9 @@ pipeline_install_icon() {
   then
     extension="png"
   fi
+  # The icon keeps the cask token: the cask copies "${PACKAGE_NAME}.${extension}"
+  # out of the published AppImage, so renaming it here would only pair with a
+  # cask that already reads the new name.
   cp -- "${upstream_icon}" "${APPDIR}/${PACKAGE_NAME}.${extension}"
   cp -- "${upstream_icon}" "${APPDIR}/share/icons/hicolor/${size}/apps/${PACKAGE_NAME}.${extension}"
 }

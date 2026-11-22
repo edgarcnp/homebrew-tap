@@ -995,3 +995,36 @@ describe("pipeline_link_appdir_entries", () => {
     assert.deepEqual(fs.readdirSync(appDir), []);
   });
 });
+
+// The desktop entry packed into the AppImage carries the launcher name. The
+// cask installs its own entry under the same name, so an app whose generic
+// name belongs to something else (Orca the IDE versus the GNOME Orca screen
+// reader) must not ship a second "orca.desktop" for the app's own desktop
+// integration to install beside it.
+describe("launcher_name", () => {
+  function launcherName(appJson: string): { status: number | null; stdout: string; stderr: string } {
+    const result = spawnSync("bash", ["-c", `set -Eeuo pipefail; . "$PIPELINE_LIB"; launcher_name`], {
+      encoding: "utf8",
+      env: { ...process.env, PIPELINE_LIB, APP_JSON: appJson },
+    });
+    return { status: result.status, stdout: (result.stdout ?? "").trim(), stderr: result.stderr ?? "" };
+  }
+
+  function realDescriptor(app: string): string {
+    return fs.readFileSync(path.join(REPO_ROOT, "packaging", "apps", app, "app.json"), "utf8");
+  }
+
+  it("uses the descriptor's desktopId", () => {
+    assert.equal(launcherName(realDescriptor("orca")).stdout, "orca-ide");
+  });
+
+  it("falls back to the cask token", () => {
+    assert.equal(launcherName(realDescriptor("gitcomet")).stdout, "gitcomet");
+  });
+
+  it("refuses a name that would leave the applications directory", () => {
+    const result = launcherName(JSON.stringify({ cask: "orca", desktopId: "../evil" }));
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /unsafe desktop entry name: \.\.\/evil/);
+  });
+});
