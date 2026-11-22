@@ -15,6 +15,7 @@ import { hasPlaceholder } from "../core/template.ts";
 import { ARCHITECTURES, isArchitecture } from "../core/types.ts";
 import type {
   AppDescriptor,
+  AppDirLink,
   Architecture,
   Artifact,
   CaskDesktopEntry,
@@ -23,6 +24,7 @@ import type {
   Payload,
   QuickSharunConfig,
   ResidualScan,
+  SmokeConfig,
   UpdaterConfig,
   WatchConfig,
 } from "../core/types.ts";
@@ -54,6 +56,8 @@ const TOP_LEVEL_KEYS = [
   "desktopTemplate",
   "caskDesktopEntry",
   "extraFiles",
+  "appDirLinks",
+  "smoke",
   "updater",
   "quickSharun",
   "watch",
@@ -523,6 +527,57 @@ function validateExtraFiles(raw: unknown, label: string): ExtraFile[] | undefine
   });
 }
 
+// Symlinks created in the finished AppDir before packing. Both sides are
+// repo-relative AppDir paths; duplicates are rejected so the first link cannot
+// hide a second.
+function validateAppDirLinks(raw: unknown, label: string): AppDirLink[] | undefined {
+  if (raw === undefined) return undefined;
+  if (!Array.isArray(raw) || raw.length === 0) {
+    fail(`${label} must be a non-empty array`);
+  }
+  const links = new Set<string>();
+  return raw.map((entry, index) => {
+    const itemLabel = `${label}[${index}]`;
+    const source = asObject(entry, itemLabel);
+    rejectUnknownKeys(source, ["link", "target"], itemLabel);
+    const link: AppDirLink = {
+      link: relativePath(str(source, "link", itemLabel), `${itemLabel}.link`),
+      target: relativePath(str(source, "target", itemLabel), `${itemLabel}.target`),
+    };
+    if (link.link === "bin/" || link.link === "bin") {
+      fail(`${itemLabel}.link must not be the staged bin directory`);
+    }
+    if (links.has(link.link)) {
+      fail(`${itemLabel}.link duplicates ${link.link}`);
+    }
+    links.add(link.link);
+    return link;
+  });
+}
+
+// Comm is capped at 15 bytes by the kernel, so a longer name could never match
+// and would silently fail to exempt the process it names.
+const DEFUNCT_PROCESS_NAME = /^[A-Za-z0-9._+-]{1,15}$/;
+
+// Smoke-gate exceptions. The names are the zombie's /proc/<pid>/comm value; an
+// entry here suppresses only the defunct-child verdict, never the loader check.
+function validateSmoke(raw: unknown, label: string): SmokeConfig | undefined {
+  if (raw === undefined) return undefined;
+  const source = asObject(raw, label);
+  rejectUnknownKeys(source, ["ignoreDefunct"], label);
+  const names = strArray(source, "ignoreDefunct", label);
+  if (names.length === 0) fail(`${label}.ignoreDefunct must not be empty`);
+  const seen = new Set<string>();
+  for (const [index, name] of names.entries()) {
+    if (!DEFUNCT_PROCESS_NAME.test(name)) {
+      fail(`${label}.ignoreDefunct[${index}] is not a process name: ${name}`);
+    }
+    if (seen.has(name)) fail(`${label}.ignoreDefunct[${index}] duplicates ${name}`);
+    seen.add(name);
+  }
+  return { ignoreDefunct: names };
+}
+
 function validateIcon(raw: unknown, label: string): IconConfig {
   const source = asObject(raw, label);
   rejectUnknownKeys(source, ["source", "size", "base"], label);
@@ -633,6 +688,8 @@ export function validateDescriptor(raw: unknown, expectedId: string): AppDescrip
   const watch = validateWatch(source["watch"], `${label}.watch`);
   const hostHelpers = validateHostHelpers(source["hostHelpers"], `${label}.hostHelpers`);
   const extraFiles = validateExtraFiles(source["extraFiles"], `${label}.extraFiles`);
+  const appDirLinks = validateAppDirLinks(source["appDirLinks"], `${label}.appDirLinks`);
+  const smoke = validateSmoke(source["smoke"], `${label}.smoke`);
   const caskDesktopEntry = validateCaskDesktopEntry(source["caskDesktopEntry"], `${label}.caskDesktopEntry`);
   // `advisory` is the old name, accepted for one release as an alias. Both at
   // once is ambiguous, so it fails rather than picking one.
@@ -675,6 +732,8 @@ export function validateDescriptor(raw: unknown, expectedId: string): AppDescrip
   if (watch !== undefined) descriptor.watch = watch;
   if (hostHelpers !== undefined) descriptor.hostHelpers = hostHelpers;
   if (extraFiles !== undefined) descriptor.extraFiles = extraFiles;
+  if (appDirLinks !== undefined) descriptor.appDirLinks = appDirLinks;
+  if (smoke !== undefined) descriptor.smoke = smoke;
   if (caskDesktopEntry !== undefined) descriptor.caskDesktopEntry = caskDesktopEntry;
 
   // The app id is the API's app id end to end: cask token and asset prefix are

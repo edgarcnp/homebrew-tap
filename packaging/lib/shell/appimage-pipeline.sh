@@ -303,6 +303,29 @@ pipeline_stage() {
   esac
 }
 
+# Creates the descriptor's relative symlinks in the finished AppDir. An app that
+# resolves its own files beside the launcher at the extracted AppImage root
+# (Orca looks for resources/bin/<launcher> there) needs the staged tree linked
+# into that shape before the image is packed.
+pipeline_link_appdir_entries() {
+  local link target full target_relative
+  while IFS=$'\t' read -r link target
+  do
+    [[ -n "${link}" ]] || continue
+    full="${APPDIR}/${link}"
+    if [[ -e "${full}" || -L "${full}" ]]
+    then
+      error "AppDir link already exists: ${link}"
+    fi
+    [[ -e "${APPDIR}/${target}" ]] || error "Missing AppDir link target: ${target}"
+    mkdir -p -- "$(dirname -- "${full}")"
+    target_relative="$(realpath --relative-to="$(dirname -- "${full}")" "${APPDIR}/${target}")"
+    [[ -n "${target_relative}" ]] || error "Failed to compute relative target for ${link}"
+    ln -s -- "${target_relative}" "${full}"
+    info "Linked ${link} -> ${target_relative}"
+  done < <(descriptor_field '.appDirLinks // [] | .[] | [.link, .target] | @tsv')
+}
+
 # Neutralizes the app's own updater and fails when a declared endpoint survives.
 pipeline_neutralize() {
   # FBR_FAILURE_OUT (set by the workflow) lets a surviving updater endpoint be
@@ -670,6 +693,10 @@ Install the Anylinux tools (packaging/scripts/install-anylinux-tools.sh) or add 
   # .env and the runtime hook belong to the finished AppDir (after AppRun exists).
   fbr finalize --app "${APP_ID}" --appdir "${APPDIR}"
 
+  # Links last, so a descriptor that names a file quick-sharun or finalize
+  # already wrote fails here instead of writing through the symlink.
+  pipeline_link_appdir_entries
+
   if ! "${APPIMAGETOOL}"
   then
     error "appimagetool failed"
@@ -692,6 +719,7 @@ Install the Anylinux tools (packaging/scripts/install-anylinux-tools.sh) or add 
   then
     smoke_launch_args=(--no-sandbox)
   fi
-  smoke_test_appimage "${output_file}" "${smoke_launch_args[@]}"
+  SMOKE_IGNORE_DEFUNCT="$(descriptor_field '.smoke.ignoreDefunct // [] | join(" ")')" \
+    smoke_test_appimage "${output_file}" "${smoke_launch_args[@]}"
   info "Built AppImage: ${output_file}"
 }

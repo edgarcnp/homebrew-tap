@@ -67,7 +67,8 @@ it for the version, and the tap never resolves "the newest".
 7. **pack** — `quick-sharun` (generates AppRun, bundles the runtime closure
    including glibc and ld-linux), sidecar reconciliation, the bundled-loader
    shim for a bundle's `libexec/` binaries, `fbr finalize` (AppDir `.env` +
-   runtime hook), pkgforge `appimagetool`, then the smoke test. A closure that
+   runtime hook), the descriptor's `appDirLinks`, pkgforge `appimagetool`, then
+   the smoke test. A closure that
    needs a soname the build environment does not carry aborts as
    `MISSING_PAYLOAD_LIB`, and the record names the sonames it could not resolve.
 
@@ -99,6 +100,8 @@ record whose `app` does not — `fbr report` refuses such a record first.
 | `quickSharun` | quick-sharun knobs: `hooks` (`ADD_HOOKS`), `env`, and `libraries` — absolute paths of libraries the app only `dlopen`s at runtime, passed to quick-sharun as deploy targets (an `ldd` scan never surfaces those, so nothing else would bundle them). |
 | `hostHelpers` | Optional AppDir paths under `bin/` the app executes outside the mount. Stashed before quick-sharun and restored after, so they stay host-runnable instead of becoming sharun wrappers. |
 | `extraFiles` | Optional `{source, target}` pairs copied verbatim from the app directory into the AppDir after quick-sharun, e.g. Firefox's default prefs under `bin/defaults/pref/`. `target` is AppDir-relative and unique; an existing target whose bytes differ fails the build instead of overwriting the payload. |
+| `appDirLinks` | Optional `{link, target}` pairs creating relative symlinks in the finished AppDir before packing, for an app that resolves its own files beside the launcher at the extracted AppImage root: Orca's self-extraction asks for `resources/bin/<launcher>` there and its launcher then needs the executable beside `resources`, so the descriptor links `resources -> bin/resources` and `orca-ide -> bin/orca-ide`. Both paths are AppDir-relative, link paths are unique, and a missing target or an existing link path fails the build. |
+| `smoke` | Optional post-build smoke-gate exceptions. `ignoreDefunct` names the `/proc/<pid>/comm` values a defunct descendant may carry without failing the gate (Orca's parcel watcher leaves a `sh` zombie); a known upstream leak only, never a stuck launcher. Loader errors and every other defunct child still fail. |
 | `watch` | Optional release-watch block (`feedUrl`, `format`, `versionPattern`, optional `skipPattern`, `repo`, and `versionField` for `"json"`). `format` — `"atom"`, `"json"` or `"github-release"` — must be declared: the API's reader still defaults an absent one to atom, but this validator does not, so a forgotten format fails here instead of silently watching the wrong reader. The pattern matches the feed entry *title* and capture group 1 is the version: the atom entry title, the release `name` for `"github-release"` (falling back to `tag_name` when GitHub left the name empty — what the atom title carried), or the `versionField` value (a dotted path, e.g. `version`) for `"json"`, which reads a single version string from a JSON document for upstreams like avakot that publish no feed. A `"github-release"` feed must be the pinned `https://api.github.com/repos/<owner>/<repo>/releases` URL. The API reads this block for the version it dispatches; the tap never fetches it, so there is no feed-versus-artifact comparison. |
 
 ### Artifact kinds
@@ -257,7 +260,9 @@ Each check lives in one place:
   dynamic-loader errors and on a launcher left waiting on a defunct child (a
   child still unreaped after `SMOKE_DEFUNCT_SECONDS`, default 3, means the app
   never got past it — the way a host-glibc mismatch reaches the gate, because
-  the dead child's stderr goes nowhere). It passes `--no-sandbox` only to
+  the dead child's stderr goes nowhere). A descriptor's `smoke.ignoreDefunct`
+  skips a known upstream leak by process name; every other defunct child still
+  fails. It passes `--no-sandbox` only to
   Chromium-based payloads: a native bundle rejects the flag and exits before it
   starts, which would make the gate vacuous. The release pins the AppImage
   SHA-256 back into the cask.

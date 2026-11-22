@@ -146,6 +146,21 @@ smoke_defunct_descendants() {
   done
 }
 
+# True when a defunct pid's command name is a declared, known upstream leak
+# (the descriptor's smoke.ignoreDefunct, space-separated in
+# SMOKE_IGNORE_DEFUNCT). Names are validated as shell-safe words by the
+# descriptor loader, so word splitting here is the list itself.
+smoke_defunct_ignored() {
+  local pid="$1" name candidate
+  [[ -n "${SMOKE_IGNORE_DEFUNCT:-}" ]] || return 1
+  name="$(cat -- "/proc/${pid}/comm" 2>/dev/null)" || return 1
+  for candidate in ${SMOKE_IGNORE_DEFUNCT}
+  do
+    [[ "${name}" = "${candidate}" ]] && return 0
+  done
+  return 1
+}
+
 # Runs the built AppImage headless and fails on dynamic-loader errors and on a
 # launcher that never gets past its own dead child, mirroring quick-sharun
 # --simple-test. Extra arguments are passed to the app itself (an Electron
@@ -158,7 +173,10 @@ smoke_defunct_descendants() {
 # stay for the whole window and the loader message goes to the dead child's
 # stderr, so no captured output tells the story (Zed 1.27.0 on a host glibc
 # older than the bundled one). A child that exits on the way up is normal, so
-# a pid has to stay defunct for SMOKE_DEFUNCT_SECONDS (default 3) first.
+# a pid has to stay defunct for SMOKE_DEFUNCT_SECONDS (default 3) first. A
+# process name the descriptor declares in smoke.ignoreDefunct (passed here as
+# SMOKE_IGNORE_DEFUNCT) is skipped: a known upstream leak that does not block
+# the app, never a launcher stuck on its dead child.
 smoke_test_appimage() {
   local appimage="$1"
   shift
@@ -202,6 +220,7 @@ smoke_test_appimage() {
     elapsed=$((elapsed + 1))
     for pid in $(smoke_defunct_descendants "${runner_pid}")
     do
+      smoke_defunct_ignored "${pid}" && continue
       first_seen["${pid}"]="${first_seen[${pid}]:-${elapsed}}"
       since="${first_seen[${pid}]}"
       if ((elapsed - since >= defunct_seconds))

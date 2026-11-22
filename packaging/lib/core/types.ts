@@ -236,6 +236,23 @@ export interface ExtraFile {
   target: string;
 }
 
+// A relative symlink created in the finished AppDir before packing. An app that
+// looks for its own files beside the launcher at the extracted AppImage root
+// (Orca asks for resources/bin/<launcher> there) needs the staged tree linked
+// into that shape; both paths are AppDir-relative.
+export interface AppDirLink {
+  link: string;
+  target: string;
+}
+
+// Per-app exceptions to the post-build smoke gate. `ignoreDefunct` names the
+// process comm values a defunct descendant may carry without failing the gate:
+// only an upstream leak known not to block the app belongs here, never a
+// launcher that is actually stuck.
+export interface SmokeConfig {
+  ignoreDefunct?: string[];
+}
+
 // Release-watch block. versionPattern matches the feed entry *title*: an atom
 // entry title, the GitHub release `name` (or its `tag_name` when the name is
 // empty) for `"github-release"`, or the JSON `versionField` value for
@@ -317,6 +334,11 @@ export interface AppDescriptor {
   // Files copied verbatim from sourceDir into the AppDir after quick-sharun.
   // Absent when the app ships none.
   extraFiles?: ExtraFile[];
+  // Relative symlinks created in the finished AppDir before packing, for an app
+  // whose self-extraction expects the upstream layout beside the launcher.
+  appDirLinks?: AppDirLink[];
+  // Post-build smoke-gate exceptions for this app, if any.
+  smoke?: SmokeConfig;
   updater: UpdaterConfig;
   // quick-sharun build knobs, exported as environment variables at pack time.
   quickSharun: QuickSharunConfig;

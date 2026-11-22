@@ -860,7 +860,10 @@ function smokeApp(script: string): string {
   return file;
 }
 
-function runSmoke(appimage: string): { status: number | null; stderr: string } {
+function runSmoke(
+  appimage: string,
+  extraEnv: Record<string, string> = {},
+): { status: number | null; stderr: string } {
   const result = spawnSync(
     "bash",
     ["-c", 'set -Eeuo pipefail; . "$COMMON"; smoke_test_appimage "$APPIMAGE"'],
@@ -872,6 +875,7 @@ function runSmoke(appimage: string): { status: number | null; stderr: string } {
         APPIMAGE: appimage,
         SMOKE_TIMEOUT: "8",
         SMOKE_DEFUNCT_SECONDS: "2",
+        ...extraEnv,
       },
     },
   );
@@ -907,5 +911,87 @@ describe("smoke_test_appimage", () => {
     );
     assert.equal(status, 1);
     assert.match(stderr, /loader errors/);
+  });
+
+  it(
+    "skips a defunct process name the descriptor declares",
+    { skip: !HAS_PYTHON, timeout: 30000 },
+    () => {
+      const appimage = smokeApp(
+        [
+          "#!/bin/sh",
+          "exec python3 -c 'import os, time",
+          'if os.fork() == 0:',
+          '    os.execvp("sh", ["sh", "-c", "exit 0"])',
+          "    os._exit(0)",
+          "time.sleep(30)'",
+          "",
+        ].join("\n"),
+      );
+
+      // The orphaned `sh` is a zombie either way; only the declared exception
+      // turns the verdict, so the test proves the name actually matters.
+      const failing = runSmoke(appimage);
+      assert.equal(failing.status, 1);
+      assert.match(failing.stderr, /kept pid \d+ defunct/);
+
+      const passing = runSmoke(appimage, { SMOKE_IGNORE_DEFUNCT: "sh" });
+      assert.equal(passing.status, 0, passing.stderr);
+    },
+  );
+});
+
+// AppDir links: an app whose self-extraction expects its payload beside the
+// launcher at the AppImage root (Orca asks for resources/bin/<launcher>) needs
+// the staged tree linked into that shape before the image is packed.
+
+describe("pipeline_link_appdir_entries", () => {
+  it("creates a relative symlink at the AppDir root", () => {
+    writeHelperFile("bin/resources/bin/orca-ide", "#!/bin/sh\nexit 0\n");
+
+    const { status, stderr } = runHelperStage("pipeline_link_appdir_entries", {
+      appDirLinks: [{ link: "resources", target: "bin/resources" }],
+    });
+    assert.equal(status, 0, stderr);
+    assert.equal(fs.lstatSync(pathIn("resources")).isSymbolicLink(), true);
+    assert.equal(fs.readlinkSync(pathIn("resources")), "bin/resources");
+    assert.equal(
+      fs.realpathSync(pathIn("resources/bin/orca-ide")),
+      fs.realpathSync(pathIn("bin/resources/bin/orca-ide")),
+    );
+  });
+
+  it("creates the parent directories of a nested link", () => {
+    writeHelperFile("bin/resources/app.asar", "asar");
+
+    const { status, stderr } = runHelperStage("pipeline_link_appdir_entries", {
+      appDirLinks: [{ link: "compat/resources", target: "bin/resources" }],
+    });
+    assert.equal(status, 0, stderr);
+    assert.equal(fs.readlinkSync(pathIn("compat/resources")), "../bin/resources");
+  });
+
+  it("fails when the target does not exist", () => {
+    const { status, stderr } = runHelperStage("pipeline_link_appdir_entries", {
+      appDirLinks: [{ link: "resources", target: "bin/missing" }],
+    });
+    assert.equal(status, 1);
+    assert.match(stderr, /Missing AppDir link target: bin\/missing/);
+  });
+
+  it("fails when the link path already exists", () => {
+    writeHelperFile("resources", "already here");
+
+    const { status, stderr } = runHelperStage("pipeline_link_appdir_entries", {
+      appDirLinks: [{ link: "resources", target: "bin" }],
+    });
+    assert.equal(status, 1);
+    assert.match(stderr, /AppDir link already exists: resources/);
+  });
+
+  it("no-ops when the descriptor declares no links", () => {
+    const { status, stderr } = runHelperStage("pipeline_link_appdir_entries", {});
+    assert.equal(status, 0, stderr);
+    assert.deepEqual(fs.readdirSync(appDir), []);
   });
 });

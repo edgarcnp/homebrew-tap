@@ -252,6 +252,38 @@ describe("descriptor contents (regression against the previous per-app scripts)"
     assert.equal(descriptor.updater.residualScan, undefined);
   });
 
+  it("keeps orca's deb payload, root resources link and updater patch", () => {
+    const descriptor = loadDescriptor("orca");
+    assert.equal(descriptor.artifact.kind, "github-release");
+    if (descriptor.artifact.kind === "github-release") {
+      assert.equal(descriptor.artifact.assetNameTemplate, "orca-ide_{version}_{arch}.deb");
+      assert.equal(descriptor.artifact.tagPrefix, "v");
+    }
+    assert.equal(descriptor.payload.kind, "deb-tree");
+    assert.equal(descriptor.payload.kind === "deb-tree" ? descriptor.payload.tree : "", "opt/Orca");
+    assert.deepEqual(descriptor.appDirLinks, [
+      { link: "resources", target: "bin/resources" },
+      { link: "orca-ide", target: "bin/orca-ide" },
+    ]);
+    assert.deepEqual(descriptor.smoke, { ignoreDefunct: ["sh"] });
+    assert.deepEqual(descriptor.hostHelpers, ["bin/resources/bin/orca-wayland-clipboard"]);
+    assert.deepEqual(descriptor.binaryTargets, ["orca-ide"]);
+    // The app pins its own generic GitHub release feed, so app-update.yml alone
+    // is not enough: the repo literal is patched at both copies of the updater.
+    assert.deepEqual(descriptor.updater.removeFeed, {
+      paths: ["bin/resources/app-update.yml"],
+      required: true,
+    });
+    const patch = descriptor.updater.patchEndpoint;
+    assert.equal(patch?.from, "stablyai/orca");
+    assert.equal(patch?.from.length, patch?.binaryReplacement.length);
+    assert.deepEqual(patch?.targets, [
+      "bin/resources/app.asar",
+      "bin/resources/app.asar.unpacked/out/shared/updater/release-channel.js",
+    ]);
+    assert.equal(descriptor.updater.residualScan?.severity, "error");
+  });
+
   it("validates a payload-owned cask desktop entry", () => {
     const descriptor = loadDescriptor("zed");
     assert.deepEqual(descriptor.caskDesktopEntry, {
@@ -663,6 +695,137 @@ describe("extra files", () => {
         ),
       /duplicates/,
     );
+  });
+});
+
+describe("AppDir links", () => {
+  it("omits the field when the block is absent", () => {
+    const descriptor = validateDescriptor(
+      mutated("vscode", (copy) => {
+        delete copy["appDirLinks"];
+      }),
+      "vscode",
+    );
+    assert.equal(descriptor.appDirLinks, undefined);
+  });
+
+  it("accepts link/target pairs", () => {
+    const descriptor = validateDescriptor(
+      mutated("vscode", (copy) => {
+        copy["appDirLinks"] = [{ link: "resources", target: "bin/resources" }];
+      }),
+      "vscode",
+    );
+    assert.deepEqual(descriptor.appDirLinks, [{ link: "resources", target: "bin/resources" }]);
+  });
+
+  it("rejects non-arrays, escapes, unknown keys, duplicates and the staged bin directory", () => {
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("vscode", (copy) => {
+            copy["appDirLinks"] = {};
+          }),
+          "vscode",
+        ),
+      /appDirLinks must be a non-empty array/,
+    );
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("vscode", (copy) => {
+            copy["appDirLinks"] = [{ link: "/resources", target: "bin/resources" }];
+          }),
+          "vscode",
+        ),
+      /must be a repository-relative path/,
+    );
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("vscode", (copy) => {
+            copy["appDirLinks"] = [{ link: "resources", target: "bin/../share" }];
+          }),
+          "vscode",
+        ),
+      /must be a repository-relative path/,
+    );
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("vscode", (copy) => {
+            copy["appDirLinks"] = [{ link: "resources", target: "bin/resources", mode: "0644" }];
+          }),
+          "vscode",
+        ),
+      /is not a known field/,
+    );
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("vscode", (copy) => {
+            copy["appDirLinks"] = [
+              { link: "resources", target: "bin/resources" },
+              { link: "resources", target: "share" },
+            ];
+          }),
+          "vscode",
+        ),
+      /duplicates/,
+    );
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("vscode", (copy) => {
+            copy["appDirLinks"] = [{ link: "bin", target: "share" }];
+          }),
+          "vscode",
+        ),
+      /must not be the staged bin directory/,
+    );
+  });
+});
+
+describe("smoke exceptions", () => {
+  it("omits the field when the block is absent", () => {
+    const descriptor = validateDescriptor(
+      mutated("vscode", (copy) => {
+        delete copy["smoke"];
+      }),
+      "vscode",
+    );
+    assert.equal(descriptor.smoke, undefined);
+  });
+
+  it("accepts a defunct process name", () => {
+    const descriptor = validateDescriptor(
+      mutated("vscode", (copy) => {
+        copy["smoke"] = { ignoreDefunct: ["sh", "Xvfb"] };
+      }),
+      "vscode",
+    );
+    assert.deepEqual(descriptor.smoke, { ignoreDefunct: ["sh", "Xvfb"] });
+  });
+
+  it("rejects empty lists, unsafe names, duplicates and unknown keys", () => {
+    const assertRejects = (block: unknown, expected: RegExp): void => {
+      assert.throws(
+        () =>
+          validateDescriptor(
+            mutated("vscode", (copy) => {
+              copy["smoke"] = block;
+            }),
+            "vscode",
+          ),
+        expected,
+      );
+    };
+    assertRejects({}, /ignoreDefunct must not be empty/);
+    assertRejects({ ignoreDefunct: [] }, /ignoreDefunct must not be empty/);
+    assertRejects({ ignoreDefunct: ["/bin/sh"] }, /is not a process name/);
+    assertRejects({ ignoreDefunct: ["a".repeat(16)] }, /is not a process name/);
+    assertRejects({ ignoreDefunct: ["sh", "sh"] }, /duplicates/);
+    assertRejects({ ignoreDefunct: ["sh"], timeoutSeconds: 30 }, /is not a known field/);
   });
 });
 

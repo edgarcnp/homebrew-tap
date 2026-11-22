@@ -1,0 +1,78 @@
+{
+  "id": "orca",
+  "appName": "Orca",
+  "displayName": "Orca",
+  "comment": "Next-gen IDE for parallel agentic development",
+  "cask": "orca",
+  "watch": {
+    "feedUrl": "https://api.github.com/repos/stablyai/orca/releases",
+    "format": "github-release",
+    "versionPattern": "^v(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
+    "repo": "stablyai/orca"
+  },
+  "assetPrefix": "orca",
+  "tagPrefix": "orca-v",
+  "sourceRepo": "edgarcnp/homebrew-tap",
+  "sourceOwner": "edgarcnp",
+  "sourceDir": "packaging/apps/orca",
+  "buildCommand": "./build.sh",
+  "debloatArgs": "--add-common --prefer-nano ffmpeg-mini gdk-pixbuf2-mini",
+  "architectures": ["amd64"],
+  "binaryTargets": ["orca-ide"],
+  "artifact": {
+    "kind": "github-release",
+    "repository": "https://api.github.com/repos/stablyai/orca",
+    "packageName": "orca-ide",
+    "tagPrefix": "v",
+    "assetNameTemplate": "orca-ide_{version}_{arch}.deb"
+  },
+  "payload": {
+    "kind": "deb-tree",
+    "tree": "opt/Orca"
+  },
+  "appDirLinks": [
+    {
+      "link": "resources",
+      "target": "bin/resources"
+    },
+    {
+      "link": "orca-ide",
+      "target": "bin/orca-ide"
+    }
+  ],
+  "smoke": {
+    "ignoreDefunct": ["sh"]
+  },
+  "hostHelpers": ["bin/resources/bin/orca-wayland-clipboard"],
+  "icon": {
+    "source": "usr/share/icons/hicolor/512x512/apps/orca-ide.png",
+    "size": "512x512"
+  },
+  "desktopTemplate": "templates/orca.desktop",
+  "updater": {
+    "removeFeed": {
+      "paths": ["bin/resources/app-update.yml"],
+      "required": true
+    },
+    "patchEndpoint": {
+      "from": "stablyai/orca",
+      "textReplacement": "invalid-org/x",
+      "binaryReplacement": "invalid-org/x",
+      "targets": [
+        "bin/resources/app.asar",
+        "bin/resources/app.asar.unpacked/out/shared/updater/release-channel.js"
+      ]
+    },
+    "residualScan": {
+      "patterns": [
+        "https://github.com/stablyai/orca/releases.atom",
+        "https://github.com/stablyai/orca/releases/download",
+        "https://github.com/stablyai/orca/releases/latest"
+      ],
+      "severity": "error"
+    }
+  },
+  "quickSharun": {
+    "hooks": ["fix-namespaces.hook"]
+  }
+}
