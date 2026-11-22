@@ -18,6 +18,16 @@ on:
         description: Requested version the API decided to build; empty for manual runs, which use the cask pin
         required: false
         type: string
+      publish:
+        description: Publish a GitHub release and pin the cask; false is a build-only smoke run
+        required: false
+        type: boolean
+        default: true
+      force_build:
+        description: Build the requested cask version even when it is already pinned or published
+        required: false
+        type: boolean
+        default: false
 
 defaults:
   run:
@@ -67,6 +77,9 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.5
+      - uses: ./tap/.github/actions/setup-packaging
+        with:
+          dir: tap
       - name: Load app descriptor
         id: app
         env:
@@ -74,8 +87,10 @@ jobs:
         run: |
           # descriptor-env emits the pipeline's variables: uppercase to
           # $GITHUB_ENV, lowercase to $GITHUB_OUTPUT (which cannot read env).
-          bun tap/packaging/bin/fbr.ts descriptor-env --app "${APP}" >> "${GITHUB_ENV}"
-          bun tap/packaging/bin/fbr.ts descriptor-env --app "${APP}" --format output >> "${GITHUB_OUTPUT}"
+          bun tap/packaging/bin/fbr.ts descriptor-env --app "${APP}" \
+            --failure-out "${GITHUB_WORKSPACE}/report-code.json" >> "${GITHUB_ENV}"
+          bun tap/packaging/bin/fbr.ts descriptor-env --app "${APP}" --format output \
+            --failure-out "${GITHUB_WORKSPACE}/report-code.json" >> "${GITHUB_OUTPUT}"
       - name: Select the builder image
         id: builder
         run: |
@@ -131,6 +146,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REQUESTED_VERSION: ${{ inputs.requested_version }}
+          FORCE_BUILD: ${{ inputs.force_build }}
         run: |
           # A Mozilla release tarball is verified with gpgv against a pinned key.
           if [[ "$(bun "${GITHUB_WORKSPACE}/tap/packaging/bin/fbr.ts" descriptor --app "${APP_ID}" --field artifact.kind)" == "mozilla-release" ]]; then
@@ -281,6 +297,11 @@ jobs:
           if [[ "${release_exists}" = "true" ]]; then
             gate_args+=(--release-exists)
           fi
+          # A smoke run rebuilds the pinned version even though the release
+          # already exists; publishing is disabled by the caller.
+          if [[ "${FORCE_BUILD}" = "true" ]]; then
+            gate_args+=(--force)
+          fi
           bun "${GITHUB_WORKSPACE}/tap/packaging/bin/fbr.ts" gate "${gate_args[@]}" | tee -a "${GITHUB_OUTPUT}"
 
       # A step above classified its own failure in report-code.json; publish it
@@ -325,12 +346,16 @@ jobs:
         with:
           path: tap
           persist-credentials: false
+      - uses: ./tap/.github/actions/setup-packaging
+        with:
+          dir: ${{ github.workspace }}/tap
       - name: Load app descriptor
         env:
           APP: ${{ inputs.app }}
         run: |
           # The tap is the source of truth for the build flags.
-          bun "${GITHUB_WORKSPACE}/tap/packaging/bin/fbr.ts" descriptor-env --app "${APP}" >> "${GITHUB_ENV}"
+          bun "${GITHUB_WORKSPACE}/tap/packaging/bin/fbr.ts" descriptor-env --app "${APP}" \
+            --failure-out "${GITHUB_WORKSPACE}/report-code.json" >> "${GITHUB_ENV}"
       - name: Upgrade the container
         run: |
           # The pinned builder image freezes its pacman database at image
@@ -429,7 +454,10 @@ jobs:
 
   publish:
     needs: [detect, build]
-    if: needs.detect.outputs.skipped == 'false' && needs.detect.outputs.repair_cask == 'false'
+    if: >-
+      inputs.publish && github.ref == 'refs/heads/main' &&
+      needs.detect.outputs.skipped == 'false' &&
+      needs.detect.outputs.repair_cask == 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -446,6 +474,9 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.5
+      - uses: ./tap/.github/actions/setup-packaging
+        with:
+          dir: tap
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: ${{ needs.detect.outputs.asset_prefix }}-*
@@ -562,7 +593,7 @@ jobs:
   pin-cask:
     needs: [detect, publish]
     if: >-
-      always() && github.ref == 'refs/heads/main' &&
+      always() && inputs.publish && github.ref == 'refs/heads/main' &&
       needs.detect.outputs.skipped == 'false' &&
       (needs.detect.outputs.repair_cask == 'true' || needs.publish.result == 'success')
     runs-on: ubuntu-latest
@@ -579,6 +610,7 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.5
+      - uses: ./.github/actions/setup-packaging
       - name: Pin cask to published release
         uses: ./.github/actions/update-cask
         with:
@@ -613,6 +645,7 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.5
+      - uses: ./.github/actions/setup-packaging
       # Failure sites that classified themselves upload report-code.json under a
       # per-job name. continue-on-error covers the normal case: nothing to
       # classify, or a failure the site itself did not recognize.

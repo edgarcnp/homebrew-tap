@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { isNewer, planGate } from "../../lib/pipeline/gate.ts";
-import type { CaskState } from "../../lib/core/types.ts";
+import type { CaskState } from "../../lib/pipeline/cask.ts";
 
 function cask(version: string): CaskState {
   return { version, sha256: { amd64: "a".repeat(64), arm64: "b".repeat(64) } };
@@ -12,12 +12,14 @@ function gate(input: {
   requestedVersion: string;
   artifactVersion: string | null;
   releaseExists: boolean;
+  force?: boolean;
 }): ReturnType<typeof planGate> {
   return planGate({
     cask: cask(input.caskVersion),
     requestedVersion: input.requestedVersion,
     artifactVersion: input.artifactVersion,
     releaseExists: input.releaseExists,
+    force: input.force,
   });
 }
 
@@ -121,6 +123,30 @@ describe("planGate", () => {
     assert.equal(decision.action, "skip");
     assert.equal(decision.reasonCode, "not-ready");
     assert.match(decision.reason, /resolved 1\.0\.0 does not match requested 1\.1\.0/);
+  });
+
+  it("forces a build of the requested version for a smoke run", () => {
+    const decision = gate({
+      caskVersion: "1.1.0",
+      requestedVersion: "1.1.0",
+      artifactVersion: "1.1.0",
+      releaseExists: true,
+      force: true,
+    });
+    assert.equal(decision.action, "build");
+    assert.match(decision.reason, /Forced smoke build/);
+  });
+
+  it("does not force a build when the artifact is not ready", () => {
+    const decision = gate({
+      caskVersion: "1.1.0",
+      requestedVersion: "1.1.0",
+      artifactVersion: null,
+      releaseExists: true,
+      force: true,
+    });
+    assert.equal(decision.action, "skip");
+    assert.equal(decision.reasonCode, "not-ready");
   });
 
   it("treats an empty or non-numeric cask pin as behind", () => {

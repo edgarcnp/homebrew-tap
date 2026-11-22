@@ -5,7 +5,8 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { HttpStatusError } from "../core/errors.ts";
 import { assertInside } from "../core/guards.ts";
-import type { Architecture, Metadata } from "../core/types.ts";
+import type { Architecture } from "../core/architecture.ts";
+import type { Metadata } from "../core/metadata.ts";
 
 export interface ResolveRequest {
   architecture: Architecture;

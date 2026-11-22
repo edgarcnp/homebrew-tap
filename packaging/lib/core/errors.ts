@@ -18,6 +18,16 @@ export class NotReadyError extends Error {
   }
 }
 
+// A descriptor does not match its schema. This is a repository/configuration
+// defect, not an upstream or runner failure: re-running it changes nothing.
+// The CLI records it as DESCRIPTOR_INVALID when a failure fragment is asked for.
+export class DescriptorError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "DescriptorError";
+  }
+}
+
 // A non-retryable HTTP response (4xx other than a rate-limited 403). The
 // status is kept so a resolver can treat 404 as "not published yet" while
 // every other client error stays a failure.

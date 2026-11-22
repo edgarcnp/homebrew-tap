@@ -4,8 +4,10 @@ Build tooling for this tap's AppImage casks. One pipeline serves every app:
 what differs between apps is **data** (`apps/<app>/app.json`), not a forked
 script.
 
-The TypeScript runs directly on Bun — no build step, no runtime dependencies.
-`typescript` and `@types/node` are dev-only (for `tsc --noEmit` and editors).
+The TypeScript runs directly on Bun — no build step. The descriptor schema is
+plain **Zod**, so `bun install` is required and the CLI runs directly as
+`packaging/bin/fbr.ts`. `zod` is the runtime dependency; `typescript` and
+`@types/node` are dev-only.
 
 ## Layout
 
@@ -15,14 +17,16 @@ packaging/
   apps/<app>/build.sh      shim -> lib/shell/build-appimage.sh <app>
   apps/<app>/templates/    desktop entry (+ runtime hook)
   apps/<app>/assets/       pinned signing key material
-  bin/fbr.ts               the CLI
+  bin/fbr.ts               the CLI entry point
   builder/Dockerfile       the pinned Arch builder image
   builder/pins.json        the image refs the build workflow reads
   lib/cli.ts               CLI composition root
-  lib/core/                primitives: paths, types, guards, patterns, version,
+  lib/core/                primitives: paths, guards, patterns, version,
                            architecture, template, http, metadata
-  lib/pipeline/            descriptor-driven steps: descriptor, cask, gate,
-                           release, neutralize, render, report
+  lib/descriptor/          app.json Zod schemas (and inferred types),
+                           validation, loading and the CI projection
+  lib/pipeline/            descriptor-driven steps: cask, gate, release,
+                           neutralize, render, report, retry
   lib/advisories/          one module per artifact kind; custom/ holds
                            provider-specific artifacts (e.g. avakot)
   lib/shell/               the bash pipeline
@@ -30,11 +34,19 @@ packaging/
   scripts/                 repo tooling (tool installer, local style gate)
 ```
 
-`lib/` is a library: no import-time side effects, and the CLI is the only entry
-point. The folders group by role, not file kind — `core/` knows nothing about a
-cask, `pipeline/` implements the descriptor-driven steps, `advisories/` resolves
-upstream sources. Tests live in `tests/`,
-mirroring those groups.
+`lib/` is a library: no import-time side effects, and the CLI is the only
+process entry point. The folders group by role, not file kind — `core/` knows
+nothing about a cask, `descriptor/` owns the app.json schema and its
+invariants, `pipeline/` implements the descriptor-driven steps, `advisories/`
+resolves upstream sources. Tests live in `tests/`, mirroring those groups.
+
+`packaging/lib/descriptor/app.ts` is the single source of truth for the
+descriptor: its Zod schema **is** both the validator and the source of the
+`AppDescriptorInput` type. `validate.ts` runs `appDescriptorSchema.safeParse`
+for the shape (including unknown-field rejection) and then a semantic pass for
+path containment, cross-field identity, artifact/payload compatibility and the
+single-line rules. `fbr descriptor-schema` renders that same schema as JSON
+Schema for editors.
 
 The artifact resolvers share one download path (`advisories/download.ts`) and
 one GitHub API client (`advisories/github-api.ts`), so a resolver only supplies
@@ -86,12 +98,12 @@ record whose `app` does not — `fbr report` refuses such a record first.
 | `id`, `cask`, `assetPrefix`, `tagPrefix` | Identity. The three names above are the same string; the release tag is `<tagPrefix><version>`. |
 | `appName`, `displayName`, `comment` | Release title and desktop entry `Name=`/`Comment=`. |
 | `sourceRepo`, `sourceOwner` | Upstream repo to build from, and the owner of the fallback fork. |
-| `sourceDir`, `buildCommand` | Where CI `cd`s before building. |
+| `sourceDir`, `buildCommand` | Where CI `cd`s before building. `sourceDir` must be `packaging/apps/<app>`: the app id, directory, cask token and asset prefix are one name end to end. |
 | `debloatArgs` | pkgforge debloat flags. |
 | `buildPackages` | Arch packages CI installs into the build container for this app, beyond the shared toolchain — for libraries that must exist at pack time, e.g. one named in `quickSharun.libraries`. |
 | `architectures` | Arches this app ships; the pipeline builds, publishes and checks only these. |
 | `binaryTargets` | Names the cask must expose on `PATH` (checked by `fbr cask --action check`). |
-| `artifact` | Where the **requested version's** payload comes from: `github-release`, `json-asset`, `mozilla-release`, `update-manifest` or `avakot`. The old `advisory` key is accepted for one release as an alias and warns; both keys together are rejected. |
+| `artifact` | Where the **requested version's** payload comes from: `github-release`, `json-asset`, `mozilla-release`, `update-manifest` or `avakot`. `mozilla-release` requires a `tarball-tree` payload; `update-manifest` and `avakot` require `deb-tree`/`deb-files`; a `github-release` asset template must end in `.deb` (deb payload), `.AppImage` (appimage-tree) or `.tar.gz`/`.tar.xz` (tarball-tree). The old `advisory` alias is removed. |
 | `payload` | How the upstream package is staged. `deb-tree`/`deb-files` from a dpkg tree and `appimage-tree` entries go into `AppDir/bin`. `tarball-tree` stages a tarball tree either at the AppDir root (`target: "root"`, the default) so a bundle's own `bin/`, `libexec/`, `lib/` and `share/` keep the relative paths its binaries resolve (`$ORIGIN/../lib`, the CLI's `../libexec/zed-editor`), or into `AppDir/bin` (`target: "bin"`) for a flat application tarball. `root` names the directory inside the tarball; when absent, the tarball must contain exactly one top-level directory. `exclude` skips top-level names/globs while staging (ArtCraft skips its inert `share/` docs, whose text repeats the slug its updater scan rejects). |
 | `icon` | Icon path plus its hicolor directory: a `WxH` size for a raster icon, or `scalable` for an SVG. `base: "payload"` (default) resolves the path inside the extracted payload; `base: "app"` resolves a repo-owned icon under the app directory (GitComet's tarball ships none). The staged icon keeps the source file's extension. |
 | `desktopTemplate` | Desktop entry template, relative to the app dir. |
@@ -125,6 +137,7 @@ order for choosing a declared artifact (tarball → `.deb` → `.rpm` →
 fbr list-apps [--json]                       app ids
 fbr resolve-app --name X                     app name -> app id
 fbr descriptor --app X [--field a.b]         validated descriptor (or one field)
+fbr descriptor-schema                        JSON Schema for app.json (editor validation)
 fbr descriptor-env --app X [--format env|output]
                                              KEY=VALUE lines for $GITHUB_ENV/$GITHUB_OUTPUT
 fbr resolve --app X --arch A --requested-version V
@@ -372,6 +385,7 @@ both — including what `quick-sharun` downloads for itself at build time. Only
 ## Local run
 
 ```sh
+bun install --frozen-lockfile --ignore-scripts
 TARGET_ARCH=amd64 PACKAGE_VERSION=1.137.0 packaging/apps/vscode/build.sh
 ```
 
@@ -379,9 +393,10 @@ TARGET_ARCH=amd64 PACKAGE_VERSION=1.137.0 packaging/apps/vscode/build.sh
 returns that version's artifact, and the build fails if the resolved version
 differs (CI always sets it from the dispatch or the cask pin). Requires an
 Arch Linux system — the builder image (`packaging/builder/Dockerfile`) is the
-supported one — plus `bun` ≥ 1.4.4, `jq`, the app's own tooling (`dpkg-deb`,
+supported one — plus `bun` ≥ 1.4.5, `jq`, the app's own tooling (`dpkg-deb`,
 `gpg`/`gpgv`), `quick-sharun` in `PATH` and `APPIMAGETOOL` pointing at the
-uruntime `appimagetool`. Output lands in `<tap>/dist/`.
+uruntime `appimagetool`. The build script runs `packaging/bin/fbr.ts`; Zod's
+`node_modules` must be installed first. Output lands in `<tap>/dist/`.
 
 ## Dependency pinning
 
@@ -390,7 +405,7 @@ grouped rules in `renovate.json` for routine bumps:
 
 | Dependency | Declared in | Manager |
 | --- | --- | --- |
-| `typescript`, `@types/node` | `package.json` | npm (exact pins, no `^`) |
+| `zod`, `typescript`, `@types/node` | `package.json` | npm (exact pins, no `^`) |
 | GitHub Actions | workflow `uses:` | github-actions (SHA re-pinned) |
 | `Homebrew/actions` | workflow `uses:` (SHA plus CalVer comment) | regex custom manager (the built-in manager truncates the four-part CalVer tag) |
 | Container images | workflow `container:`, including the nested matrix image, and the builder Dockerfile's `FROM` | docker (regex for the matrix) |
@@ -423,21 +438,48 @@ No tool carries a local SHA-256 for Renovate to trip over: `actionlint` and
 pkgforge `appimagetool` are downloaded from a URL addressed by the version
 Renovate bumps, so a version PR needs no hand-edited pin — both trust whatever
 GitHub serves over HTTPS (pkgforge publishes only b3sum sidecars, served from
-the same release as the binary, so they would add no trust). `typescript` stays
-on 6.x and `@types/node` on the Node major line Bun implements, both via
-`renovate.json` rules.
+the same release as the binary, so they would add no trust). `typescript`
+stays on the stable 6.x line, and `@types/node` on the Node major line Bun
+implements; both are `renovate.json` rules.
+
+## Production gate
+
+Unit tests do not exercise `quick-sharun`, `appimagetool` or the smoke test.
+The **Pipeline smoke (build only)** workflow runs automatically on every push
+to `main` that touches `packaging/**`, the root package files, or the build
+workflow/action. A newer push cancels an older smoke run. It can also be
+dispatched manually. It builds one app per artifact/payload family with
+`publish: false` and `force_build: true`:
+
+- `vscode` — json-asset + tarball-tree
+- `orca` — github-release + deb-tree
+- `wfhelper` — github-release + appimage-tree
+- `firefox` — mozilla-release + tarball-tree
+- `little-genius` — avakot + deb-files
+- `opencode-desktop` — update-manifest + deb-tree
+
+It creates no release and changes no cask. For a focused app check, dispatch
+**Build AppImages** with that app, `publish: false`, `force_build: true`
+(e.g. `orca`). The test workflow also runs on the main push (including
+`brew audit` and the production-dependency CLI job); after both pass, run one
+real dispatch so publish and pin-cask are exercised.
 
 ## Tests and gates
 
 `bun test` runs the unit suite (Bun's runner over `node:test`; no test
-dependencies): dpkg ordering, HTTP timeout/cap/atomic write, guards and metadata
-validation, descriptor validation, cask read/update/consistency, the gate table,
+dependencies). The PR workflow also has a `runtime-dependencies` job that
+installs with `--production` and runs `fbr cask --action check`, so a missing
+runtime module fails in minutes instead of inside a build. The suite covers
+dpkg ordering, HTTP timeout/cap/atomic write,
+guards and metadata validation, descriptor validation, cask read/update/consistency, the gate table,
 updater neutralization, desktop rendering, run records, retry plans, the
 artifact parsers, the JSON-asset and Mozilla-signature paths, and the detached
 signature fixture. The signature tests need `gpg`/`gpgv` (the `gnupg` package).
 
 `bun run typecheck` runs `tsc --noEmit` (strict). `bun run style` runs
-`brew style edgarcnp/tap` on its own — RuboCop plus shellcheck, shfmt and
-actionlint — the fast subset to run before every commit and push.
+`packaging/scripts/style.sh` on its own — `brew style` over the authored Ruby,
+shell and workflow files, explicitly excluding `node_modules` — the fast subset
+to run before every commit and push.
 `scripts/check-style.sh` runs the full local gate — shellcheck, typecheck,
-tests, cask check, brew style/audit, actionlint — the same set CI runs per PR.
+tests, cask check, brew style/audit, actionlint — the same set CI runs per PR
+and main push.

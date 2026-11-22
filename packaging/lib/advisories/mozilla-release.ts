@@ -10,8 +10,8 @@ import * as path from "node:path";
 import {
   assertHttpsUrl,
   assertMatches,
+  assertPackageName,
   assertPositiveSize,
-  assertSafeName,
   assertSha256Hex,
   fail,
 } from "../core/guards.ts";
@@ -19,7 +19,9 @@ import { MAX_PAYLOAD_BYTES, sha256Hex, writeFileAtomic } from "../core/http.ts";
 import { makeMetadata, writeMetadata } from "../core/metadata.ts";
 import { REPO_ROOT } from "../core/paths.ts";
 import { substitutePlaceholders } from "../core/template.ts";
-import type { Architecture, Metadata, MozillaReleaseArtifact } from "../core/types.ts";
+import type { Architecture } from "../core/architecture.ts";
+import type { Metadata } from "../core/metadata.ts";
+import type { MozillaReleaseArtifact } from "../descriptor/artifact.ts";
 import { fetchVerified } from "./download.ts";
 import {
   isNotFound,
@@ -139,7 +141,7 @@ export async function resolveWithMozillaRelease(
   artifact: MozillaReleaseArtifact,
   request: ResolveRequest,
 ): Promise<ResolveOutcome> {
-  const packageName = assertSafeName(artifact.packageName, "package name");
+  const packageName = assertPackageName(artifact.packageName, "package name");
   const fingerprint = assertMatches(artifact.fingerprint, /^[0-9A-Fa-f]{40}$/, "key fingerprint");
   const keyPath = resolveKeyPath(artifact.keyPath);
   // Fail fast on a key that does not match the pin, before any download.
@@ -191,7 +193,12 @@ export async function resolveWithMozillaRelease(
     outputDir,
     `${packageName}_${request.requestedVersion}_${request.architecture}${extension}`,
   );
-  const signaturePath = path.join(outputDir, "release.sig");
+  // Per-arch: two resolves into one output directory (a dual-arch build) must
+  // not overwrite each other's signature before verification.
+  const signaturePath = path.join(
+    outputDir,
+    `${packageName}_${request.requestedVersion}_${request.architecture}.sig`,
+  );
   writeFileAtomic(signaturePath, signature);
   writeFileAtomic(payloadPath, bytes);
   try {

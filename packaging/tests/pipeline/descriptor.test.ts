@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import { describe, it } from "node:test";
-import { descriptorLines, listApps, loadDescriptor, resolveApp, validateDescriptor } from "../../lib/pipeline/descriptor.ts";
+import { descriptorLines, listApps, loadDescriptor, resolveApp, validateDescriptor } from "../../lib/descriptor/index.ts";
 import { descriptorPath } from "../../lib/core/paths.ts";
 import { APP_ID } from "../../lib/core/patterns.ts";
+import { descriptorJsonSchema } from "../../lib/descriptor/schema.ts";
 
 const APPS = listApps();
 
@@ -49,8 +50,19 @@ describe("descriptor loading", () => {
       const descriptor = loadDescriptor(app);
       assert.equal(descriptor.id, app);
       assert.ok(descriptor.binaryTargets.length > 0);
-      assert.ok(descriptor.sourceDir.endsWith(`/apps/${app}`));
+      assert.equal(descriptor.sourceDir, `packaging/apps/${app}`);
     }
+  });
+
+  it("renders the descriptor type as JSON Schema", () => {
+    // The schema is generated from AppDescriptorInput, so it cannot drift from
+    // the validator the CLI runs. Editors use it for app.json completion.
+    const schema = descriptorJsonSchema() as {
+      properties?: Record<string, unknown>;
+    };
+    assert.ok(schema.properties?.["artifact"], "schema must describe artifact");
+    assert.ok(schema.properties["payload"], "schema must describe payload");
+    assert.ok(schema.properties["id"], "schema must describe id");
   });
 
   it("rejects unknown apps and missing descriptors", () => {
@@ -81,7 +93,7 @@ describe("descriptor loading", () => {
           }),
           "vscode_2",
         ),
-      /\.id is not a valid app id/,
+      /\.id: must be a lowercase app id/,
     );
     assert.throws(
       () =>
@@ -92,7 +104,7 @@ describe("descriptor loading", () => {
           }),
           "vscode",
         ),
-      /cask is not a valid app id/,
+      /cask: must be a lowercase app id/,
     );
   });
 });
@@ -137,7 +149,7 @@ describe("descriptor contents (regression against the previous per-app scripts)"
       assert.equal(descriptor.artifact.assetTemplate, "opencode-desktop-linux-{arch}.deb");
       assert.deepEqual(descriptor.artifact.downloadHosts, ["opencode.ai"]);
     }
-    assert.equal(descriptor.payload.tree, "opt/OpenCode");
+    assert.equal(descriptor.payload.kind === "deb-tree" ? descriptor.payload.tree : "", "opt/OpenCode");
     assert.equal(descriptor.updater.removeFeed?.required, true);
     assert.deepEqual(descriptor.updater.residualScan?.patterns, ["https://opencode.ai/update/api/"]);
     // Warning, not error: the endpoint is legitimately embedded in app.asar,
@@ -349,7 +361,7 @@ describe("descriptor contents (regression against the previous per-app scripts)"
           }),
           "artcraft-launcher",
         ),
-      /payload\.exclude entry must be a top-level name or glob/,
+      /payload\.exclude\[0\] must be a top-level name or glob/,
     );
     assert.throws(
       () =>
@@ -359,7 +371,7 @@ describe("descriptor contents (regression against the previous per-app scripts)"
           }),
           "vscode",
         ),
-      /payload\.target must be "root" or "bin"/,
+      /payload\.target: Invalid option/,
     );
     assert.throws(
       () =>
@@ -559,7 +571,7 @@ describe("host helpers", () => {
           }),
           "vscode",
         ),
-      /hostHelpers must be an array/,
+      /hostHelpers: Invalid input: expected array/,
     );
     assert.throws(
       () =>
@@ -569,7 +581,7 @@ describe("host helpers", () => {
           }),
           "vscode",
         ),
-      /must be a non-empty string/,
+      /hostHelpers\.0: Too small/,
     );
     assert.throws(
       () =>
@@ -648,7 +660,7 @@ describe("extra files", () => {
           }),
           "vscode",
         ),
-      /extraFiles must be a non-empty array/,
+      /extraFiles: Invalid input: expected array/,
     );
     assert.throws(
       () =>
@@ -728,7 +740,7 @@ describe("AppDir links", () => {
           }),
           "vscode",
         ),
-      /appDirLinks must be a non-empty array/,
+      /appDirLinks: Invalid input: expected array/,
     );
     assert.throws(
       () =>
@@ -916,7 +928,7 @@ describe("descriptor validation", () => {
   it("rejects missing, empty and unsafe fields", () => {
     assert.throws(
       () => validateDescriptor(mutated("vscode", (copy) => { delete copy["appName"]; }), "vscode"),
-      /appName must be a non-empty string/,
+      /appName: Invalid input: expected string/,
     );
     assert.throws(
       () => validateDescriptor(mutated("vscode", (copy) => { copy["sourceDir"] = "/etc"; }), "vscode"),
@@ -928,11 +940,11 @@ describe("descriptor validation", () => {
     );
     assert.throws(
       () => validateDescriptor(mutated("vscode", (copy) => { copy["binaryTargets"] = []; }), "vscode"),
-      /binaryTargets must not be empty/,
+      /binaryTargets: Too small/,
     );
     assert.throws(
       () => validateDescriptor(mutated("vscode", (copy) => { copy["tagPrefix"] = "bad prefix"; }), "vscode"),
-      /not a safe tag prefix/,
+      /tagPrefix: must be a safe reference/,
     );
   });
 
@@ -1049,16 +1061,13 @@ describe("descriptor validation", () => {
           }),
           "little-genius",
         ),
-      /targets must not be empty/,
+      /targets: Too small/,
     );
   });
 
-  it("accepts the deprecated advisory alias for one release and rejects both keys", () => {
-    const aliased = mutated("vscode", (copy) => {
-      copy["advisory"] = copy["artifact"];
-      delete copy["artifact"];
-    });
-    assert.equal(validateDescriptor(aliased, "vscode").artifact.kind, "json-asset");
+  it("rejects the removed advisory alias", () => {
+    // The alias was documented as a one-release bridge; every descriptor now
+    // uses `artifact`, so an unknown-key failure is the correct outcome.
     assert.throws(
       () =>
         validateDescriptor(
@@ -1067,7 +1076,7 @@ describe("descriptor validation", () => {
           }),
           "vscode",
         ),
-      /deprecated "advisory" alias cannot be combined/,
+      /advisory is not a known field/,
     );
   });
 
@@ -1206,7 +1215,7 @@ describe("descriptor validation", () => {
           }),
           "vscode",
         ),
-      /patterns must not be empty/,
+      /patterns: Too small/,
     );
     assert.throws(
       () =>
@@ -1216,7 +1225,7 @@ describe("descriptor validation", () => {
           }),
           "vscode",
         ),
-      /severity must be/,
+      /severity: Invalid option/,
     );
     assert.throws(
       () =>
@@ -1226,7 +1235,7 @@ describe("descriptor validation", () => {
           }),
           "opencode-desktop",
         ),
-      /downloadHosts must not be empty/,
+      /downloadHosts: Too small/,
     );
     assert.throws(
       () =>
@@ -1234,7 +1243,7 @@ describe("descriptor validation", () => {
           mutated("vscode", (copy) => { nested(copy, "icon")["size"] = "big"; }),
           "vscode",
         ),
-      /size must look like/,
+      /icon\.size: must be a WxH size or scalable/,
     );
   });
 
@@ -1255,7 +1264,7 @@ describe("descriptor validation", () => {
           mutated("vscode", (copy) => { nested(copy, "icon")["base"] = "remote"; }),
           "vscode",
         ),
-      /icon\.base must be "payload" or "app"/,
+      /icon\.base: Invalid option/,
     );
   });
 
@@ -1264,15 +1273,15 @@ describe("descriptor validation", () => {
     assert.deepEqual(validateDescriptor(without, "vscode").architectures, ["amd64", "arm64"]);
     assert.throws(
       () => validateDescriptor(mutated("vscode", (copy) => { copy["architectures"] = []; }), "vscode"),
-      /non-empty array/,
+      /architectures: Too small/,
     );
     assert.throws(
       () => validateDescriptor(mutated("vscode", (copy) => { copy["architectures"] = ["riscv"]; }), "vscode"),
-      /must be one of/,
+      /architectures.*Invalid option/,
     );
     assert.throws(
       () => validateDescriptor(mutated("vscode", (copy) => { copy["architectures"] = ["amd64", "amd64"]; }), "vscode"),
-      /duplicates/,
+      /architectures\[1\] duplicates/,
     );
   });
 
@@ -1283,7 +1292,7 @@ describe("descriptor validation", () => {
           mutated("wfhelper", (copy) => { delete nested(copy, "artifact")["tagPrefix"]; }),
           "wfhelper",
         ),
-      /artifact\.tagPrefix must be a non-empty string/,
+      /artifact\.tagPrefix: Invalid input: expected string/,
     );
     assert.throws(
       () =>
@@ -1310,7 +1319,7 @@ describe("descriptor validation", () => {
           mutated("opencode-desktop", (copy) => { delete nested(copy, "artifact")["assetTemplate"]; }),
           "opencode-desktop",
         ),
-      /assetTemplate must be a non-empty string/,
+      /artifact\.assetTemplate: Invalid input: expected string/,
     );
     assert.throws(
       () =>
@@ -1326,7 +1335,7 @@ describe("descriptor validation", () => {
           mutated("opencode-desktop", (copy) => { nested(copy, "artifact")["downloadHosts"] = []; }),
           "opencode-desktop",
         ),
-      /downloadHosts must not be empty/,
+      /downloadHosts: Too small/,
     );
     assert.throws(
       () =>
@@ -1334,7 +1343,7 @@ describe("descriptor validation", () => {
           mutated("opencode-desktop", (copy) => { nested(copy, "artifact")["downloadHosts"] = "opencode.ai"; }),
           "opencode-desktop",
         ),
-      /downloadHosts must be an array/,
+      /downloadHosts: Invalid input: expected array/,
     );
   });
 
@@ -1345,7 +1354,7 @@ describe("descriptor validation", () => {
           mutated("vscode", (copy) => { delete nested(copy, "watch")["feedUrl"]; }),
           "vscode",
         ),
-      /watch\.feedUrl must be a non-empty string/,
+      /watch\.feedUrl: Invalid input: expected string/,
     );
     // The format is declared, never defaulted: an omission must fail here rather
     // than silently watching an atom feed (the API defaults it only for
@@ -1356,7 +1365,7 @@ describe("descriptor validation", () => {
           mutated("vscode", (copy) => { delete nested(copy, "watch")["format"]; }),
           "vscode",
         ),
-      /watch\.format must be a non-empty string/,
+      /watch\.format: Invalid option/,
     );
     assert.throws(
       () =>
@@ -1380,7 +1389,7 @@ describe("descriptor validation", () => {
           mutated("gitcomet", (copy) => { nested(copy, "watch")["skipPattern"] = ""; }),
           "gitcomet",
         ),
-      /watch\.skipPattern must be a non-empty string/,
+      /watch\.skipPattern: Too small/,
     );
     assert.throws(
       () =>
@@ -1388,7 +1397,7 @@ describe("descriptor validation", () => {
           mutated("vscode", (copy) => { copy["watch"] = "https://example.com/releases.atom"; }),
           "vscode",
         ),
-      /watch must be an object/,
+      /watch: Invalid input: expected object/,
     );
 
     const withoutWatch = mutated("vscode", (copy) => { delete copy["watch"]; });
@@ -1421,7 +1430,7 @@ describe("descriptor validation", () => {
           mutated("little-genius", (copy) => { nested(copy, "artifact")["downloadHosts"] = []; }),
           "little-genius",
         ),
-      /downloadHosts must not be empty/,
+      /downloadHosts: Too small/,
     );
     // The fixed artifact name belongs to the avakot kind: as update-manifest
     // it fails the {arch} requirement, keeping the generic contract strict.
@@ -1501,7 +1510,7 @@ describe("descriptor validation", () => {
           }),
           "vscode",
         ),
-      /format must be "atom", "json" or "github-release"/,
+      /watch\.format: Invalid option/,
     );
     assert.throws(
       () =>

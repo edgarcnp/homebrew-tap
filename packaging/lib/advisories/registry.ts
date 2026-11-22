@@ -2,7 +2,7 @@
 // without handling it here is a type error rather than a runtime surprise.
 
 import { fail } from "../core/guards.ts";
-import type { Artifact, ArtifactKind } from "../core/types.ts";
+import type { Artifact, ArtifactKind } from "../descriptor/artifact.ts";
 import { resolveWithAvakot } from "./custom/avakot.ts";
 import { resolveWithGithubRelease } from "./github-release.ts";
 import { resolveWithJsonAsset } from "./json-asset.ts";

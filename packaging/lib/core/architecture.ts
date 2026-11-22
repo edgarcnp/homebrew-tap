@@ -2,7 +2,14 @@
 // cask, uname), so no two layers can disagree about a build's architecture.
 
 import { fail } from "./guards.ts";
-import type { Architecture } from "./types.ts";
+
+export type Architecture = "amd64" | "arm64";
+
+export const ARCHITECTURES: readonly Architecture[] = ["amd64", "arm64"];
+
+export function isArchitecture(value: unknown): value is Architecture {
+  return value === "amd64" || value === "arm64";
+}
 
 // AppImage arch suffix: <app>-<version>-x86_64.AppImage.
 export const APPIMAGE_ARCH: Record<Architecture, string> = {

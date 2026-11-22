@@ -1,7 +1,20 @@
-# brew tap-new uses this file to generate a PR test workflow for the new tap
+# brew tap-new generates a PR test workflow; this tap also runs it on direct
+# pushes to main, because changes land without a pull request.
 name: brew test-bot
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - "Casks/**"
+      - "Formula/**"
+      - ".github/**"
+      - "packaging/**"
+      - "package.json"
+      - "bun.lock"
+      - "tsconfig.json"
+      - "renovate.json"
   pull_request:
     paths:
       - "Casks/**"
@@ -59,9 +72,12 @@ jobs:
           restore-keys: ${{ matrix.os }}-rubygems-
 
       - name: Save Homebrew Bundler RubyGems
-        # Same-repo PR runs may save; fork PRs only restore, so a fork cannot
-        # write attacker Ruby into a cache entry main would later restore.
-        if: github.event.pull_request.head.repo.full_name == github.repository
+        # Same-repo PR runs and main pushes may save; fork PRs only restore, so
+        # a fork cannot write attacker Ruby into a cache entry main would later
+        # restore.
+        if: >-
+          github.event_name == 'push' ||
+          github.event.pull_request.head.repo.full_name == github.repository
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ steps.set-up-homebrew.outputs.gems-path }}
@@ -140,8 +156,10 @@ jobs:
           TAP_REPO: ${{ github.repository }}
         run: |
           # The tap is already checked out by setup-homebrew. No --fix:
-          # sandbox corrections are discarded and would mask regressions.
-          brew style edgarcnp/tap
+          # sandbox corrections are discarded and would mask regressions. The
+          # script passes authored files explicitly, so dependencies under
+          # node_modules are not linted.
+          packaging/scripts/style.sh
           tap_dir="$(brew --repository "$TAP_REPO")"
           for cask in "$tap_dir"/Casks/*.rb; do
             brew audit --cask "edgarcnp/tap/$(basename "$cask" .rb)"
@@ -152,3 +170,21 @@ jobs:
       - run: brew test-bot --only-setup
 
       - run: brew test-bot --only-tap-syntax
+
+  # The build jobs install with --production. This job proves that dependency
+  # set is complete before a 60-minute build fails on a missing runtime module.
+  runtime-dependencies:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.5
+      - uses: ./.github/actions/setup-packaging
+      - name: Run the CLI with production dependencies only
+        run: bun packaging/bin/fbr.ts cask --action check

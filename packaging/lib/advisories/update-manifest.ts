@@ -9,6 +9,7 @@ import { NotReadyError } from "../core/errors.ts";
 import {
   assertHostAllowed,
   assertHttpsUrl,
+  assertPackageName,
   assertPositiveSize,
   assertSafeName,
   assertSha256Hex,
@@ -19,7 +20,8 @@ import { MAX_PAYLOAD_BYTES } from "../core/http.ts";
 import { makeMetadata, writeMetadata } from "../core/metadata.ts";
 import { DEB_VERSION } from "../core/patterns.ts";
 import { substitutePlaceholders } from "../core/template.ts";
-import type { Metadata, UpdateManifestArtifact } from "../core/types.ts";
+import type { Metadata } from "../core/metadata.ts";
+import type { UpdateManifestArtifact } from "../descriptor/artifact.ts";
 import { downloadVerified, fetchVerified } from "./download.ts";
 import {
   isNotFound,
@@ -132,7 +134,7 @@ export async function resolveWithUpdateManifest(
   const repository = validateManifestEndpoint(artifact.repository);
   if (artifact.downloadHosts.length === 0) fail("downloadHosts must not be empty");
   for (const host of artifact.downloadHosts) assertSafeName(host, "download host");
-  const packageName = assertSafeName(artifact.packageName, "package name");
+  const packageName = assertPackageName(artifact.packageName, "package name");
   if (!artifact.assetTemplate.includes("{arch}")) {
     fail("update-manifest artifact requires an assetTemplate containing {arch}");
   }

@@ -5,7 +5,8 @@ import * as path from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import { finalizeApp, isElf, neutralizeUpdater } from "../../lib/pipeline/neutralize.ts";
 import { APPS_DIR } from "../../lib/core/paths.ts";
-import type { AppDescriptor, UpdaterConfig } from "../../lib/core/types.ts";
+import type { AppDescriptor } from "../../lib/descriptor/app.ts";
+import type { UpdaterConfig } from "../../lib/descriptor/updater.ts";
 
 const ENDPOINT = "update.code.visualstudio.com";
 const BINARY_REPLACEMENT = "update.invalidupdate.invalid";

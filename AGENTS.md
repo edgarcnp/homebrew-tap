@@ -23,11 +23,14 @@ is **data** (`packaging/apps/<app>/app.json`), never a forked script.
   `assetPrefix`, and `Casks/<app>.rb`.
 - Every cask is amd64-only: one `x86_64` AppImage each, and
   `depends_on arch: :x86_64` refuses the install on arm64 up front.
-- TypeScript runs directly on Bun — no build step, no runtime dependencies.
-  `typescript` and `@types/node` are dev-only; adding a dependency is a
-  decision, not a convenience.
+- TypeScript runs directly on Bun — no build step. The descriptor schema is
+  plain **Zod**, so `bun install` is required and `packaging/bin/fbr.ts` is the
+  only process entry point. `zod` is the runtime dependency; `typescript` and
+  `@types/node` are dev-only. Adding another dependency is a decision, not a
+  convenience.
 - `packaging/lib/` is a library with no import-time side effects;
-  `packaging/bin/fbr.ts` is the only entry point and `lib/cli.ts` composes it.
+  `lib/cli.ts` composes the CLI. `lib/descriptor/` owns the `app.json` schema,
+  its validation and the generated JSON Schema.
 - Cask versions and checksums are produced by this pipeline, never by hand.
 
 ## Layout
@@ -36,20 +39,21 @@ is **data** (`packaging/apps/<app>/app.json`), never a forked script.
 | --- | --- |
 | `Casks/<app>.rb` | the cask: version and `sha256` pinned |
 | `packaging/apps/<app>/` | `app.json` descriptor, `build.sh` shim, templates, key material |
-| `packaging/bin/fbr.ts` | the CLI; `packaging/lib/{core,pipeline,advisories,shell}/` its library |
+| `packaging/bin/fbr.ts` | the CLI entry point; `packaging/lib/{core,descriptor,pipeline,advisories,shell}/` its library |
 | `packaging/builder/` | the pinned builder image: `Dockerfile`, `pins.json` (the ref the build job reads) |
 | `packaging/lib/shell/` | the bash pipeline the build runs |
 | `packaging/tests/` | unit suite, mirroring `lib/` |
-| `packaging/scripts/` | repo tooling: `check-style.sh`, `install-anylinux-tools.sh`, `pin-builder-image.sh` |
+| `packaging/scripts/` | repo tooling: `check-style.sh`, `style.sh`, `install-anylinux-tools.sh`, `pin-builder-image.sh` |
 | `.github/workflows/`, `.github/actions/` | build, publish, dispatch, tests, cask pinning |
 | `dist/` | build output, gitignored |
 
 ## Prerequisites
 
-- `bun` 1.4.4 (the version CI pins), `shellcheck`, `gnupg` (`gpg`/`gpgv` for
+- `bun` 1.4.5 (the version CI pins), `shellcheck`, `gnupg` (`gpg`/`gpgv` for
   the Mozilla detached-signature tests), and a Homebrew install for `brew
   style` and `brew audit`.
-- JS dev dependencies: `bun install --frozen-lockfile --ignore-scripts`.
+- JS dependencies: `bun install --frozen-lockfile --ignore-scripts` (Zod is a
+  runtime dependency; the CLI needs `node_modules`).
 - A *local AppImage build* additionally needs an Arch Linux system or the
   pkgforge container, plus `jq`, `dpkg-deb`, `gpg`/`gpgv`, `quick-sharun` on
   `PATH` and `APPIMAGETOOL` pointing at the uruntime `appimagetool`. See "Local
@@ -57,8 +61,8 @@ is **data** (`packaging/apps/<app>/app.json`), never a forked script.
 
 ## Checks
 
-Run these before committing. CI runs the same set on every PR
-(`.github/workflows/tests.yml`), so skipping them locally only moves the
+Run these before committing. CI runs the same set on every PR and every main
+push (`.github/workflows/tests.yml`), so skipping them locally only moves the
 failure to CI.
 
 ```sh
@@ -66,7 +70,7 @@ bun install --frozen-lockfile --ignore-scripts  # once
 bun run typecheck                               # tsc --noEmit, strict
 bun run test                                    # unit suite
 bun packaging/bin/fbr.ts cask --action check    # each cask matches its descriptor
-bun run style                                   # brew style: rubocop, shellcheck, shfmt, actionlint
+bun run style                                   # brew style over authored files (excludes node_modules)
 packaging/scripts/check-style.sh                # everything above plus brew audit per cask
 ```
 
@@ -92,8 +96,8 @@ memory or habit.
 
 ### TypeScript and tests
 
-- Strict `tsc --noEmit`; the CLI rejects unknown or duplicate flags with exit 2
-  rather than ignoring them.
+- Strict `tsc --noEmit` (TypeScript 6 + Zod); the CLI rejects unknown or
+  duplicate flags with exit 2 rather than ignoring them.
 - Tests use Bun's runner (`bun test`) over `node:test`, live in `packaging/tests/`
   beside the group they cover, and must stay deterministic: the HTTP suites
   bind a local `127.0.0.1` server and every other URL in the tests is a string
@@ -150,7 +154,8 @@ memory or habit.
 
 | Workflow | What it does |
 | --- | --- |
-| `tests.yml` (`brew test-bot`) | PR gate: typecheck, tests, cask check, shellcheck, actionlint, `brew style`/`audit`, tap syntax |
+| `tests.yml` (`brew test-bot`) | push/PR gate: typecheck, tests, cask check, shellcheck, actionlint, `brew style`/`audit`, tap syntax, plus a production-dependency CLI job |
+| `pipeline-smoke.yml` | build-only gate on packaging pushes to `main` (and manual): one app per artifact/payload family, no release or cask changes |
 | `build.yml` | build one app or all of them; the app list comes from the descriptors |
 | `build-appimage.yml` | the reusable per-app build (container, toolchain, pack, smoke test) |
 | `retry.yml` | on completion of a build run, re-runs it when the run record says a failure is retryable; opens an issue otherwise |

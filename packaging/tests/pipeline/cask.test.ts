@@ -4,7 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { describe, it } from "node:test";
 import { checkCask, readCask, readCaskFile, updateCask, writeCask } from "../../lib/pipeline/cask.ts";
-import { listApps, loadDescriptor } from "../../lib/pipeline/descriptor.ts";
+import { listApps, loadDescriptor } from "../../lib/descriptor/index.ts";
 import { caskPath } from "../../lib/core/paths.ts";
 
 const HASH_A = "a".repeat(64);
@@ -111,6 +111,7 @@ describe("updateCask", () => {
       fs.writeFileSync(file, source);
       writeCask(file, { version: "9.9.9", sha256: { amd64: HASH_A, arm64: HASH_B } });
       assert.match(fs.readFileSync(file, "utf8"), /version "9\.9\.9"/);
+      assert.equal(fs.statSync(file).mode & 0o777, 0o644, "a cask must stay repository-readable");
       assert.deepEqual(fs.readdirSync(dir), ["demo.rb"]);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });

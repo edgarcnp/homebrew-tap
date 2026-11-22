@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
-// Entry point for the packaging CLI. Bun runs the TypeScript directly, so the
-// repository needs no build step and no runtime dependencies.
+// Entry point for the packaging CLI. Bun runs the TypeScript directly, and the
+// descriptor schema is plain Zod, so no build or loader step is involved.
 
 import { errorExitCode, runCli } from "../lib/cli.ts";
 

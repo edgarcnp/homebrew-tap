@@ -4,11 +4,12 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { describe, it } from "node:test";
-import { listApps } from "../lib/pipeline/descriptor.ts";
+import { listApps } from "../lib/descriptor/index.ts";
 import { REPO_ROOT } from "../lib/core/paths.ts";
 import { errorExitCode } from "../lib/cli.ts";
 import {
   ChecksumMismatchError,
+  DescriptorError,
   GuardViolationError,
   NotReadyError,
   UpdaterResidualError,
@@ -17,7 +18,8 @@ import {
 } from "../lib/core/errors.ts";
 
 // The workflows call fbr with exact flag shapes; these tests run the real
-// entry point so a flag contract change cannot ship without CI noticing.
+// entry point so a flag contract change cannot ship without CI noticing. The
+// wrapper registers typia's transform before the CLI's module graph loads.
 const FBR = path.join(REPO_ROOT, "packaging", "bin", "fbr.ts");
 
 function fbr(args: string[]): { status: number | null; stdout: string; stderr: string } {
@@ -47,6 +49,15 @@ describe("fbr CLI contract", () => {
     const json = fbr(["list-apps", "--json"]);
     assert.equal(json.status, 0);
     assert.deepEqual(JSON.parse(json.stdout), expected);
+  });
+
+  it("prints the descriptor JSON Schema for editors", () => {
+    const result = fbr(["descriptor-schema"]);
+    assert.equal(result.status, 0, result.stderr);
+    const schema = JSON.parse(result.stdout) as {
+      properties?: Record<string, unknown>;
+    };
+    assert.ok(schema.properties?.["artifact"]);
   });
 
   it("resolves an app name the way the build plan calls it", () => {
@@ -85,6 +96,12 @@ describe("fbr CLI contract", () => {
     assert.match(matching.stdout, /^skipped=true$/m);
     assert.match(matching.stdout, /^not_ready=false$/m);
     assert.match(matching.stdout, /already at requested/);
+
+    // A smoke run forces the same pinned version to build without publishing.
+    const forced = fbr([...base, "--force"]);
+    assert.equal(forced.status, 0, forced.stderr);
+    assert.match(forced.stdout, /^action=build$/m);
+    assert.match(forced.stdout, /Forced smoke build/);
 
     // The cask is behind, the release for the requested version exists: the
     // expensive build is unnecessary, only the pin is repaired.
@@ -207,6 +224,48 @@ describe("fbr CLI contract", () => {
     assert.match(missing.stderr, /--requested-version/);
   });
 
+  it("classifies an invalid descriptor as a config failure", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "fbr-descriptor-"));
+    try {
+      const fragment = path.join(dir, "report-code.json");
+      const result = fbr([
+        "descriptor",
+        "--app",
+        "nope",
+        "--failure-out",
+        fragment,
+      ]);
+      assert.equal(result.status, 1, result.stderr);
+      const parsed = JSON.parse(fs.readFileSync(fragment, "utf8")) as Record<string, unknown>;
+      assert.equal(parsed["code"], "DESCRIPTOR_INVALID");
+      assert.match(String(parsed["message"]), /Unknown app/);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("classifies a missing required update feed as a guard violation", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "fbr-feed-"));
+    try {
+      const fragment = path.join(dir, "report-code.json");
+      const result = fbr([
+        "neutralize",
+        "--app",
+        "orca",
+        "--appdir",
+        dir,
+        "--failure-out",
+        fragment,
+      ]);
+      assert.equal(result.status, 4, result.stderr);
+      const parsed = JSON.parse(fs.readFileSync(fragment, "utf8")) as Record<string, unknown>;
+      assert.equal(parsed["code"], "GUARD_VIOLATION");
+      assert.match(String(parsed["message"]), /expected upstream update feed is missing/);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("classifies a permanent failure and writes the fragment the workflow uploads", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "fbr-cli-"));
     try {
@@ -303,12 +362,12 @@ describe("build workflow contract", () => {
     const resolve = stepBody("Resolve the requested version and gate");
     const calls = resolve
       .split("\n")
-      .filter((line) => line.includes("fbr.ts"))
+      .filter((line) => line.includes("packaging/bin/fbr"))
       .map((line) => line.trim());
     assert.ok(calls.length >= 4, "the resolve step lost its fbr calls");
     for (const line of calls) {
       assert.ok(
-        line.includes("${GITHUB_WORKSPACE}/tap/packaging/bin/fbr.ts"),
+        line.includes("${GITHUB_WORKSPACE}/tap/packaging/bin/fbr"),
         `fbr call outside the tap checkout: ${line}`,
       );
     }
@@ -335,6 +394,7 @@ describe("classified failure exit codes", () => {
     assert.equal(errorExitCode(new UpdaterResidualError("residual")), 6);
     assert.equal(errorExitCode(new UpstreamConflictError("conflict")), 7);
     assert.equal(errorExitCode(new NotReadyError("missing")), 8);
+    assert.equal(errorExitCode(new DescriptorError("bad descriptor")), 1);
     assert.equal(errorExitCode(new Error("unclassified")), 1);
   });
 });

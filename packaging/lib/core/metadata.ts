@@ -12,8 +12,20 @@ import {
 } from "./guards.ts";
 import { MAX_PAYLOAD_BYTES, writeFileAtomic } from "./http.ts";
 import { DEB_VERSION } from "./patterns.ts";
-import type { Architecture, Metadata } from "./types.ts";
-import { isArchitecture } from "./types.ts";
+import { isArchitecture, type Architecture } from "./architecture.ts";
+
+// Emitted by every resolver; the JSON key names are the contract with the
+// shell pipeline.
+export interface Metadata {
+  package: string;
+  version: string;
+  architecture: Architecture;
+  repositoryPath: string;
+  sha256: string;
+  size: number;
+  repository: string;
+  path: string | null;
+}
 
 // The fields an artifact resolver fills in; an unresolved payload carries a
 // null path.

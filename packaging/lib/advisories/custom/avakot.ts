@@ -12,6 +12,7 @@ import { ChecksumMismatchError, NotReadyError } from "../../core/errors.ts";
 import {
   assertHostAllowed,
   assertHttpsUrl,
+  assertPackageName,
   assertPositiveSize,
   assertSafeName,
   assertSha256Hex,
@@ -27,7 +28,8 @@ import {
 import { makeMetadata, writeMetadata } from "../../core/metadata.ts";
 import { DEB_VERSION } from "../../core/patterns.ts";
 import { substitutePlaceholders } from "../../core/template.ts";
-import type { AvakotArtifact, Metadata } from "../../core/types.ts";
+import type { Metadata } from "../../core/metadata.ts";
+import type { AvakotArtifact } from "../../descriptor/artifact.ts";
 import { fetchVerified } from "../download.ts";
 import {
   isNotFound,
@@ -121,7 +123,7 @@ export async function resolveWithAvakot(
   const repository = validateManifestEndpoint(artifact.repository);
   if (artifact.downloadHosts.length === 0) fail("downloadHosts must not be empty");
   for (const host of artifact.downloadHosts) assertSafeName(host, "download host");
-  const packageName = assertSafeName(artifact.packageName, "package name");
+  const packageName = assertPackageName(artifact.packageName, "package name");
   const assetName = substitutePlaceholders(artifact.assetTemplate, {
     arch: request.architecture,
   });

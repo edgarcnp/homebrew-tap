@@ -37,7 +37,7 @@ bun packaging/bin/fbr.ts cask --action check
 echo "cask check: OK"
 
 echo "=== brew style ==="
-brew style edgarcnp/tap
+packaging/scripts/style.sh
 echo "brew style: OK"
 
 echo "=== brew audit ==="

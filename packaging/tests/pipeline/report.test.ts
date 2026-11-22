@@ -6,7 +6,7 @@ import * as path from "node:path";
 import { describe, it } from "node:test";
 import { REPO_ROOT } from "../../lib/core/paths.ts";
 import { APP_ID } from "../../lib/core/patterns.ts";
-import { listApps } from "../../lib/pipeline/descriptor.ts";
+import { listApps } from "../../lib/descriptor/index.ts";
 import {
   buildReport,
   FAILURE_CODES,
@@ -417,6 +417,10 @@ describe("run records", () => {
     assert.deepEqual(reason.evidence, { reason: "upstream said no" });
 
     // A single value over the API's 256-byte string cap fails at the site.
+    assert.throws(
+      () => buildReport({ ...base, evidence: { "not-snake": "x" } }),
+      /key is not snake_case/,
+    );
     assert.throws(
       () => buildReport({ ...base, evidence: { reason: "x".repeat(5 * 1024) } }),
       /caps an evidence value at 256/,

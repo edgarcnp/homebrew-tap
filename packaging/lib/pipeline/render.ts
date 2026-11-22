@@ -5,7 +5,7 @@ import * as fs from "node:fs";
 import { assertSingleLine, fail } from "../core/guards.ts";
 import { writeFileAtomic } from "../core/http.ts";
 import { appDir } from "../core/paths.ts";
-import type { AppDescriptor } from "../core/types.ts";
+import type { AppDescriptor } from "../descriptor/app.ts";
 
 const REQUIRED_KEYS = ["Name=", "Comment=", "Exec=", "Icon=", "Type=Application"];
 

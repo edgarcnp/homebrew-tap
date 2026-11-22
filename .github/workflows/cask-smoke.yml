@@ -51,6 +51,9 @@ jobs:
         run: |
           tap_dir="$(brew --repository "$TAP_REPO")"
           cd "$tap_dir"
+          # fbr imports Zod, so the pinned dependency has to exist before the
+          # first descriptor read.
+          bun install --frozen-lockfile --ignore-scripts --production
           # Homebrew loads casks by name only: a path or a Ruby source file is
           # refused, and a bare token would resolve against homebrew/cask
           # first, so every lookup here names this tap as well.

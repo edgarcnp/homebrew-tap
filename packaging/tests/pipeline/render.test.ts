@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { describe, it } from "node:test";
-import { listApps, loadDescriptor } from "../../lib/pipeline/descriptor.ts";
+import { listApps, loadDescriptor } from "../../lib/descriptor/index.ts";
 import { renderDesktopEntry, writeDesktopEntry } from "../../lib/pipeline/render.ts";
 
 describe("renderDesktopEntry", () => {

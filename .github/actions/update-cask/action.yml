@@ -30,6 +30,9 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Install packaging dependencies
+      shell: bash
+      run: bun install --frozen-lockfile --ignore-scripts --production
     - name: Update cask version and checksums
       id: update
       shell: bash -xeuo pipefail {0}
@@ -40,7 +43,9 @@ runs:
         ASSET_PREFIX: ${{ inputs.asset_prefix }}
         GH_TOKEN: ${{ inputs.token }}
       run: |
-        [[ "$PACKAGE_VERSION" =~ ^[0-9A-Za-z._-]+$ ]] || { echo "invalid version: $PACKAGE_VERSION" >&2; exit 1; }
+        # "+" is legal in a tag and in a Debian version; the build workflow's
+        # tag-safe guard allows it, so this must too.
+        [[ "$PACKAGE_VERSION" =~ ^[0-9A-Za-z._+-]+$ ]] || { echo "invalid version: $PACKAGE_VERSION" >&2; exit 1; }
         # fbr validates the prefixes and checksum shapes, failing rather than
         # half-updating the file.
         cask="$(bun packaging/bin/fbr.ts descriptor --app "${APP}" --field cask)"

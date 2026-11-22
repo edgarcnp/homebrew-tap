@@ -3,10 +3,16 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { APPIMAGE_ARCH, BREW_ARCH, resolveBrewArch } from "../core/architecture.ts";
+import { APPIMAGE_ARCH, BREW_ARCH, resolveBrewArch, type Architecture } from "../core/architecture.ts";
 import { assertSha256Hex, fail } from "../core/guards.ts";
 import { writeFileAtomic } from "../core/http.ts";
-import type { AppDescriptor, Architecture, CaskState } from "../core/types.ts";
+import type { AppDescriptor } from "../descriptor/app.ts";
+
+export interface CaskState {
+  version: string;
+  // Architecture -> pinned SHA-256 (single-arch casks carry one entry).
+  sha256: Partial<Record<Architecture, string>>;
+}
 
 const VERSION_STANZA = /^[ \t]*version "([^"]*)"/gm;
 const ARM64_SHA256 = /^[ \t]*(?:sha256[ \t]+)?arm64_linux:[ \t]*"([0-9a-f]{64})"/gm;
@@ -160,7 +166,9 @@ function assertVersionLine(version: string): string {
 
 export function writeCask(caskFile: string, state: CaskState): void {
   const source = fs.readFileSync(caskFile, "utf8");
-  writeFileAtomic(caskFile, updateCask(source, state));
+  // A cask is repository content, not a secret: the atomic writer's 0600
+  // default would leave the working copy unreadable to other users.
+  writeFileAtomic(caskFile, updateCask(source, state), 0o644);
 }
 
 export function expectedCaskUrl(descriptor: AppDescriptor): string {

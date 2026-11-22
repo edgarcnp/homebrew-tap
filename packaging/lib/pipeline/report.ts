@@ -270,6 +270,9 @@ export function buildReport(input: ReportInput): RunReport {
   }
   if (input.evidence !== undefined && Object.keys(input.evidence).length > 0) {
     for (const [key, value] of Object.entries(input.evidence)) {
+      if (!EVIDENCE_KEY_PATTERN.test(key)) {
+        fail(`Report evidence key is not snake_case: ${key}`);
+      }
       assertEvidenceValue(value, `report evidence value for ${key}`);
     }
     const bytes = Buffer.byteLength(JSON.stringify(input.evidence), "utf8");

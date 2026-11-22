@@ -3,7 +3,7 @@
 
 import * as path from "node:path";
 import { GuardViolationError } from "./errors.ts";
-import { SAFE_IDENTIFIER } from "./patterns.ts";
+import { SAFE_IDENTIFIER, SAFE_REFERENCE } from "./patterns.ts";
 
 export function fail(message: string): never {
   throw new Error(message);
@@ -39,6 +39,12 @@ export function assertMatches(value: string, pattern: RegExp, label: string): st
 // Package/cask/asset identifiers: no path separators, no leading dash.
 export function assertSafeName(value: string, label: string): string {
   return assertMatches(value, SAFE_IDENTIFIER, label);
+}
+
+// Upstream package identity may carry "+" (a build marker); a cask token does
+// not. Descriptor validation and every resolver use this one rule.
+export function assertPackageName(value: string, label: string): string {
+  return assertMatches(value, SAFE_REFERENCE, label);
 }
 
 export function assertSha256Hex(value: string, label: string): string {

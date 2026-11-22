@@ -1,0 +1,55 @@
+name: Pipeline smoke (build only)
+
+# Manual production gate for pipeline changes: run the real builder and smoke
+# test for one app from every artifact/payload family, without publishing a
+# release or touching a cask. The six apps cover:
+#   vscode            json-asset + tarball-tree
+#   orca              github-release + deb-tree
+#   wfhelper          github-release + appimage-tree
+#   firefox           mozilla-release + tarball-tree
+#   little-genius     avakot + deb-files
+#   opencode-desktop  update-manifest + deb-tree
+#
+# Run this before merging a change that touches the descriptor schema, the
+# shell staging stages, or the pack/smoke path. It is intentionally manual:
+# six full AppImage builds are expensive and must not gate every PR.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "packaging/**"
+      - "package.json"
+      - "bun.lock"
+      - "tsconfig.json"
+      - ".github/workflows/build-appimage.yml"
+      - ".github/workflows/pipeline-smoke.yml"
+      - ".github/actions/setup-packaging/**"
+  workflow_dispatch:
+
+# A newer push supersedes a smoke run that is still building stale code.
+concurrency:
+  group: pipeline-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    strategy:
+      fail-fast: false
+      matrix:
+        app:
+          - vscode
+          - orca
+          - wfhelper
+          - firefox
+          - little-genius
+          - opencode-desktop
+    uses: ./.github/workflows/build-appimage.yml
+    with:
+      app: ${{ matrix.app }}
+      publish: false
+      force_build: true

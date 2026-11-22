@@ -3,10 +3,10 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { describe, it } from "node:test";
-import { loadDescriptor } from "../../lib/pipeline/descriptor.ts";
+import { loadDescriptor } from "../../lib/descriptor/index.ts";
 import { sha256Hex } from "../../lib/core/http.ts";
 import { planReleasePrune, renderReleaseNotes } from "../../lib/pipeline/release.ts";
-import type { AppDescriptor } from "../../lib/core/types.ts";
+import type { AppDescriptor } from "../../lib/descriptor/app.ts";
 
 // Every shipped cask is amd64-only, so the dual-arch walk (both assets, both
 // pins) is exercised with a synthetic descriptor instead of a real app.

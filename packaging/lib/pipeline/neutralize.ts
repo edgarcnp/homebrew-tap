@@ -5,9 +5,10 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { assertSameLength, assertSingleLine, fail } from "../core/guards.ts";
-import { UpdaterResidualError } from "../core/errors.ts";
+import { GuardViolationError, UpdaterResidualError } from "../core/errors.ts";
 import { appDir } from "../core/paths.ts";
-import type { AppDescriptor, EndpointPatch } from "../core/types.ts";
+import type { AppDescriptor } from "../descriptor/app.ts";
+import type { EndpointPatch } from "../descriptor/updater.ts";
 
 // Vendored trees are never patched, but are still scanned for survivors.
 const PATCH_SKIP_DIRS = new Set(["node_modules", ".git"]);
@@ -129,7 +130,12 @@ function removeFeeds(
   for (const relative of paths) {
     const full = path.join(appDirPath, relative);
     if (!fs.existsSync(full)) {
-      if (required) fail(`expected upstream update feed is missing: ${full}`);
+      if (required) {
+        // A required feed that disappeared is an upstream layout change, not a
+        // transient build failure: classify it permanent so retry.yml opens an
+        // issue instead of re-running the same build.
+        throw new GuardViolationError(`expected upstream update feed is missing: ${full}`);
+      }
       continue;
     }
     fs.unlinkSync(full);

@@ -6,7 +6,8 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fail } from "../core/guards.ts";
 import { sha256Hex } from "../core/http.ts";
-import type { AppDescriptor, Architecture } from "../core/types.ts";
+import type { Architecture } from "../core/architecture.ts";
+import type { AppDescriptor } from "../descriptor/app.ts";
 import { sortDebVersions } from "../core/version.ts";
 
 export interface UpstreamRecord {

@@ -4,9 +4,16 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { parseArgs, type ParseArgsConfig } from "node:util";
-import { APPIMAGE_ARCH, resolveArchitecture } from "./core/architecture.ts";
+import {
+  APPIMAGE_ARCH,
+  ARCHITECTURES,
+  isArchitecture,
+  resolveArchitecture,
+  type Architecture,
+} from "./core/architecture.ts";
 import {
   ChecksumMismatchError,
+  DescriptorError,
   GuardViolationError,
   NotReadyError,
   UpdaterResidualError,
@@ -14,7 +21,8 @@ import {
   UpstreamUnavailableError,
 } from "./core/errors.ts";
 import { checkCask, readCaskFile, writeCask } from "./pipeline/cask.ts";
-import { descriptorLines, listApps, loadDescriptor, resolveApp } from "./pipeline/descriptor.ts";
+import { descriptorLines, listApps, loadDescriptor, resolveApp } from "./descriptor/index.ts";
+import type { AppDescriptor } from "./descriptor/app.ts";
 import { planGate } from "./pipeline/gate.ts";
 import {
   buildReport,
@@ -41,8 +49,6 @@ import {
 import { finalizeApp, neutralizeUpdater } from "./pipeline/neutralize.ts";
 import { resolveWith } from "./advisories/registry.ts";
 import { writeDesktopEntry } from "./pipeline/render.ts";
-import type { AppDescriptor, Architecture } from "./core/types.ts";
-import { ARCHITECTURES, isArchitecture } from "./core/types.ts";
 import { compareDebVersions, sortDebVersions } from "./core/version.ts";
 
 type Options = NonNullable<ParseArgsConfig["options"]>;
@@ -253,7 +259,7 @@ const COMMANDS: Command[] = [
   {
     name: "descriptor",
     summary: "Print a validated descriptor, or one dotted field (--app, [--field])",
-    options: { app: APP, field: { type: "string" } },
+    options: { app: APP, field: { type: "string" }, "failure-out": { type: "string" } },
     run: (flags) => {
       const descriptor = descriptorFor(flags);
       const field = flags.optStr("field");
@@ -278,9 +284,21 @@ const COMMANDS: Command[] = [
     },
   },
   {
+    name: "descriptor-schema",
+    summary: "Print the JSON Schema for app.json (editor validation)",
+    options: {},
+    run: async () => {
+      // Lazy: the schema module pulls in Zod's JSON Schema renderer, which
+      // most commands never need.
+      const { descriptorJsonSchema } = await import("./descriptor/schema.ts");
+      process.stdout.write(`${JSON.stringify(descriptorJsonSchema(), null, 2)}\n`);
+      return 0;
+    },
+  },
+  {
     name: "descriptor-env",
     summary: "Emit KEY=VALUE lines for $GITHUB_ENV or $GITHUB_OUTPUT (--app, [--format])",
-    options: { app: APP, format: { type: "string" } },
+    options: { app: APP, format: { type: "string" }, "failure-out": { type: "string" } },
     run: (flags) => {
       const format = flags.optStr("format") ?? "env";
       if (format !== "env" && format !== "output") {
@@ -335,13 +353,14 @@ const COMMANDS: Command[] = [
   {
     name: "gate",
     summary:
-      "Print the cask gate decision (--app, --requested-version V, [--artifact-version V], [--release-exists], [--tap])",
+      "Print the cask gate decision (--app, --requested-version V, [--artifact-version V], [--release-exists], [--force], [--tap])",
     options: {
       app: APP,
       tap: TAP,
       "requested-version": { type: "string" },
       "artifact-version": { type: "string" },
       "release-exists": { type: "boolean" },
+      force: { type: "boolean" },
     },
     run: (flags) => {
       const descriptor = descriptorFor(flags);
@@ -351,6 +370,7 @@ const COMMANDS: Command[] = [
         requestedVersion: flags.str("requested-version"),
         artifactVersion: flags.optStr("artifact-version") ?? null,
         releaseExists: flags.bool("release-exists"),
+        force: flags.bool("force"),
       });
       // Emitted as $GITHUB_OUTPUT lines; the workflow consumes them directly.
       for (const line of [
@@ -654,7 +674,7 @@ const COMMANDS: Command[] = [
 export function usage(): string {
   const lines = ["fbr <command> [flags]", "", "Commands:"];
   for (const command of COMMANDS) {
-    lines.push(`  ${command.name.padEnd(16)} ${command.summary}`);
+    lines.push(`  ${command.name.padEnd(18)} ${command.summary}`);
   }
   return `${lines.join("\n")}\n`;
 }
@@ -671,6 +691,10 @@ interface FailureVerdict {
 }
 
 function classifyFailure(error: unknown): FailureVerdict | undefined {
+  // A descriptor defect is permanent and a caller-side configuration error.
+  // Exit 1 is the CLI's generic failure code; the fragment carries the precise
+  // code the retry plan reads.
+  if (error instanceof DescriptorError) return { code: "DESCRIPTOR_INVALID", exitCode: 1 };
   if (error instanceof UpstreamUnavailableError) {
     return { code: "UPSTREAM_UNAVAILABLE", exitCode: 3, evidence: { ...error.evidence } };
   }

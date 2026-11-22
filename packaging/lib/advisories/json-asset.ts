@@ -9,6 +9,7 @@ import { ChecksumMismatchError, NotReadyError } from "../core/errors.ts";
 import {
   assertHostAllowed,
   assertHttpsUrl,
+  assertPackageName,
   assertPositiveSize,
   assertSafeName,
   assertSha256Hex,
@@ -22,7 +23,8 @@ import {
   writeFileAtomic,
 } from "../core/http.ts";
 import { makeMetadata, writeMetadata } from "../core/metadata.ts";
-import type { JsonAssetArtifact, Metadata } from "../core/types.ts";
+import type { Metadata } from "../core/metadata.ts";
+import type { JsonAssetArtifact } from "../descriptor/artifact.ts";
 import { fetchVerified } from "./download.ts";
 import {
   isNotFound,
@@ -90,7 +92,7 @@ export async function resolveWithJsonAsset(
   const endpoint = assertHttpsUrl(artifact.url, "update document endpoint");
   if (artifact.downloadHosts.length === 0) fail("downloadHosts must not be empty");
   for (const host of artifact.downloadHosts) assertSafeName(host, "download host");
-  const packageName = assertSafeName(artifact.packageName, "package name");
+  const packageName = assertPackageName(artifact.packageName, "package name");
   const { outputDir, metadataPath } = prepareOutput(request);
 
   let document: unknown;

@@ -5,7 +5,32 @@
 // workflow needs no shell for it.
 
 import { compareDebVersions } from "../core/version.ts";
-import type { GateDecision, GateInput } from "../core/types.ts";
+import type { CaskState } from "./cask.ts";
+
+export type GateAction = "build" | "skip" | "repair-cask";
+
+export interface GateInput {
+  cask: CaskState;
+  // The one version this run may build: the API's dispatched version, or the
+  // cask pin for a manual run. There is no second, newest-upstream version.
+  requestedVersion: string;
+  // The version resolve actually found a payload for, or null when resolve
+  // reported not-ready.
+  artifactVersion: string | null;
+  releaseExists: boolean;
+  // Smoke runs rebuild the requested version even when the cask already pins
+  // it or the release exists; publishing is disabled separately.
+  force?: boolean | undefined;
+}
+
+export interface GateDecision {
+  action: GateAction;
+  reason: string;
+  // A typed readiness signal for the run record: present only when the API's
+  // requested version is not published upstream yet, so the API can wait and
+  // ask again instead of matching on the human `reason`.
+  reasonCode?: "not-ready" | undefined;
+}
 
 // A cask version that is empty or non-numeric cannot be compared; treat it as
 // "needs building" so a broken pin is repaired rather than skipped.
@@ -41,6 +66,13 @@ export function planGate(input: GateInput): GateDecision {
       action: "skip",
       reason: `not-ready: resolved ${input.artifactVersion} does not match requested ${requested}`,
       reasonCode: "not-ready",
+    };
+  }
+
+  if (input.force === true) {
+    return {
+      action: "build",
+      reason: `Forced smoke build of requested ${requested}; release and cask pin ignored`,
     };
   }
 

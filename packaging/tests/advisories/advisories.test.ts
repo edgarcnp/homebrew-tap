@@ -28,7 +28,7 @@ import {
 } from "../../lib/advisories/update-manifest.ts";
 import { GuardViolationError, NotReadyError } from "../../lib/core/errors.ts";
 import { REPO_ROOT } from "../../lib/core/paths.ts";
-import type { JsonAssetArtifact, MozillaReleaseArtifact } from "../../lib/core/types.ts";
+import type { JsonAssetArtifact, MozillaReleaseArtifact } from "../../lib/descriptor/artifact.ts";
 
 const SHA512 = "A".repeat(86) + "==";
 const OPENCODE_HOSTS = ["opencode.ai"];

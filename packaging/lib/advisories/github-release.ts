@@ -14,7 +14,9 @@ import { MAX_PAYLOAD_BYTES } from "../core/http.ts";
 import { makeMetadata, writeMetadata } from "../core/metadata.ts";
 import { DEB_VERSION, SAFE_REFERENCE } from "../core/patterns.ts";
 import { hasPlaceholder, substitutePlaceholders } from "../core/template.ts";
-import type { Architecture, GithubReleaseArtifact, Metadata } from "../core/types.ts";
+import type { Architecture } from "../core/architecture.ts";
+import type { Metadata } from "../core/metadata.ts";
+import type { GithubReleaseArtifact } from "../descriptor/artifact.ts";
 import { downloadVerified, fetchVerified } from "./download.ts";
 import {
   assertRepositoryUrl,

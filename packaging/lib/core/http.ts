@@ -190,10 +190,14 @@ export async function readPayload(
   return Buffer.concat(chunks);
 }
 
-export function writeFileAtomic(filePath: string, data: string | Buffer): void {
+export function writeFileAtomic(
+  filePath: string,
+  data: string | Buffer,
+  mode: number = 0o600,
+): void {
   const tmp = `${filePath}.tmp.${crypto.randomBytes(8).toString("hex")}`;
   try {
-    fs.writeFileSync(tmp, data, { mode: 0o600, flag: "wx" });
+    fs.writeFileSync(tmp, data, { mode, flag: "wx" });
     fs.renameSync(tmp, filePath);
   } catch (error) {
     try {

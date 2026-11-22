@@ -1,0 +1,22 @@
+name: Set up packaging dependencies
+
+description: >-
+  Install the tap's pinned Bun dependencies. The packaging CLI imports Zod, so
+  node_modules must exist before any `fbr` command runs.
+
+inputs:
+  dir:
+    description: Directory containing package.json and bun.lock
+    required: false
+    default: "."
+
+runs:
+  using: composite
+  steps:
+    - name: Install packaging dependencies
+      shell: bash
+      working-directory: ${{ inputs.dir }}
+      # Every caller of this action only runs fbr. Production mode proves the
+      # runtime packages are declared as dependencies, and keeps type-only
+      # packages out of the build container.
+      run: bun install --frozen-lockfile --ignore-scripts --production

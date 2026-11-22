@@ -16,7 +16,7 @@ import {
 } from "../../lib/core/guards.ts";
 import { GuardViolationError } from "../../lib/core/errors.ts";
 import { assertMetadata, METADATA_KEYS, metadataUrl, readMetadataField, writeMetadata } from "../../lib/core/metadata.ts";
-import type { Metadata } from "../../lib/core/types.ts";
+import type { Metadata } from "../../lib/core/metadata.ts";
 
 function validMetadata(): Metadata {
   return {
