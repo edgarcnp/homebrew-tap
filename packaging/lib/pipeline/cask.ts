@@ -7,6 +7,7 @@ import { APPIMAGE_ARCH, BREW_ARCH, resolveBrewArch, type Architecture } from "..
 import { assertSha256Hex, fail } from "../core/guards.ts";
 import { writeFileAtomic } from "../core/http.ts";
 import type { AppDescriptor } from "../descriptor/app.ts";
+import { launcherId } from "./render.ts";
 
 export interface CaskState {
   version: string;
@@ -238,8 +239,8 @@ export function checkCask(descriptor: AppDescriptor, source: string): string[] {
 
   // The desktop entry and icon are named by desktopId when the app needs a
   // launcher name of its own, else by the cask token.
-  const launcherId = descriptor.desktopId ?? descriptor.cask;
-  const iconTarget = `.local/share/icons/hicolor/${descriptor.icon.size}/apps/${launcherId}${iconExtension(descriptor)}`;
+  const launcher = launcherId(descriptor);
+  const iconTarget = `.local/share/icons/hicolor/${descriptor.icon.size}/apps/${launcher}${iconExtension(descriptor)}`;
   require(source.includes(iconTarget), `postflight does not install the icon to ${iconTarget}`);
   require(source.includes(`~/${iconTarget}`), `zap does not remove ~/${iconTarget}`);
 
@@ -252,8 +253,8 @@ export function checkCask(descriptor: AppDescriptor, source: string): string[] {
 
   const caskDesktopEntry = descriptor.caskDesktopEntry;
   if (caskDesktopEntry === undefined) {
-    const desktopTarget = `.local/share/applications/${launcherId}.desktop`;
-    require(source.includes(desktopTarget), `postflight does not write ${desktopTarget}`);
+    const desktopTarget = `.local/share/applications/${launcher}.desktop`;
+    require(source.includes(`write_file "${desktopTarget}"`), `postflight does not write ${desktopTarget}`);
     require(source.includes(`~/${desktopTarget}`), `zap does not remove ~/${desktopTarget}`);
     require(
       source.includes(`Name=${descriptor.displayName}`),
@@ -264,9 +265,19 @@ export function checkCask(descriptor: AppDescriptor, source: string): string[] {
       `desktop entry Comment does not match comment "${descriptor.comment}"`,
     );
     require(
-      source.includes(`Icon=${launcherId}`),
-      `desktop entry Icon does not match "${launcherId}"`,
+      source.includes(`Icon=${launcher}`),
+      `desktop entry Icon does not match "${launcher}"`,
     );
+    // A renamed launcher leaves the entry under the cask token behind: earlier
+    // casks wrote it, and an image packed before the rename still installs it
+    // through app_image, so the upgrade would end on two launchers.
+    if (launcher !== descriptor.cask) {
+      const legacy = `.local/share/applications/${descriptor.cask}.desktop`;
+      require(
+        source.includes(`remove "${legacy}", base: :home`),
+        `postflight does not remove the pre-rename entry ${legacy}`,
+      );
+    }
   } else {
     // The payload owns the entry text (Name, Comment and Icon come from
     // upstream), so the cask patches that file and installs it. The extraction

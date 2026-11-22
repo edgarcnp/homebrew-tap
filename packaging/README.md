@@ -74,13 +74,19 @@ it for the version, and the tap never resolves "the newest".
    `root`/`target`).
 5. **neutralize** — `fbr neutralize` disables the app's own updater, then
    asserts no updater endpoint survived.
-6. **render + icon** — `fbr render-desktop` (literal substitution, no `sed`) and
-   the descriptor's icon into the hicolor tree.
+6. **render + icon** — `fbr render-desktop` (literal substitution, no `sed`)
+   writes the entry at the AppDir root under the launcher name (`desktopId`,
+   else the cask token) and the pipeline copies it to
+   `share/applications/<launcher>.desktop`; the descriptor's icon goes into the
+   hicolor tree. The root name is the one that reaches a user: Homebrew's
+   `app_image` artifact installs every root `*.desktop`, so a second name there
+   is a second launcher.
 7. **pack** — `quick-sharun` (generates AppRun, bundles the runtime closure
    including glibc and ld-linux), sidecar reconciliation, the bundled-loader
    shim for a bundle's `libexec/` binaries, `fbr finalize` (AppDir `.env` +
-   runtime hook), the descriptor's `appDirLinks`, pkgforge `appimagetool`, then
-   the smoke test. A closure that
+   runtime hook), the descriptor's `appDirLinks`, pkgforge `appimagetool`, the
+   desktop-entry gate (the packed image's root must carry
+   `<launcher>.desktop` and nothing else), then the smoke test. A closure that
    needs a soname the build environment does not carry aborts as
    `MISSING_PAYLOAD_LIB`, and the record names the sonames it could not resolve.
 
@@ -97,7 +103,7 @@ record whose `app` does not — `fbr report` refuses such a record first.
 | --- | --- |
 | `id`, `cask`, `assetPrefix`, `tagPrefix` | Identity. The three names above are the same string; the release tag is `<tagPrefix><version>`. |
 | `appName`, `displayName`, `comment` | Release title and desktop entry `Name=`/`Comment=`. |
-| `desktopId` | Launcher name, for an app whose generic name is already taken on a user's desktop — Orca the IDE would otherwise ship `orca.desktop` and `orca.png` beside the GNOME Orca screen reader's. Names the entry the cask installs, its icon, and the entry packed into the AppImage, so the app's own desktop integration installs the same id instead of a second `orca.desktop`. The icon file inside the AppImage keeps the cask token, because the cask copies that name out of the published asset. Absent means the cask token. |
+| `desktopId` | Launcher name, for an app whose generic name is already taken on a user's desktop — Orca the IDE would otherwise ship `orca.desktop` and `orca.png` beside the GNOME Orca screen reader's. Names the entry at the AppDir root, its copy under `share/applications`, the entry the cask installs, and the icon. The root name is what a user ends up with: Homebrew's `app_image` artifact installs every root `*.desktop` it finds, so a root entry named after the cask token would land beside the cask's own and give the app two launchers; the pack stage fails on the disagreement. A renamed launcher also makes the cask remove the pre-rename entry (`remove ".local/share/applications/<cask>.desktop"`), which earlier casks wrote and an image packed before the rename still installs. The icon file inside the AppImage keeps the cask token, because the cask copies that name out of the published asset. Absent means the cask token. |
 | `sourceRepo`, `sourceOwner` | Upstream repo to build from, and the owner of the fallback fork. |
 | `sourceDir`, `buildCommand` | Where CI `cd`s before building. `sourceDir` must be `packaging/apps/<app>`: the app id, directory, cask token and asset prefix are one name end to end. |
 | `debloatArgs` | pkgforge debloat flags. |
@@ -269,7 +275,8 @@ Each check lives in one place:
 - **Casks** — one parser reads `Casks/*.rb`; `fbr cask --action check` asserts
   the cask agrees with its descriptor (URL, asset name, binaries, icon size,
   desktop entry — written from the template, or patched from the payload when
-  `caskDesktopEntry` is set — and zap paths).
+  `caskDesktopEntry` is set — the pre-rename entry's removal when `desktopId`
+  renames the launcher, and zap paths).
 - **The build** — `smoke_test_appimage` runs the AppImage headless and fails on
   dynamic-loader errors and on a launcher left waiting on a defunct child (a
   child still unreaped after `SMOKE_DEFUNCT_SECONDS`, default 3, means the app
@@ -280,6 +287,11 @@ Each check lives in one place:
   Chromium-based payloads: a native bundle rejects the flag and exits before it
   starts, which would make the gate vacuous. The release pins the AppImage
   SHA-256 back into the cask.
+- **The installed launcher** — `cask-smoke.yml` installs every cask and runs
+  `packaging/scripts/check-desktop-entries.sh`, which requires exactly one
+  entry in the applications directory for that app: the artifact's entry and
+  the cask's postflight entry must be the same file. The build gate asserts
+  the root name; this one asserts what a user's desktop actually received.
 
 ## Adding an app
 

@@ -48,7 +48,7 @@ import {
 } from "./pipeline/release.ts";
 import { finalizeApp, neutralizeUpdater } from "./pipeline/neutralize.ts";
 import { resolveWith } from "./advisories/registry.ts";
-import { writeDesktopEntry } from "./pipeline/render.ts";
+import { launcherId, writeDesktopEntry } from "./pipeline/render.ts";
 import { compareDebVersions, sortDebVersions } from "./core/version.ts";
 
 type Options = NonNullable<ParseArgsConfig["options"]>;
@@ -630,7 +630,7 @@ const COMMANDS: Command[] = [
     options: { app: APP, appdir: { type: "string" }, version: { type: "string" } },
     run: (flags) => {
       const descriptor = descriptorFor(flags);
-      const destination = path.join(flags.str("appdir"), `${descriptor.cask}.desktop`);
+      const destination = path.join(flags.str("appdir"), `${launcherId(descriptor)}.desktop`);
       writeDesktopEntry(descriptor, flags.str("version"), destination);
       process.stdout.write(`${destination}\n`);
       return 0;

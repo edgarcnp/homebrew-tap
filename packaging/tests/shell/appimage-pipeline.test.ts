@@ -1028,3 +1028,99 @@ describe("launcher_name", () => {
     assert.match(result.stderr, /unsafe desktop entry name: \.\.\/evil/);
   });
 });
+
+// The pack gate: Homebrew's app_image artifact installs every "*.desktop" the
+// AppImage carries at its root, so the root has to hold the one entry the
+// cask's postflight writes and nothing else. A second name there is a second
+// launcher in the user's applications directory (the orca.desktop that shipped
+// beside orca-ide.desktop).
+describe("pipeline_assert_packaged_desktop", () => {
+  let scratch: string;
+  let imageRoot: string;
+  let appimage: string;
+
+  beforeEach(() => {
+    scratch = fs.mkdtempSync(path.join(os.tmpdir(), "fbr-pack-gate-"));
+    imageRoot = path.join(scratch, "root");
+    appimage = path.join(scratch, "orca-x86_64.AppImage");
+    fs.mkdirSync(imageRoot);
+    // What the AppImage runtime does for "--appimage-extract '*.desktop'":
+    // it puts the matched root files under ./squashfs-root in the cwd.
+    fs.writeFileSync(
+      appimage,
+      [
+        "#!/bin/bash",
+        "set -euo pipefail",
+        `printf '%s\\n' "$@" > "${scratch}/args"`,
+        "[[ \"${1:-}\" = --appimage-extract ]]",
+        "[[ \"${2:-}\" = '*.desktop' ]]",
+        "mkdir -p squashfs-root",
+        "shopt -s nullglob",
+        `cp "${imageRoot}"/*.desktop squashfs-root/ 2>/dev/null || true`,
+        "",
+      ].join("\n"),
+    );
+    fs.chmodSync(appimage, 0o755);
+  });
+
+  afterEach(() => {
+    fs.rmSync(scratch, { recursive: true, force: true });
+  });
+
+  function entryNames(...names: string[]): void {
+    for (const name of names) {
+      fs.writeFileSync(path.join(imageRoot, name), "[Desktop Entry]\nName=Orca IDE\n");
+    }
+  }
+
+  function run(launcher = "orca-ide"): { status: number | null; stderr: string } {
+    const result = spawnSync(
+      "bash",
+      ["-c", `set -Eeuo pipefail; . "$PIPELINE_LIB"; LAUNCHER_NAME="$LAUNCHER"; pipeline_assert_packaged_desktop "$IMAGE"`],
+      {
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          PIPELINE_LIB,
+          LAUNCHER: launcher,
+          IMAGE: appimage,
+          TMPDIR: scratch,
+        },
+      },
+    );
+    return { status: result.status, stderr: result.stderr ?? "" };
+  }
+
+  it("accepts the launcher's entry alone", () => {
+    entryNames("orca-ide.desktop");
+    const { status, stderr } = run();
+    assert.equal(status, 0, stderr);
+    assert.equal(fs.readFileSync(path.join(scratch, "args"), "utf8"), "--appimage-extract\n*.desktop\n");
+  });
+
+  it("rejects a root entry under the cask token", () => {
+    entryNames("orca.desktop");
+    const { status, stderr } = run();
+    assert.equal(status, 1);
+    assert.match(stderr, /ships 'orca\.desktop' at its root; expected only orca-ide\.desktop/);
+  });
+
+  it("rejects a second entry beside the launcher's", () => {
+    entryNames("orca-ide.desktop", "orca.desktop");
+    const { status, stderr } = run();
+    assert.equal(status, 1);
+    assert.match(stderr, /ships 'orca-ide\.desktop\norca\.desktop' at its root/);
+  });
+
+  it("rejects an image with no root entry at all", () => {
+    const { status, stderr } = run();
+    assert.equal(status, 1);
+    assert.match(stderr, /ships 'no desktop entry' at its root/);
+  });
+
+  it("leaves no scratch directory behind", () => {
+    entryNames("orca-ide.desktop");
+    run();
+    assert.deepEqual(fs.readdirSync(scratch).sort(), ["args", "root", "orca-x86_64.AppImage"].sort());
+  });
+});

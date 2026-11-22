@@ -686,6 +686,38 @@ pipeline_run_quick_sharun() {
   error "quick-sharun failed"
 }
 
+# Basenames of the desktop entries at the root of an extracted AppImage,
+# sorted. Homebrew's app_image artifact installs exactly these, so this is what
+# a user's applications directory receives from the install.
+desktop_entry_names() {
+  local appdir_root="$1"
+  [[ -d "${appdir_root}" ]] || return 0
+  find -L "${appdir_root}" -maxdepth 1 -type f -name '*.desktop' -printf '%f\n' | LC_ALL=C sort
+}
+
+# Fails unless the packed AppImage's root carries the entry the cask installs,
+# and nothing else. The artifact installs every root "*.desktop" it finds, so
+# an entry under another name lands beside the cask's own postflight entry and
+# the app gets two launchers (an orca.desktop beside orca-ide.desktop).
+pipeline_assert_packaged_desktop() {
+  local appimage="$1" extract_dir expected names
+  expected="${LAUNCHER_NAME}.desktop"
+  extract_dir="$(mktemp -d "${TMPDIR:-/tmp}/fbr-desktop.XXXXXX")" || error "mktemp failed for the desktop entry check"
+  # The runtime extracts the image root into squashfs-root, the directory
+  # Homebrew's app_image artifact globs for "*.desktop".
+  if ! (cd "${extract_dir}" && "${appimage}" --appimage-extract '*.desktop' >/dev/null 2>&1)
+  then
+    rm -rf -- "${extract_dir}"
+    error "Desktop entry check: --appimage-extract failed for ${appimage}"
+  fi
+  names="$(desktop_entry_names "${extract_dir}/squashfs-root")"
+  rm -rf -- "${extract_dir}"
+  if [[ "${names}" != "${expected}" ]]
+  then
+    error "the packaged AppImage ships '${names:-no desktop entry}' at its root; expected only ${expected}, because Homebrew's app_image artifact installs the root entry beside the cask's own"
+  fi
+}
+
 # Packages the AppDir: quick-sharun (AppRun + the runtime closure including
 # libc), then the pkgforge appimagetool via APPIMAGETOOL, then the smoke gate.
 pipeline_pack() {
@@ -731,6 +763,9 @@ Install the Anylinux tools (packaging/scripts/install-anylinux-tools.sh) or add 
     error "Missing AppImage output: ${output_file}"
   fi
   chmod 0755 -- "${output_file}"
+  # Before the smoke gate: a wrong root entry is a structural defect that a
+  # successful launch says nothing about.
+  pipeline_assert_packaged_desktop "${output_file}"
   # Chromium-based payloads need --no-sandbox to start headless. A native
   # bundle (Zed) rejects it as an unknown flag and exits 2 before launching
   # anything, which would let the gate pass without ever starting the app.

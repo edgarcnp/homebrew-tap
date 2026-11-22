@@ -187,6 +187,19 @@ describe("checkCask", () => {
 
     const drift = checkCask({ ...descriptor, desktopId: "orca-launcher" }, source);
     assert.match(drift.join("; "), /applications\/orca-launcher\.desktop/);
+
+    // A renamed launcher leaves the entry under the cask token behind: earlier
+    // casks wrote it, and an image packed before the rename still installs it
+    // through app_image. The postflight removes it so an upgrade converges.
+    const noLegacyCleanup = source.replace(
+      '    remove ".local/share/applications/orca.desktop", base: :home\n',
+      "",
+    );
+    assert.notEqual(noLegacyCleanup, source);
+    assert.match(
+      checkCask(descriptor, noLegacyCleanup).join("; "),
+      /postflight does not remove the pre-rename entry \.local\/share\/applications\/orca\.desktop/,
+    );
   });
 
   it("checks a payload-owned desktop entry instead of a generated one", () => {

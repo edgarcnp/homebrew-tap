@@ -45,7 +45,7 @@ jobs:
         with:
           bun-version: 1.4.5
 
-      - name: Install all casks and verify declared binaries
+      - name: Install all casks and verify declared binaries and one desktop entry
         env:
           TAP_REPO: ${{ github.repository }}
         run: |
@@ -85,4 +85,8 @@ jobs:
             brew info --cask --json=v2 "$cask" | jq -r '.casks[0].artifacts[] | select(.binary) | .target' | while read -r bin; do
               test -x "$bin"
             done
+            # One launcher per app: Homebrew's app_image artifact installs the
+            # desktop entry packed into the AppImage, and the cask's postflight
+            # writes its own. A name mismatch leaves two icons that each parse.
+            packaging/scripts/check-desktop-entries.sh --app "$app"
           done

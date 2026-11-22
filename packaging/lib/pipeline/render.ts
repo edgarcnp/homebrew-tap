@@ -9,6 +9,15 @@ import type { AppDescriptor } from "../descriptor/app.ts";
 
 const REQUIRED_KEYS = ["Name=", "Comment=", "Exec=", "Icon=", "Type=Application"];
 
+// The launcher name: the desktopId when the app needs an entry name of its
+// own, else the cask token. It names the entry at the AppDir root — the one
+// Homebrew's app_image artifact installs — the copy under share/applications,
+// the entry the cask writes and the icon the cask installs. A single name
+// keeps the artifact's entry and the cask's entry the same file.
+export function launcherId(descriptor: AppDescriptor): string {
+  return descriptor.desktopId ?? descriptor.cask;
+}
+
 export function renderDesktopEntry(descriptor: AppDescriptor, version: string): string {
   const templatePath = `${appDir(descriptor.id)}/${descriptor.desktopTemplate}`;
   if (!fs.existsSync(templatePath)) fail(`Missing desktop template: ${templatePath}`);

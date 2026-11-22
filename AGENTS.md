@@ -161,7 +161,7 @@ memory or habit.
 | `retry.yml` | on completion of a build run, re-runs it when the run record says a failure is retryable; opens an issue otherwise |
 | `builder.yml` | rebuilds the `fbr-builder-base` image on Dockerfile changes and weekly, then pins it and prunes older versions, keeping the newest three |
 | `dispatch.yml` | entry point for API-dispatched builds (`request_id`, `app`, `version`); the run posts its own `accepted` report |
-| `cask-smoke.yml` | installs and smoke-tests the casks on push to `main` and weekly |
+| `cask-smoke.yml` | installs and smoke-tests the casks on push to `main` and weekly, and checks each app left exactly one desktop entry |
 | `publish.yml` (`brew pr-pull`) | pulls and publishes a named PR |
 | `autobump.yml` (`brew bump`) | Homebrew's autobump, triggered only when the workflow file itself changes; inert on a cask-only tap |
 

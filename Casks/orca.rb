@@ -40,6 +40,10 @@ cask "orca" do
       Categories=Utility;
       MimeType=text/markdown;text/csv;text/tab-separated-values;x-scheme-handler/orca;
     EOS
+    # Earlier casks wrote the entry under the cask token, and an image packed
+    # before the launcher rename still carries it for the app_image artifact to
+    # install; either would leave a second Orca IDE launcher.
+    remove ".local/share/applications/orca.desktop", base: :home
   end
 
   zap trash: [
@@ -47,7 +51,10 @@ cask "orca" do
     "~/.config/orca",
     "~/.local/bin/orca",
     "~/.local/share/applications/orca-ide.desktop",
+    "~/.local/share/applications/orca.desktop",
     "~/.local/share/icons/hicolor/512x512/apps/orca-ide.png",
+    "~/.local/share/icons/hicolor/512x512/apps/orca.png",
+    "~/.local/share/orca",
   ]
 
   caveats <<~EOS
