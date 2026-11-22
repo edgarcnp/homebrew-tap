@@ -101,22 +101,6 @@ jobs:
           if-no-files-found: error
           retention-days: 7
           overwrite: true
-      # One image version per run accumulates in the registry; keep the newest
-      # three and delete the rest. Only main prunes: a feature-branch dispatch
-      # pushes an image the pin job never adopts, and those must not count as
-      # newest and evict the version main is pinned to. Best-effort like the run
-      # reports, because the pushed image and its pin are this job's product: a
-      # failed prune must not fail the run. The version just pushed is the
-      # newest, so the pin the AppImage build reads is never in the delete set.
-      - name: Prune the older builder images
-        if: github.ref == 'refs/heads/main'
-        continue-on-error: true
-        uses: actions/delete-package-versions@e5bc658cc4c965c472efe991f8beea3981499c55 # v5.0.0
-        with:
-          package-name: fbr-builder-base
-          package-type: container
-          min-versions-to-keep: 3
-
   # After the image is pushed, commit the new tag+digest into
   # packaging/builder/pins.json so dispatches always run the image this
   # workflow produced. Signed and pushed with the same PAT the cask pins use,
@@ -130,6 +114,7 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
+      packages: write
     concurrency:
       group: pin-builder-image
       cancel-in-progress: false
@@ -191,6 +176,20 @@ jobs:
             sleep 10
             git fetch origin main
             git rebase FETCH_HEAD
+            # A rebase replays the commit without its signature; branch
+            # protection rejects an unsigned commit, so sign it again.
+            git commit --amend --no-edit -S
           done
           echo "could not push the builder image pin after 5 attempts" >&2
           exit 1
+      # Prune only after the new pin is on main. A failed pin must never leave
+      # pins.json pointing at a deleted image. Each tag is an index, a platform
+      # manifest and an attestation, so nine versions keep three tags.
+      # Best-effort: a failed prune must not fail a run whose pin succeeded.
+      - name: Prune the older builder images
+        continue-on-error: true
+        uses: actions/delete-package-versions@e5bc658cc4c965c472efe991f8beea3981499c55 # v5.0.0
+        with:
+          package-name: fbr-builder-base
+          package-type: container
+          min-versions-to-keep: 9
