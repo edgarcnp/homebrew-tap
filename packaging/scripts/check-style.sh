@@ -32,9 +32,9 @@ echo "=== unit tests ==="
 bun run test
 echo "unit tests: OK"
 
-echo "=== cask vs app descriptor ==="
-bun packaging/bin/fbr.ts cask --action check
-echo "cask check: OK"
+echo "=== packaging tools ==="
+packaging/scripts/check-tools.sh
+echo "packaging tools: OK"
 
 echo "=== brew style ==="
 packaging/scripts/style.sh

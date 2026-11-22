@@ -10,25 +10,16 @@ name: Pipeline smoke (build only)
 #   little-genius     avakot + deb-files
 #   opencode-desktop  update-manifest + deb-tree
 #
-# Run this before merging a change that touches the descriptor schema, the
+# Run this before releasing a change that touches the descriptor schema, the
 # shell staging stages, or the pack/smoke path. It is intentionally manual:
-# six full AppImage builds are expensive and must not gate every PR.
+# six full AppImage builds are expensive and must not gate every push. A main
+# push runs the fast `check-tools` and test gates instead.
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - "packaging/**"
-      - "package.json"
-      - "bun.lock"
-      - "tsconfig.json"
-      - ".github/workflows/build-appimage.yml"
-      - ".github/workflows/pipeline-smoke.yml"
-      - ".github/actions/setup-packaging/**"
   workflow_dispatch:
 
-# A newer push supersedes a smoke run that is still building stale code.
+# A newer manual dispatch supersedes a smoke run that is still building stale
+# code.
 concurrency:
   group: pipeline-smoke-${{ github.ref }}
   cancel-in-progress: true

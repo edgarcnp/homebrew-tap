@@ -445,11 +445,11 @@ implements; both are `renovate.json` rules.
 ## Production gate
 
 Unit tests do not exercise `quick-sharun`, `appimagetool` or the smoke test.
-The **Pipeline smoke (build only)** workflow runs automatically on every push
-to `main` that touches `packaging/**`, the root package files, or the build
-workflow/action. A newer push cancels an older smoke run. It can also be
-dispatched manually. It builds one app per artifact/payload family with
-`publish: false` and `force_build: true`:
+A main push runs the fast `check-tools.sh` and test gates; the full
+**Pipeline smoke (build only)** workflow is manual, because six AppImage builds
+are expensive. Run it before releasing a change that touches the descriptor
+schema, the staging stages, or the pack/smoke path. It builds one app per
+artifact/payload family with `publish: false` and `force_build: true`:
 
 - `vscode` — json-asset + tarball-tree
 - `orca` — github-release + deb-tree
@@ -467,10 +467,10 @@ real dispatch so publish and pin-cask are exercised.
 ## Tests and gates
 
 `bun test` runs the unit suite (Bun's runner over `node:test`; no test
-dependencies). The PR workflow also has a `runtime-dependencies` job that
-installs with `--production` and runs `fbr cask --action check`, so a missing
-runtime module fails in minutes instead of inside a build. The suite covers
-dpkg ordering, HTTP timeout/cap/atomic write,
+dependencies). The push/PR workflow also has a `runtime-dependencies` job that
+installs with `--production` and runs `packaging/scripts/check-tools.sh`:
+every descriptor, its CI projection, the JSON Schema command and every cask,
+without a build. The suite covers dpkg ordering, HTTP timeout/cap/atomic write,
 guards and metadata validation, descriptor validation, cask read/update/consistency, the gate table,
 updater neutralization, desktop rendering, run records, retry plans, the
 artifact parsers, the JSON-asset and Mozilla-signature paths, and the detached

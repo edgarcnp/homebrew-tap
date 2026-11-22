@@ -69,7 +69,7 @@ failure to CI.
 bun install --frozen-lockfile --ignore-scripts  # once
 bun run typecheck                               # tsc --noEmit, strict
 bun run test                                    # unit suite
-bun packaging/bin/fbr.ts cask --action check    # each cask matches its descriptor
+bun run check:tools                             # descriptors, schema and casks load
 bun run style                                   # brew style over authored files (excludes node_modules)
 packaging/scripts/check-style.sh                # everything above plus brew audit per cask
 ```
@@ -154,8 +154,8 @@ memory or habit.
 
 | Workflow | What it does |
 | --- | --- |
-| `tests.yml` (`brew test-bot`) | push/PR gate: typecheck, tests, cask check, shellcheck, actionlint, `brew style`/`audit`, tap syntax, plus a production-dependency CLI job |
-| `pipeline-smoke.yml` | build-only gate on packaging pushes to `main` (and manual): one app per artifact/payload family, no release or cask changes |
+| `tests.yml` (`brew test-bot`) | push/PR gate: typecheck, tests, tool check, shellcheck, actionlint, `brew style`/`audit`, tap syntax, plus a production-dependency tool job |
+| `pipeline-smoke.yml` | manual build-only gate: one app per artifact/payload family, no release or cask changes |
 | `build.yml` | build one app or all of them; the app list comes from the descriptors |
 | `build-appimage.yml` | the reusable per-app build (container, toolchain, pack, smoke test) |
 | `retry.yml` | on completion of a build run, re-runs it when the run record says a failure is retryable; opens an issue otherwise |

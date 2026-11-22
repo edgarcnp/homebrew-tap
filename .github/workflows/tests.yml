@@ -186,5 +186,5 @@ jobs:
         with:
           bun-version: 1.4.5
       - uses: ./.github/actions/setup-packaging
-      - name: Run the CLI with production dependencies only
-        run: bun packaging/bin/fbr.ts cask --action check
+      - name: Check the packaging tools with production dependencies only
+        run: packaging/scripts/check-tools.sh
