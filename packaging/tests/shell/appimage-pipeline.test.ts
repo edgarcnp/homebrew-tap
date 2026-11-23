@@ -1156,7 +1156,7 @@ describe("pipeline_stage", () => {
   const APP_JSON = JSON.stringify({
     payload: {
       kind: "deb-files",
-      files: ["usr/bin/pi-agent-desktop"],
+      files: ["usr/bin/app"],
       trees: [{ source: "usr/lib/Pi Agent", target: "usr/lib/Pi Agent" }],
     },
     icon: { size: "128x128" },
@@ -1195,11 +1195,11 @@ describe("pipeline_stage", () => {
 
   it("stages a declared tree at its own AppDir path", { skip: !HAS_JQ }, () => {
     const { status, stderr } = stage(APP_JSON, {
-      "usr/bin/pi-agent-desktop": "binary",
+      "usr/bin/app": "binary",
       "usr/lib/Pi Agent/resources/server/desktop-server.cjs": "server",
     });
     assert.equal(status, 0, stderr);
-    assert.equal(fs.readFileSync(pathIn("bin/pi-agent-desktop"), "utf8"), "binary");
+    assert.equal(fs.readFileSync(pathIn("bin/app"), "utf8"), "binary");
     assert.equal(
       fs.readFileSync(pathIn("usr/lib/Pi Agent/resources/server/desktop-server.cjs"), "utf8"),
       "server",
@@ -1208,7 +1208,7 @@ describe("pipeline_stage", () => {
   });
 
   it("fails when a declared tree is not in the payload", { skip: !HAS_JQ }, () => {
-    const { status, stderr } = stage(APP_JSON, { "usr/bin/pi-agent-desktop": "binary" });
+    const { status, stderr } = stage(APP_JSON, { "usr/bin/app": "binary" });
     assert.equal(status, 1);
     assert.match(stderr, /Missing payload tree: .*usr\/lib\/Pi Agent/);
   });
@@ -1219,13 +1219,13 @@ describe("pipeline_stage", () => {
     const appJson = JSON.stringify({
       payload: {
         kind: "deb-files",
-        files: ["usr/bin/pi-agent-desktop"],
+        files: ["usr/bin/app"],
         trees: [{ source: "usr/lib/a\tb", target: "lib/a\tb" }],
       },
       icon: { size: "128x128" },
     });
     const { status, stderr } = stage(appJson, {
-      "usr/bin/pi-agent-desktop": "binary",
+      "usr/bin/app": "binary",
       "usr/lib/a\tb/resources/node": "node",
     });
     assert.equal(status, 0, stderr);
