@@ -1,6 +1,6 @@
 cask "pi-agent-desktop" do
-  version "0.0.0"
-  sha256 "0000000000000000000000000000000000000000000000000000000000000000"
+  version "0.8.7"
+  sha256 "ba6fab0635f1334e387d822044fd69adf589d19f531461b39edfbcd1eb5637e2"
 
   url "https://github.com/edgarcnp/homebrew-tap/releases/download/pi-agent-desktop-v#{version}/pi-agent-desktop-#{version}-x86_64.AppImage"
   name "Pi Agent Desktop"
