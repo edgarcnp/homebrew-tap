@@ -296,6 +296,58 @@ describe("descriptor contents (regression against the previous per-app scripts)"
     assert.equal(descriptor.updater.residualScan?.severity, "error");
   });
 
+  it("keeps thinkrail's zstd bundle, layout links and updater patch", () => {
+    const descriptor = loadDescriptor("thinkrail");
+    assert.equal(descriptor.artifact.kind, "github-release");
+    if (descriptor.artifact.kind === "github-release") {
+      assert.equal(descriptor.artifact.repository, "https://api.github.com/repos/JetBrains/thinkrail");
+      assert.equal(
+        descriptor.artifact.assetNameTemplate,
+        "stable-linux-x64-ThinkRail-{version}.tar.zst",
+      );
+      assert.equal(descriptor.artifact.tagPrefix, "v");
+    }
+    // The daily nightlies are prereleases named "Nightly 0.5.0-nightly.11", so
+    // the plain three-part tag is what holds the tap to the stable channel.
+    assert.deepEqual(descriptor.watch, {
+      feedUrl: "https://api.github.com/repos/JetBrains/thinkrail/releases",
+      format: "github-release",
+      versionPattern: "^v(\\d+\\.\\d+\\.\\d+)$",
+      repo: "JetBrains/thinkrail",
+    });
+    assert.equal(descriptor.payload.kind, "tarball-tree");
+    assert.equal(
+      descriptor.payload.kind === "tarball-tree" ? descriptor.payload.root : "",
+      "ThinkRail",
+    );
+    // The bundle ships its own entry (Exec=launcher); the pipeline renders the
+    // one a user installs.
+    assert.deepEqual(
+      descriptor.payload.kind === "tarball-tree" ? descriptor.payload.exclude : undefined,
+      ["ThinkRail.desktop"],
+    );
+    // The Electrobun runtime resolves Resources/ beside bin/ and its private
+    // libraries from the bun process, which quick-sharun moves to shared/bin.
+    assert.deepEqual(descriptor.appDirLinks, [
+      { link: "shared/Resources", target: "Resources" },
+      { link: "shared/bin/libElectrobunCore.so", target: "bin/libElectrobunCore.so" },
+      { link: "shared/bin/libNativeWrapper.so", target: "bin/libNativeWrapper.so" },
+      { link: "shared/bin/libasar.so", target: "bin/libasar.so" },
+    ]);
+    // libNativeWrapper.so carries GTK and WebKit as NEEDED entries, so the
+    // closure scan finds them in the debloated packages. libayatana-appindicator
+    // is the one nothing else pulls in, so it is the only declared package.
+    assert.deepEqual(descriptor.buildPackages, ["libayatana-appindicator"]);
+    assert.equal(descriptor.quickSharun.libraries, undefined);
+    assert.equal(descriptor.debloatArgs, "--add-common --prefer-nano webkit2gtk-4.1-mini gdk-pixbuf2-mini");
+    assert.deepEqual(descriptor.binaryTargets, ["thinkrail"]);
+    // One JSON field carries the whole updater endpoint.
+    const patch = descriptor.updater.patchEndpoint;
+    assert.deepEqual(patch?.targets, ["Resources/version.json"]);
+    assert.equal(patch?.binaryReplacement.length, patch?.from.length);
+    assert.equal(descriptor.updater.residualScan?.severity, "error");
+  });
+
   it("validates a payload-owned cask desktop entry", () => {
     const descriptor = loadDescriptor("zed");
     assert.deepEqual(descriptor.caskDesktopEntry, {
@@ -350,6 +402,34 @@ describe("descriptor contents (regression against the previous per-app scripts)"
     assertRejects("Orca IDE", /desktopId: must be a lowercase app id/);
     assertRejects("orca/ide", /desktopId: must be a lowercase app id/);
     assertRejects("", /desktopId: must be a lowercase app id/);
+  });
+
+  it("pairs a zstd tarball container with a tarball-tree payload", () => {
+    // ThinkRail publishes its desktop bundle zstd-compressed; `tar -f` reads
+    // that like any other tarball, so the container is a tarball too.
+    const descriptor = validateDescriptor(
+      mutated("zed", (copy) => {
+        nested(copy, "artifact")["assetNameTemplate"] =
+          "stable-linux-x64-ThinkRail-{version}.tar.zst";
+      }),
+      "zed",
+    );
+    assert.equal(
+      descriptor.artifact.kind === "github-release" ? descriptor.artifact.assetNameTemplate : "",
+      "stable-linux-x64-ThinkRail-{version}.tar.zst",
+    );
+    // Still a tarball, not a licence to skip the payload kind it stages.
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("zed", (copy) => {
+            nested(copy, "artifact")["assetNameTemplate"] = "ThinkRail-{version}.tar.zst";
+            copy["payload"] = { kind: "appimage-tree" };
+          }),
+          "zed",
+        ),
+      /payload must be tarball-tree for a tarball asset/,
+    );
   });
 
   it("validates a bundle tarball payload's root and target", () => {

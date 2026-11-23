@@ -82,6 +82,7 @@ describe("github-release artifact", () => {
     assert.equal(updateYmlName("arm64"), "latest-linux-arm64.yml");
     assert.equal(payloadExtension("zed-linux-x86_64.tar.gz"), ".tar.gz");
     assert.equal(payloadExtension("firefox-160.0.tar.xz"), ".tar.xz");
+    assert.equal(payloadExtension("stable-linux-x64-ThinkRail-0.4.0.tar.zst"), ".tar.zst");
     assert.equal(payloadExtension("pi-desktop_1.0.0_amd64.deb"), ".deb");
     assert.equal(payloadExtension("WFHelper-2.1.0.AppImage"), ".AppImage");
     assert.throws(

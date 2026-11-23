@@ -1,0 +1,61 @@
+{
+  "id": "thinkrail",
+  "appName": "ThinkRail",
+  "displayName": "ThinkRail",
+  "comment": "The agentic IDE that gets better every time you use it",
+  "cask": "thinkrail",
+  "watch": {
+    "feedUrl": "https://api.github.com/repos/JetBrains/thinkrail/releases",
+    "format": "github-release",
+    "versionPattern": "^v(\\d+\\.\\d+\\.\\d+)$",
+    "repo": "JetBrains/thinkrail"
+  },
+  "assetPrefix": "thinkrail",
+  "tagPrefix": "thinkrail-v",
+  "sourceRepo": "edgarcnp/homebrew-tap",
+  "sourceOwner": "edgarcnp",
+  "sourceDir": "packaging/apps/thinkrail",
+  "buildCommand": "./build.sh",
+  "debloatArgs": "--add-common --prefer-nano webkit2gtk-4.1-mini gdk-pixbuf2-mini",
+  "buildPackages": ["libayatana-appindicator"],
+  "architectures": ["amd64"],
+  "binaryTargets": ["thinkrail"],
+  "artifact": {
+    "kind": "github-release",
+    "repository": "https://api.github.com/repos/JetBrains/thinkrail",
+    "packageName": "thinkrail",
+    "tagPrefix": "v",
+    "assetNameTemplate": "stable-linux-x64-ThinkRail-{version}.tar.zst"
+  },
+  "payload": {
+    "kind": "tarball-tree",
+    "root": "ThinkRail",
+    "exclude": ["ThinkRail.desktop"]
+  },
+  "appDirLinks": [
+    { "link": "shared/Resources", "target": "Resources" },
+    { "link": "shared/bin/libElectrobunCore.so", "target": "bin/libElectrobunCore.so" },
+    { "link": "shared/bin/libNativeWrapper.so", "target": "bin/libNativeWrapper.so" },
+    { "link": "shared/bin/libasar.so", "target": "bin/libasar.so" }
+  ],
+  "icon": {
+    "source": "Resources/appIcon.png",
+    "size": "512x512"
+  },
+  "desktopTemplate": "templates/thinkrail.desktop",
+  "updater": {
+    "patchEndpoint": {
+      "from": "https://github.com/JetBrains/thinkrail/releases/download/desktop-updates",
+      "textReplacement": "https://update.invalid/thinkrail/desktop-updates/disabled-update-upgrade",
+      "binaryReplacement": "https://update.invalid/thinkrail/desktop-updates/disabled-update-upgrade",
+      "targets": ["Resources/version.json"]
+    },
+    "residualScan": {
+      "patterns": ["releases/download/desktop-updates"],
+      "severity": "error"
+    }
+  },
+  "quickSharun": {
+    "hooks": ["fix-namespaces.hook"]
+  }
+}

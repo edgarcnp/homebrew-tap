@@ -68,7 +68,7 @@ it for the version, and the tap never resolves "the newest".
    fallback to another release.
 3. **extract** — `dpkg-deb -x` for `.deb` payloads (with an arch assertion), the
    upstream AppImage's own `--appimage-extract` (no FUSE needed), or `tar` for
-   an application tarball (`.tar.gz`, `.tar.xz`).
+   an application tarball (`.tar.gz`, `.tar.xz`, `.tar.zst`).
 4. **stage** — descriptor-driven staging into `AppDir/bin` (a payload tree, a
    list of binaries, an AppImage tree with renames/excludes, or a tarball's
    `root`/`target`).
@@ -110,7 +110,7 @@ record whose `app` does not — `fbr report` refuses such a record first.
 | `buildPackages` | Arch packages CI installs into the build container for this app, beyond the shared toolchain — for libraries that must exist at pack time, e.g. one named in `quickSharun.libraries`. |
 | `architectures` | Arches this app ships; the pipeline builds, publishes and checks only these. |
 | `binaryTargets` | Names the cask must expose on `PATH` (checked by `fbr cask --action check`). |
-| `artifact` | Where the **requested version's** payload comes from: `github-release`, `json-asset`, `mozilla-release`, `update-manifest` or `avakot`. `mozilla-release` requires a `tarball-tree` payload; `update-manifest` and `avakot` require `deb-tree`/`deb-files`; a `github-release` asset template must end in `.deb` (deb payload), `.AppImage` (appimage-tree) or `.tar.gz`/`.tar.xz` (tarball-tree). The old `advisory` alias is removed. |
+| `artifact` | Where the **requested version's** payload comes from: `github-release`, `json-asset`, `mozilla-release`, `update-manifest` or `avakot`. `mozilla-release` requires a `tarball-tree` payload; `update-manifest` and `avakot` require `deb-tree`/`deb-files`; a `github-release` asset template must end in `.deb` (deb payload), `.AppImage` (appimage-tree) or `.tar.gz`/`.tar.xz`/`.tar.zst` (tarball-tree). The old `advisory` alias is removed. |
 | `payload` | How the upstream package is staged. `deb-tree`/`deb-files` from a dpkg tree and `appimage-tree` entries go into `AppDir/bin`. `deb-files` also takes `trees`: `{source, target}` directories staged at an AppDir path of their own — outside `bin/` and the paths the pack stages own (`shared/`, `sharun`, `dash`, `AppRun*`, `.env`) — for an app that resolves its data elsewhere (a Tauri payload reads `../lib/<product name>` beside its launcher). `tarball-tree` stages a tarball tree either at the AppDir root (`target: "root"`, the default) so a bundle's own `bin/`, `libexec/`, `lib/` and `share/` keep the relative paths its binaries resolve (`$ORIGIN/../lib`, the CLI's `../libexec/zed-editor`), or into `AppDir/bin` (`target: "bin"`) for a flat application tarball. `root` names the directory inside the tarball; when absent, the tarball must contain exactly one top-level directory. `exclude` skips top-level names/globs while staging (ArtCraft skips its inert `share/` docs, whose text repeats the slug its updater scan rejects). |
 | `icon` | Icon path plus its hicolor directory: a `WxH` size for a raster icon, or `scalable` for an SVG. `base: "payload"` (default) resolves the path inside the extracted payload; `base: "app"` resolves a repo-owned icon under the app directory (GitComet's tarball ships none). The staged icon keeps the source file's extension. |
 | `desktopTemplate` | Desktop entry template, relative to the app dir. |

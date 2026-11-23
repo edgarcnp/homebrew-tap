@@ -57,14 +57,16 @@ export function isAppImageAsset(name: string): boolean {
 
 // The extension the payload is written with, which also tells the extract
 // stage how to unpack it: dpkg for a `.deb`, its own extraction for an
-// `.AppImage`, `tar` for a tarball. Any other container is a layout this
-// pipeline cannot unpack, so it fails here instead of writing a mislabelled
-// file the build would only trip over later.
+// `.AppImage`, `tar` for a tarball, whatever its compression (ThinkRail
+// publishes its desktop bundle zstd-compressed, and `tar -f` reads that too).
+// Any other container is a layout this pipeline cannot unpack, so it fails here
+// instead of writing a mislabelled file the build would only trip over later.
 export function payloadExtension(name: string): string {
   if (name.endsWith(".deb")) return ".deb";
   if (isAppImageAsset(name)) return ".AppImage";
   if (name.endsWith(".tar.gz")) return ".tar.gz";
   if (name.endsWith(".tar.xz")) return ".tar.xz";
+  if (name.endsWith(".tar.zst")) return ".tar.zst";
   return fail(`Unsupported release asset, not a .deb, .AppImage or tarball payload: ${name}`);
 }
 

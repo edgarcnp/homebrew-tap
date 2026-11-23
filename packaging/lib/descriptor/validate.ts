@@ -462,7 +462,11 @@ function validateCompatibility(descriptor: AppDescriptorInput, label: string): v
       if (payload.kind !== "appimage-tree") {
         fail(`${label}.payload must be appimage-tree for an .AppImage asset`);
       }
-    } else if (name.endsWith(".tar.gz") || name.endsWith(".tar.xz")) {
+    } else if (
+      name.endsWith(".tar.gz") ||
+      name.endsWith(".tar.xz") ||
+      name.endsWith(".tar.zst")
+    ) {
       if (payload.kind !== "tarball-tree") {
         fail(`${label}.payload must be tarball-tree for a tarball asset`);
       }

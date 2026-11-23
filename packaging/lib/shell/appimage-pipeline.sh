@@ -142,9 +142,10 @@ pipeline_extract() {
       PAYLOAD_ROOT="${deb_payload}"
       ;;
     tarball-tree)
-      # Any tarball compression: an application tarball (.tar.gz) and a
-      # Mozilla release tarball (.tar.xz) both land here. `tar -f` detects the
-      # compression from the archive itself.
+      # Any tarball compression: an application tarball (.tar.gz), a Mozilla
+      # release tarball (.tar.xz) and ThinkRail's Electrobun bundle (.tar.zst)
+      # all land here. `tar -f` detects the compression from the archive itself
+      # and shells out to the matching tool, which the builder image carries.
       local tar_payload="${WORK_DIR}/tar-payload"
       mkdir -p -- "${tar_payload}"
       tar -xf "${PAYLOAD_PATH}" -C "${tar_payload}"
