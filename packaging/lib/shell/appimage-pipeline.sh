@@ -485,8 +485,10 @@ pipeline_link_runtime_targets() {
     name="${target##*/}"
     wrapper="${APPDIR}/bin/${name}"
     real="${APPDIR}/shared/bin/${name}"
-    [[ -f "${wrapper}" ]] && [[ "${wrapper}" -ef "${sharun}" ]] ||
+    if [[ ! -f "${wrapper}" ]] || [[ ! "${wrapper}" -ef "${sharun}" ]]
+    then
       error "Runtime target ${target} has no sharun wrapper at bin/${name}"
+    fi
     [[ -x "${real}" ]] || error "Runtime target ${target} was not deployed to shared/bin/${name}"
     relative="$(realpath --relative-to="$(dirname -- "${destination}")" "${wrapper}")"
     if [[ -L "${destination}" ]] && [[ "$(readlink -- "${destination}")" = "${relative}" ]]
