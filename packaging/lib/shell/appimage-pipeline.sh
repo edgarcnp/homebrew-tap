@@ -249,6 +249,19 @@ pipeline_stage() {
         ensure_file_exists "${PAYLOAD_ROOT}/${file}" "payload file ${file}"
         cp -a -- "${PAYLOAD_ROOT}/${file}" "${APPDIR}/bin/"
       done < <(descriptor_field '.payload.files[]')
+      # A tree the app resolves outside bin/ keeps its own AppDir destination:
+      # a Tauri payload reads <AppDir>/lib/<product name>/resources, and
+      # staging it under bin/ would move the resources out of reach. Two reads
+      # per entry, because jq -r emits one line per value and a path may hold a
+      # tab (which @tsv would escape).
+      local tree_source tree_target
+      while IFS= read -r tree_source && IFS= read -r tree_target
+      do
+        [[ -d "${PAYLOAD_ROOT}/${tree_source}" ]] ||
+          error "Missing payload tree: ${PAYLOAD_ROOT}/${tree_source}"
+        mkdir -p -- "$(dirname -- "${APPDIR}/${tree_target}")"
+        cp -aT -- "${PAYLOAD_ROOT}/${tree_source}" "${APPDIR}/${tree_target}"
+      done < <(descriptor_field '.payload.trees[]? | .source, .target')
       ;;
     appimage-tree)
       # Entry by entry, renaming the scoped executable and dropping the upstream
@@ -453,6 +466,39 @@ pipeline_reconcile_sharun_sidecars() {
   [[ "${reconciled}" -eq 0 ]] || info "Reconciled ${reconciled} nested sharun sidecar(s)"
 }
 
+# A declared runtime target is a file the payload spawns by its own path (a
+# bundled Node, for instance). quick-sharun deploys it to shared/bin/<name>
+# with a bin/<name> wrapper, but it only hardlinks sharun over executables
+# under bin/, so the declared path keeps the pristine host-linked copy: the app
+# would run that one while the bundled copy goes unreached, and the image
+# would carry the binary twice. Point the declared path at its wrapper, the one
+# slot sharun resolves without the environment, so the app runs the
+# bundled-loader copy.
+pipeline_link_runtime_targets() {
+  local sharun target destination name wrapper real relative
+  sharun="${APPDIR}/sharun"
+  [[ -x "${sharun}" ]] || return 0
+  while IFS= read -r target
+  do
+    [[ -n "${target}" ]] || continue
+    destination="${APPDIR}/${target}"
+    name="${target##*/}"
+    wrapper="${APPDIR}/bin/${name}"
+    real="${APPDIR}/shared/bin/${name}"
+    [[ -f "${wrapper}" ]] && [[ "${wrapper}" -ef "${sharun}" ]] ||
+      error "Runtime target ${target} has no sharun wrapper at bin/${name}"
+    [[ -x "${real}" ]] || error "Runtime target ${target} was not deployed to shared/bin/${name}"
+    relative="$(realpath --relative-to="$(dirname -- "${destination}")" "${wrapper}")"
+    if [[ -L "${destination}" ]] && [[ "$(readlink -- "${destination}")" = "${relative}" ]]
+    then
+      continue
+    fi
+    rm -f -- "${destination}"
+    ln -s -- "${relative}" "${destination}"
+    info "Linked runtime target ${target} -> ${relative}"
+  done < <(descriptor_field '.quickSharun.targets // [] | .[]')
+}
+
 # A bundle tarball's CLI re-execs a sibling binary by relative path (Zed's
 # `zed` runs ../libexec/zed-editor). That exec goes through the host's
 # ld-linux while the binary's rpath pulls the AppImage's bundled libc, so on a
@@ -599,10 +645,11 @@ pipeline_restore_host_helpers() {
 }
 
 # Fills TARGETS with the quick-sharun deploy targets: the staged payload
-# binaries, plus every library the descriptor declares for a runtime dlopen.
-# quick-sharun bundles a library only when it is a target or reachable from
-# one, and an app that dlopens a library never links it, so ldd would never
-# surface it.
+# binaries, every runtime executable the descriptor declares outside bin/
+# (a bundled Node, which the payload spawns but does not expose on PATH), and
+# every library the descriptor declares for a runtime dlopen. quick-sharun
+# bundles a library only when it is a target or reachable from one, and an app
+# that dlopens a library never links it, so ldd would never surface it.
 pipeline_collect_targets() {
   TARGETS=()
   if [[ "$(descriptor_field '.payload.kind')" = "deb-files" ]]
@@ -644,6 +691,14 @@ pipeline_collect_targets() {
     [[ -e "${library}" ]] || error "Missing quick-sharun library: ${library}"
     TARGETS+=("${library}")
   done < <(descriptor_field '.quickSharun.libraries // [] | .[]')
+
+  local target
+  while IFS= read -r target
+  do
+    [[ -n "${target}" ]] || continue
+    [[ -e "${APPDIR}/${target}" ]] || error "Missing quick-sharun target: ${APPDIR}/${target}"
+    TARGETS+=("${APPDIR}/${target}")
+  done < <(descriptor_field '.quickSharun.targets // [] | .[]')
 }
 
 # Names the abort quick-sharun reports when a staged binary needs a soname the
@@ -740,6 +795,7 @@ Install the Anylinux tools (packaging/scripts/install-anylinux-tools.sh) or add 
   pipeline_run_quick_sharun
   pipeline_restore_host_helpers
   pipeline_reconcile_sharun_sidecars
+  pipeline_link_runtime_targets
   pipeline_shim_bundle_libexec
 
   # .env and the runtime hook belong to the finished AppDir (after AppRun exists).

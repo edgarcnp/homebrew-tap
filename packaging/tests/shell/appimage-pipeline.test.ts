@@ -448,6 +448,29 @@ describe("pipeline_collect_targets", () => {
     assert.match(stderr, /No staged binaries/);
   });
 
+  it("appends a runtime target the payload spawns outside bin/", { skip: !HAS_JQ }, () => {
+    writeExecutable("lib/App/resources/node/node");
+    const { status, targets } = collectTargets(
+      JSON.stringify({
+        payload: { kind: "deb-files", files: ["usr/bin/app"] },
+        quickSharun: { targets: ["lib/App/resources/node/node"] },
+      }),
+    );
+    assert.equal(status, 0);
+    assert.deepEqual(targets, [pathIn("bin/app"), pathIn("lib/App/resources/node/node")]);
+  });
+
+  it("fails when a declared runtime target is not in the AppDir", { skip: !HAS_JQ }, () => {
+    const { status, stderr } = collectTargets(
+      JSON.stringify({
+        payload: { kind: "deb-files", files: ["usr/bin/app"] },
+        quickSharun: { targets: ["lib/missing/node"] },
+      }),
+    );
+    assert.equal(status, 1);
+    assert.match(stderr, /Missing quick-sharun target/);
+  });
+
   it("fails when a declared library is not in the build environment", { skip: !HAS_JQ }, () => {
     const { status, stderr } = collectTargets(
       JSON.stringify({
@@ -1122,5 +1145,150 @@ describe("pipeline_assert_packaged_desktop", () => {
     entryNames("orca-ide.desktop");
     run();
     assert.deepEqual(fs.readdirSync(scratch).sort(), ["args", "root", "orca-x86_64.AppImage"].sort());
+  });
+});
+
+// deb-files staging: the declared files land in bin/ (and are the quick-sharun
+// targets), while a declared tree keeps an AppDir path of its own. A Tauri
+// payload resolves <APPDIR>/usr/lib/<product name> at runtime, so staging that
+// tree under bin/ would leave the resources out of reach.
+describe("pipeline_stage", () => {
+  const APP_JSON = JSON.stringify({
+    payload: {
+      kind: "deb-files",
+      files: ["usr/bin/pi-agent-desktop"],
+      trees: [{ source: "usr/lib/Pi Agent", target: "usr/lib/Pi Agent" }],
+    },
+    icon: { size: "128x128" },
+  });
+
+  function stage(
+    appJson: string,
+    layout: Record<string, string>,
+  ): { status: number | null; stderr: string } {
+    const payloadRoot = path.join(workDir, "payload");
+    fs.mkdirSync(payloadRoot, { recursive: true });
+    for (const [relative, content] of Object.entries(layout)) {
+      const full = path.join(payloadRoot, relative);
+      fs.mkdirSync(path.dirname(full), { recursive: true });
+      fs.writeFileSync(full, content);
+    }
+    const result = spawnSync(
+      "bash",
+      [
+        "-c",
+        'set -Eeuo pipefail; . "$PIPELINE_LIB"; APPDIR="$APP_DIR"; PAYLOAD_ROOT="$PAYLOAD_ROOT"; pipeline_stage',
+      ],
+      {
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          PIPELINE_LIB,
+          APP_DIR: appDir,
+          PAYLOAD_ROOT: payloadRoot,
+          APP_JSON: appJson,
+        },
+      },
+    );
+    return { status: result.status, stderr: result.stderr ?? "" };
+  }
+
+  it("stages a declared tree at its own AppDir path", { skip: !HAS_JQ }, () => {
+    const { status, stderr } = stage(APP_JSON, {
+      "usr/bin/pi-agent-desktop": "binary",
+      "usr/lib/Pi Agent/resources/server/desktop-server.cjs": "server",
+    });
+    assert.equal(status, 0, stderr);
+    assert.equal(fs.readFileSync(pathIn("bin/pi-agent-desktop"), "utf8"), "binary");
+    assert.equal(
+      fs.readFileSync(pathIn("usr/lib/Pi Agent/resources/server/desktop-server.cjs"), "utf8"),
+      "server",
+    );
+    assert.equal(fs.existsSync(pathIn("bin/usr")), false);
+  });
+
+  it("fails when a declared tree is not in the payload", { skip: !HAS_JQ }, () => {
+    const { status, stderr } = stage(APP_JSON, { "usr/bin/pi-agent-desktop": "binary" });
+    assert.equal(status, 1);
+    assert.match(stderr, /Missing payload tree: .*usr\/lib\/Pi Agent/);
+  });
+
+  // The source and target are read one per line, so a path holding a tab (the
+  // scalar pattern allows one) survives; a TSV transport would escape it.
+  it("keeps a tab in a declared tree path", { skip: !HAS_JQ }, () => {
+    const appJson = JSON.stringify({
+      payload: {
+        kind: "deb-files",
+        files: ["usr/bin/pi-agent-desktop"],
+        trees: [{ source: "usr/lib/a\tb", target: "lib/a\tb" }],
+      },
+      icon: { size: "128x128" },
+    });
+    const { status, stderr } = stage(appJson, {
+      "usr/bin/pi-agent-desktop": "binary",
+      "usr/lib/a\tb/resources/node": "node",
+    });
+    assert.equal(status, 0, stderr);
+    assert.equal(fs.readFileSync(pathIn("lib/a\tb/resources/node"), "utf8"), "node");
+  });
+});
+
+// A declared runtime target (a bundled Node) must resolve to its bin/ wrapper.
+// quick-sharun only hardlinks sharun over executables under bin/, so without
+// this stage the declared path keeps the pristine host-linked copy while the
+// deployed one goes unreached, and the image carries the binary twice.
+describe("pipeline_link_runtime_targets", () => {
+  const APP_JSON = JSON.stringify({ quickSharun: { targets: ["lib/App/resources/node/node"] } });
+
+  function linkRuntimeTargets(appJson = APP_JSON): { status: number | null; stderr: string } {
+    const result = spawnSync(
+      "bash",
+      [
+        "-c",
+        'set -Eeuo pipefail; . "$PIPELINE_LIB"; APPDIR="$APP_DIR"; pipeline_link_runtime_targets',
+      ],
+      {
+        encoding: "utf8",
+        env: { ...process.env, PIPELINE_LIB, APP_DIR: appDir, APP_JSON: appJson },
+      },
+    );
+    return { status: result.status, stderr: result.stderr ?? "" };
+  }
+
+  // What quick-sharun leaves: a bin/<name> wrapper, the deployed binary, and
+  // the pristine copy at the declared path.
+  function seedWrappedTarget(): void {
+    makeSharun();
+    wrap("bin/node");
+    writeExecutable("shared/bin/node");
+    writeExecutable("lib/App/resources/node/node");
+  }
+
+  it("points the declared path at the bin/ wrapper", { skip: !HAS_JQ }, () => {
+    seedWrappedTarget();
+    const { status, stderr } = linkRuntimeTargets();
+    assert.equal(status, 0, stderr);
+    const target = pathIn("lib/App/resources/node/node");
+    assert.equal(fs.lstatSync(target).isSymbolicLink(), true);
+    assert.equal(fs.realpathSync(target), fs.realpathSync(pathIn("bin/node")));
+    // relative, so the link survives the read-only mount path changing per run
+    assert.equal(fs.readlinkSync(target).startsWith("/"), false);
+  });
+
+  it("stays clean when the stage runs again", { skip: !HAS_JQ }, () => {
+    seedWrappedTarget();
+    assert.equal(linkRuntimeTargets().status, 0);
+    const before = fs.readlinkSync(pathIn("lib/App/resources/node/node"));
+    assert.equal(linkRuntimeTargets().status, 0);
+    assert.equal(fs.readlinkSync(pathIn("lib/App/resources/node/node")), before);
+  });
+
+  it("fails when quick-sharun created no wrapper", { skip: !HAS_JQ }, () => {
+    makeSharun();
+    writeExecutable("shared/bin/node");
+    writeExecutable("lib/App/resources/node/node");
+    const { status, stderr } = linkRuntimeTargets();
+    assert.equal(status, 1);
+    assert.match(stderr, /Runtime target lib\/App\/resources\/node\/node has no sharun wrapper at bin\/node/);
   });
 });

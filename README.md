@@ -37,6 +37,7 @@ brew install --cask <cask>
 | `little-genius` | [Little Genius](https://lg.avakot.org/) | |
 | `opencode-desktop` | [OpenCode Desktop](https://opencode.ai/) | |
 | `orca` | [Orca](https://github.com/stablyai/orca) | |
+| `pi-agent-desktop` | [Pi Agent](https://github.com/abcwyc/pi-agent-desktop) | |
 | `vscode` | [Visual Studio Code](https://code.visualstudio.com/) | |
 | `wfhelper` | [WFHelper](https://github.com/WFHelper/WFHelper) | |
 | `zed` | [Zed](https://zed.dev/) | stable channel only |

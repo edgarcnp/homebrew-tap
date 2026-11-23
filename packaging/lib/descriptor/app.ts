@@ -60,6 +60,10 @@ const quickSharunSchema = z.strictObject({
   // Absolute paths in the build environment of libraries the app only dlopens
   // at runtime; checked semantically.
   libraries: z.array(z.string()).exactOptional(),
+  // AppDir-relative executables the payload runs but does not stage in bin/
+  // (a bundled runtime, for instance). quick-sharun deploys them like the
+  // staged binaries, so they run under the bundled loader, not the host's.
+  targets: z.array(relativePath).min(1).exactOptional(),
   // Extra quick-sharun environment variables, passed through verbatim.
   env: z.record(z.string(), z.string()).exactOptional(),
 });

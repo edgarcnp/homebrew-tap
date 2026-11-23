@@ -408,6 +408,96 @@ describe("descriptor contents (regression against the previous per-app scripts)"
     );
   });
 
+  it("validates a deb-files tree staged outside bin/", () => {
+    const descriptor = loadDescriptor("pi-agent-desktop");
+    assert.equal(descriptor.payload.kind, "deb-files");
+    assert.deepEqual(
+      descriptor.payload.kind === "deb-files" ? descriptor.payload.trees : undefined,
+      [{ source: "usr/lib/Pi Agent", target: "lib/Pi Agent" }],
+    );
+
+    const assertRejects = (trees: unknown, expected: RegExp): void => {
+      assert.throws(
+        () =>
+          validateDescriptor(
+            mutated("pi-agent-desktop", (copy) => {
+              nested(copy, "payload")["trees"] = trees;
+            }),
+            "pi-agent-desktop",
+          ),
+        expected,
+      );
+    };
+    assertRejects(
+      [{ source: "usr/lib/Pi Agent", target: "../outside" }],
+      /must be a repository-relative path/,
+    );
+    assertRejects(
+      [{ source: "usr/lib/Pi Agent", target: "bin/resources" }],
+      /trees\[0\]\.target must stay outside bin\//,
+    );
+    assertRejects(
+      [{ source: "usr/lib/Pi Agent", target: "shared/lib/Pi Agent" }],
+      /trees\[0\]\.target is reserved by the pack stages/,
+    );
+    assertRejects(
+      [
+        { source: "usr/lib/Pi Agent", target: "usr/lib/Pi Agent" },
+        { source: "usr/lib/other", target: "usr/lib/Pi Agent" },
+      ],
+      /trees\[1\]\.target duplicates usr\/lib\/Pi Agent/,
+    );
+    // Only deb-files carries trees: bin/ is the only place deb-tree stages.
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("orca", (copy) => {
+            nested(copy, "payload")["trees"] = [{ source: "opt/Orca", target: "usr/lib/Orca" }];
+          }),
+          "orca",
+        ),
+      /payload\.trees is not a known field/,
+    );
+  });
+
+  it("watches pi-agent's release title and a bare tag", () => {
+    // The API matches the release title, falling back to tag_name when the
+    // title is empty: the pattern has to accept both shapes.
+    const watch = loadDescriptor("pi-agent-desktop").watch;
+    assert.equal(watch?.format, "github-release");
+    const pattern = new RegExp(watch?.versionPattern ?? "");
+    assert.equal(pattern.exec("pi-agent-desktop v0.8.7")?.[1], "0.8.7");
+    assert.equal(pattern.exec("v0.8.7")?.[1], "0.8.7");
+    assert.equal(pattern.exec("pi-agent-desktop v0.9.0-rc.1")?.[1], "0.9.0-rc.1");
+    // Another product's release in the same feed must not match.
+    assert.equal(pattern.exec("Pi Agent v0.8.7"), null);
+  });
+
+  it("validates declared quick-sharun runtime targets", () => {
+    const descriptor = loadDescriptor("pi-agent-desktop");
+    assert.deepEqual(descriptor.quickSharun.targets, ["lib/Pi Agent/resources/node/node"]);
+
+    const assertRejects = (targets: unknown, expected: RegExp): void => {
+      assert.throws(
+        () =>
+          validateDescriptor(
+            mutated("pi-agent-desktop", (copy) => {
+              nested(copy, "quickSharun")["targets"] = targets;
+            }),
+            "pi-agent-desktop",
+          ),
+        expected,
+      );
+    };
+    assertRejects(["../outside"], /must be a repository-relative path/);
+    assertRejects(["bin/node"], /is a staged bin\/ file, which is a target already/);
+    assertRejects(["lib/a", "lib/a"], /targets\[1\] duplicates lib\/a/);
+    assertRejects(
+      ["lib/a/node", "lib/b/node"],
+      /targets\[1\] shares the basename node with another target/,
+    );
+  });
+
   it("keeps firefox's signed release tarball, flat staging and codec dlopens", () => {
     const descriptor = loadDescriptor("firefox");
     assert.equal(descriptor.artifact.kind, "mozilla-release");

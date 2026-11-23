@@ -11,10 +11,21 @@ export const debTreePayloadSchema = z.strictObject({
   tree: relativePath,
 });
 
+const debFilesTreeSchema = z.strictObject({
+  // Directory inside the extracted .deb.
+  source: relativePath,
+  // AppDir-relative destination, outside bin/ and the pack stages' own paths.
+  target: relativePath,
+});
+
 export const debFilesPayloadSchema = z.strictObject({
   kind: z.literal("deb-files"),
   // Paths inside the extracted .deb to stage into AppDir/bin.
   files: z.array(relativePath).min(1),
+  // Directories staged at an AppDir path of their own, for an app that
+  // resolves data outside bin/ (a Tauri payload reads ../lib/<product name>
+  // beside its launcher).
+  trees: z.array(debFilesTreeSchema).min(1).exactOptional(),
 });
 
 export const appimageTreePayloadSchema = z.strictObject({

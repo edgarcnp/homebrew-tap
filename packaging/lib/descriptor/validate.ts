@@ -136,16 +136,52 @@ function validateArtifact(artifact: Artifact, label: string): void {
   }
 }
 
+// AppDir paths the pack stages own: quick-sharun writes the AppRun machinery
+// and the sharun runtime, the finalize stage writes .env, and shared/ is the
+// symlink tree it resolves through. A payload tree staged there is either
+// overwritten silently or breaks packing, so it is refused up front.
+const RESERVED_APP_DIR_TARGETS = new Set([
+  ".env",
+  "AppRun",
+  "AppRun.lib",
+  "AppRun.sh",
+  "dash",
+  "sharun",
+]);
+
+// A target a deb-files tree may not stage into: bin/ is where `files` goes, and
+// the rest belong to the pack stages.
+function assertStageableTreeTarget(target: string, label: string): void {
+  const root = target.split("/")[0] ?? "";
+  if (root === "bin") {
+    fail(`${label} must stay outside bin/, which deb-files stages: ${target}`);
+  }
+  if (root === "shared" || RESERVED_APP_DIR_TARGETS.has(root)) {
+    fail(`${label} is reserved by the pack stages: ${target}`);
+  }
+}
+
 function validatePayload(payload: Payload, label: string): void {
   switch (payload.kind) {
     case "deb-tree":
       relativePath(payload.tree, `${label}.tree`);
       break;
-    case "deb-files":
+    case "deb-files": {
       payload.files.forEach((file, index) => {
         relativePath(file, `${label}.files[${index}]`);
       });
+      const treeTargets = new Set<string>();
+      for (const [index, tree] of (payload.trees ?? []).entries()) {
+        relativePath(tree.source, `${label}.trees[${index}].source`);
+        relativePath(tree.target, `${label}.trees[${index}].target`);
+        assertStageableTreeTarget(tree.target, `${label}.trees[${index}].target`);
+        if (treeTargets.has(tree.target)) {
+          fail(`${label}.trees[${index}].target duplicates ${tree.target}`);
+        }
+        treeTargets.add(tree.target);
+      }
       break;
+    }
     case "appimage-tree":
       for (const [from, to] of Object.entries(payload.rename ?? {})) {
         assertSafeName(from, `${label}.rename key`);
@@ -223,6 +259,25 @@ function validateQuickSharun(config: QuickSharunConfig, label: string): void {
     if (!library.startsWith("/")) {
       fail(`${label}.libraries[${index}] must be an absolute path: ${library}`);
     }
+  }
+  // AppDir-relative: the pipeline resolves them against the staged AppDir,
+  // where bin/ files are targets already.
+  const targets = new Set<string>();
+  const names = new Set<string>();
+  for (const [index, target] of (config.targets ?? []).entries()) {
+    relativePath(target, `${label}.targets[${index}]`);
+    if (target === "bin" || target.startsWith("bin/")) {
+      fail(`${label}.targets[${index}] is a staged bin/ file, which is a target already: ${target}`);
+    }
+    if (targets.has(target)) fail(`${label}.targets[${index}] duplicates ${target}`);
+    targets.add(target);
+    // quick-sharun keeps one wrapper per basename: two targets with the same
+    // name would both resolve to the same shared/bin entry.
+    const name = target.slice(target.lastIndexOf("/") + 1);
+    if (names.has(name)) {
+      fail(`${label}.targets[${index}] shares the basename ${name} with another target`);
+    }
+    names.add(name);
   }
   for (const [key, value] of Object.entries(config.env ?? {})) {
     if (!/^[A-Z][A-Z0-9_]*$/.test(key)) fail(`${label}.env key is not a valid name: ${key}`);
