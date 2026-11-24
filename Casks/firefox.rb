@@ -1,6 +1,6 @@
 cask "firefox" do
-  version "160.0.1"
-  sha256 "41c59ee4b5258502c21f780a9c2eed7893883217dc8fc5fbe03debe1d7b70c12"
+  version "161.0"
+  sha256 "2de1fbec5180080b344078aed6ea974317497bd41a1c1d3d53da993925b1de44"
 
   url "https://github.com/edgarcnp/homebrew-tap/releases/download/firefox-v#{version}/firefox-#{version}-x86_64.AppImage"
   name "Firefox"
