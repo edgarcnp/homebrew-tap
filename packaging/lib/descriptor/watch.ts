@@ -11,13 +11,15 @@ export const watchFormatSchema = z.enum(["atom", "json", "github-release"]);
 export const watchSchema = z.strictObject({
   feedUrl: httpsUrl,
   versionPattern: nonEmptyString,
-  // Entries whose title matches are skipped, e.g. GitComet's "-rc" releases.
+  // A title or name this matches is dropped. On an "atom" feed that means the
+  // read takes the next entry; a single-value source ("json", "github-release")
+  // yields no version for that pass, which holds the pin and re-reads next tick.
   skipPattern: nonEmptyString.exactOptional(),
   // Upstream repo (owner/repo) the watch feed belongs to; informational for
   // the API's watcher.
   repo: ownerRepo.exactOptional(),
   // Feed format: "atom" parses releases.atom entry titles, "github-release"
-  // reads the GitHub releases list from the pinned API URL, and "json" reads a
+  // reads the latest release object from the pinned API URL, and "json" reads a
   // single version string at `versionField`.
   format: watchFormatSchema,
   // Dotted path to the version string in a JSON feed; required with "json",
