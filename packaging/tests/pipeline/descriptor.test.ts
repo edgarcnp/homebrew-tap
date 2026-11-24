@@ -307,11 +307,16 @@ describe("descriptor contents (regression against the previous per-app scripts)"
       );
       assert.equal(descriptor.artifact.tagPrefix, "v");
     }
-    // The daily nightlies are prereleases named "Nightly 0.5.0-nightly.11", so
-    // the plain three-part tag is what holds the tap to the stable channel.
+    // Releases come in two channels with a nightly roughly every day, so the
+    // releases feed is no version source: its ten-entry window already ends
+    // before `v0.4.0`, `?page=2` returns the same document byte for byte, and
+    // four of the ten slots go to `@thinkrail/pi-*` package releases. GitHub's
+    // `releases/latest` filters drafts and prereleases server-side, and its
+    // `tag_name` is what this pattern strips the `v` from.
     assert.deepEqual(descriptor.watch, {
-      feedUrl: "https://api.github.com/repos/JetBrains/thinkrail/releases",
-      format: "github-release",
+      feedUrl: "https://api.github.com/repos/JetBrains/thinkrail/releases/latest",
+      format: "json",
+      versionField: "tag_name",
       versionPattern: "^v(\\d+\\.\\d+\\.\\d+)$",
       repo: "JetBrains/thinkrail",
     });

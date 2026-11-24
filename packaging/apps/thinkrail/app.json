@@ -5,8 +5,9 @@
   "comment": "The agentic IDE that gets better every time you use it",
   "cask": "thinkrail",
   "watch": {
-    "feedUrl": "https://api.github.com/repos/JetBrains/thinkrail/releases",
-    "format": "github-release",
+    "feedUrl": "https://api.github.com/repos/JetBrains/thinkrail/releases/latest",
+    "format": "json",
+    "versionField": "tag_name",
     "versionPattern": "^v(\\d+\\.\\d+\\.\\d+)$",
     "repo": "JetBrains/thinkrail"
   },

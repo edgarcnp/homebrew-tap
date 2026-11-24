@@ -8,11 +8,17 @@ tag, and verified against the SHA-256 in its `SHA256SUMS` asset.
 
 ## App-specific
 
-- **Version source** — `github-release` on `JetBrains/thinkrail`. Releases are
-  cut on two channels: a stable tag (`v0.4.0`) and a daily prerelease
-  (`v0.5.0-nightly.11`, published as `Nightly 0.5.0-nightly.11`). The watch
-  pattern matches the plain three-part tag, so the tap only ever dispatches
-  stable builds; the cask's livecheck carries the same anchored pattern.
+- **Version source** — `format: "json"` against GitHub's
+  `api.github.com/repos/JetBrains/thinkrail/releases/latest`, whose `tag_name`
+  is the stable release (`v0.4.0` today). The releases feed is unusable here,
+  not merely noisy: nightlies land about once a day, four of the ten feed slots
+  go to `@thinkrail/pi-*` package releases, and `?page=2` returns the same
+  document byte for byte, so the window cannot be widened or paged past. GitHub
+  filters drafts and prereleases out of `latest` server-side, which is the same
+  answer upstream's own installer uses for its stable channel. The pattern
+  keeps the `v` and rejects anything with a suffix, so a nightly can never be
+  dispatched even if one were ever marked stable. The cask's livecheck reads
+  the tap's own tags, so it is unaffected.
 - **Payload** — `tarball-tree` on `stable-linux-{appimage_arch}-ThinkRail-{version}.tar.zst`:
   the electrobun bundle, zstd-compressed. Upstream's
   `thinkrail-desktop-linux-x64.tar.gz` is *not* the payload: it holds a 63 MB
