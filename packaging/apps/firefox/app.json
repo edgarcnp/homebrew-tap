@@ -84,5 +84,6 @@
       "/usr/lib/libcanberra.so.0",
       "/usr/lib/libspeechd.so.2"
     ]
-  }
+  },
+  "waylandBackend": "moz"
 }

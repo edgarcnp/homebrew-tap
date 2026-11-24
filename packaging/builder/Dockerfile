@@ -17,6 +17,10 @@
 #   - file: the magic database quick-sharun can bundle
 #   - nss: Electron's libnss3 must exist in the build environment for the
 #     closure scan to find it
+#   - weston: the smoke gate runs every AppImage on its headless backend, since
+#     the builds are Wayland-only and Xvfb is an X11 display
+#   - xorg-server-xvfb: the same gate gives an app that opted out of the Wayland
+#     rule (`waylandOnly: false`) an X11 display instead
 #   - the rest is download, extract, verify and packing tooling.
 #
 # Renovate owns the pins: the FROM digest (docker manager), the appimagetool
@@ -49,6 +53,7 @@ RUN pacman-key --init \
       nss \
       patchelf \
       unzip \
+      weston \
       wget \
       xorg-server-xvfb \
       zsync \

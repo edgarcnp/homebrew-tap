@@ -6,13 +6,31 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { assertSameLength, assertSingleLine, fail } from "../core/guards.ts";
 import { GuardViolationError, UpdaterResidualError } from "../core/errors.ts";
-import { appDir } from "../core/paths.ts";
-import type { AppDescriptor } from "../descriptor/app.ts";
+import { appDir, PACKAGING_DIR } from "../core/paths.ts";
+import type { AppDescriptor, WaylandBackend } from "../descriptor/app.ts";
 import type { EndpointPatch } from "../descriptor/updater.ts";
 
 // Vendored trees are never patched, but are still scanned for survivors.
 const PATCH_SKIP_DIRS = new Set(["node_modules", ".git"]);
 const ELF_MAGIC = Buffer.from([0x7f, 0x45, 0x4c, 0x46]);
+// A 00- prefix puts the guard at the front of the AppRun hook glob, ahead of
+// quick-sharun's own 01-/05- hooks (an app may deploy a 00- of its own, e.g.
+// wfhelper's electron-ldd fix, which then sorts just before it).
+const WAYLAND_HOOK_NAME = "00-wayland-only.hook";
+const WAYLAND_HOOK_SOURCE = path.join(PACKAGING_DIR, "lib", "shell", "wayland-only.hook");
+// Appended to the shared guard, so one file carries the tap's rule plus only
+// the switches this app's toolkit actually reads.
+//
+// Electron needs both lines: 38 made `--ozone-platform=auto` the default and
+// removed `ELECTRON_OZONE_PLATFORM_HINT`, choosing Wayland when
+// `XDG_SESSION_TYPE=wayland`, while 20-37 only understand the hint. The
+// session-type line is what a real Wayland session exports anyway; a build
+// container exports nothing, which is why the gate needs it too.
+const WAYLAND_BACKEND_EXPORTS: Record<WaylandBackend, readonly string[]> = {
+  gdk: ["export GDK_BACKEND=wayland"],
+  electron: ["export XDG_SESSION_TYPE=wayland", "export ELECTRON_OZONE_PLATFORM_HINT=wayland"],
+  moz: ["export MOZ_ENABLE_WAYLAND=1"],
+};
 
 export interface NeutralizeReport {
   patchedFiles: string[];
@@ -202,7 +220,8 @@ export function neutralizeUpdater(descriptor: AppDescriptor, appDirPath: string)
   return report;
 }
 
-// Runs after quick-sharun: .env and the runtime hook belong to the finished AppDir.
+// Runs after quick-sharun: .env and the runtime hooks belong to the finished
+// AppDir.
 export function finalizeApp(descriptor: AppDescriptor, appDirPath: string): string[] {
   const notes: string[] = [];
   const updater = descriptor.updater;
@@ -228,6 +247,28 @@ export function finalizeApp(descriptor: AppDescriptor, appDirPath: string): stri
     fs.copyFileSync(source, destination);
     fs.chmodSync(destination, 0o755);
     notes.push(`installed runtime hook ${destination}`);
+  }
+
+  // Wayland-only is the tap's rule, not this app's: the shared guard gives every
+  // AppImage the same refusal, and the app's own `waylandBackend` decides
+  // whether one toolkit variable rides along. An opt-out is one field.
+  if (descriptor.waylandOnly !== false) {
+    const binDir = path.join(appDirPath, "bin");
+    if (!fs.existsSync(binDir)) fail(`Missing AppDir bin directory: ${binDir}`);
+    if (!fs.existsSync(WAYLAND_HOOK_SOURCE)) fail(`Missing Wayland-only hook: ${WAYLAND_HOOK_SOURCE}`);
+    const guard = fs.readFileSync(WAYLAND_HOOK_SOURCE, "utf8");
+    const backend = descriptor.waylandBackend;
+    const content = backend === undefined
+      ? guard
+      : `${guard}\n${WAYLAND_BACKEND_EXPORTS[backend].join("\n")}\n`;
+    // Replaced rather than truncated: a payload tree that shipped a symlink at
+    // this name would otherwise turn the write into one at whatever it points
+    // at. Writing a fresh file also makes `mode` apply, since it only does so
+    // at creation.
+    const destination = path.join(binDir, WAYLAND_HOOK_NAME);
+    fs.rmSync(destination, { force: true });
+    fs.writeFileSync(destination, content, { mode: 0o755 });
+    notes.push(`installed Wayland-only hook ${destination}`);
   }
 
   for (const file of descriptor.extraFiles ?? []) {

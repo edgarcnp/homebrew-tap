@@ -305,6 +305,14 @@ function validateSmoke(smoke: SmokeConfig, label: string): void {
   }
 }
 
+// The Wayland rule and its one switch: an app that opted out carries no
+// backend, because the hook that would read it is never installed there.
+function validateWayland(input: AppDescriptorInput, label: string): void {
+  if (input.waylandBackend !== undefined && input.waylandOnly === false) {
+    fail(`${label}.waylandBackend is set on an app that opts out of the rule`);
+  }
+}
+
 function validateWatch(watch: WatchConfig, label: string): void {
   assertHttpsUrl(watch.feedUrl, `${label}.feedUrl`);
   // The GitHub latest-release transport fetches the pinned API path behind the
@@ -523,6 +531,7 @@ export function validateDescriptor(raw: unknown, expectedId: string): AppDescrip
     validatePresentation(input, label);
     if (input.watch !== undefined) validateWatch(input.watch, `${label}.watch`);
     if (input.smoke !== undefined) validateSmoke(input.smoke, `${label}.smoke`);
+    validateWayland(input, label);
     validateUpdater(input.updater ?? {}, `${label}.updater`);
     validateQuickSharun(input.quickSharun ?? {}, `${label}.quickSharun`);
     validateCompatibility(input, label);

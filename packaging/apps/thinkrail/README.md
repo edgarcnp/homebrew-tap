@@ -63,6 +63,14 @@ tag, and verified against the SHA-256 in its `SHA256SUMS` asset.
   bundle's WebKit (2.54.3) is current and `webkitgtk-6.0` is unavailable
   (`bin/libNativeWrapper.so` has `NEEDED libwebkit2gtk-4.1.so.0`), so the
   hook is the only lever until the driver renders.
+- **X11 only** — the bundled Electrobun native wrapper (1.0.2) calls
+  `setenv("GDK_BACKEND", "x11", 1)` immediately before `gtk_init`, and its
+  screen-capture path refuses anything that is not a `GDK_IS_X11_DISPLAY`, so
+  on a Wayland desktop this app is an Xwayland client by design. The
+  descriptor's `waylandOnly: false` keeps the tap's Wayland-only hook out of
+  this AppDir: no environment variable and no hook ordering overrides a
+  `setenv` the runtime performs in-process, so a native Wayland window needs an
+  upstream Electrobun release that stops forcing X11.
 
 ## Updater neutralization
 

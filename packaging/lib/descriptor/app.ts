@@ -54,6 +54,11 @@ const smokeSchema = z.strictObject({
   ignoreDefunct: z.array(z.string()).exactOptional(),
 });
 
+// The toolkit switch the Wayland-only hook exports. One value per family, so a
+// descriptor names its toolkit rather than spelling the variable, and a typo
+// fails the load instead of exporting nothing.
+const waylandBackendSchema = z.enum(["gdk", "electron", "moz"]);
+
 const quickSharunSchema = z.strictObject({
   // pkgforge hooks to deploy (ADD_HOOKS); names are checked semantically.
   hooks: z.array(z.string()).exactOptional(),
@@ -122,11 +127,19 @@ export const appDescriptorSchema = z.strictObject({
   appDirLinks: z.array(appDirLinkSchema).min(1).exactOptional(),
   // Post-build smoke-gate exceptions for this app, if any.
   smoke: smokeSchema.exactOptional(),
+  // The finished AppImage refuses to start without a Wayland session unless
+  // this is false; only a runtime that cannot draw on Wayland sets it.
+  waylandOnly: z.boolean().exactOptional(),
+  // The toolkit switch the Wayland-only hook exports for this app, so the
+  // window is the toolkit's native Wayland one whatever the host environment
+  // says. Absent means the toolkit follows WAYLAND_DISPLAY by itself.
+  waylandBackend: waylandBackendSchema.exactOptional(),
   updater: updaterSchema.exactOptional(),
   quickSharun: quickSharunSchema.exactOptional(),
 });
 
 export type IconConfig = z.infer<typeof iconSchema>;
+export type WaylandBackend = z.infer<typeof waylandBackendSchema>;
 export type CaskDesktopEntry = z.infer<typeof caskDesktopEntrySchema>;
 export type ExtraFile = z.infer<typeof extraFileSchema>;
 export type AppDirLink = z.infer<typeof appDirLinkSchema>;

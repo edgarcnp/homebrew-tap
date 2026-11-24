@@ -226,6 +226,9 @@ describe("descriptor contents (regression against the previous per-app scripts)"
     assert.equal(descriptor.updater.patchEndpoint?.from, "https://api.avakot.org/lg/manifest.json");
     assert.equal(descriptor.updater.patchEndpoint?.binaryReplacement.length, 39);
     assert.equal(descriptor.updater.residualScan?.severity, "error");
+    // A Tauri payload on GTK 3: the hook exports the GTK switch, not Electron's
+    // or Firefox's.
+    assert.equal(descriptor.waylandBackend, "gdk");
   });
 
   it("keeps wfhelper's AppImage artifact, tree staging and required feed removal", () => {
@@ -245,6 +248,7 @@ describe("descriptor contents (regression against the previous per-app scripts)"
     );
     assert.deepEqual(descriptor.architectures, ["amd64"]);
     assert.equal(descriptor.payload.kind, "appimage-tree");
+    assert.equal(descriptor.waylandBackend, "electron");
     assert.deepEqual(
       descriptor.payload.kind === "appimage-tree" ? descriptor.payload.exclude : [],
       ["AppRun", "wfhelper.desktop", "wfhelper.png", "usr"],
@@ -363,6 +367,10 @@ describe("descriptor contents (regression against the previous per-app scripts)"
     assert.deepEqual(patch?.targets, ["Resources/version.json"]);
     assert.equal(patch?.binaryReplacement.length, patch?.from.length);
     assert.equal(descriptor.updater.residualScan?.severity, "error");
+    // Electrobun's native wrapper sets GDK_BACKEND=x11 inside the process
+    // before gtk_init, so this app draws through Xwayland and cannot honour
+    // the tap's Wayland-only rule.
+    assert.equal(descriptor.waylandOnly, false);
   });
 
   it("validates a payload-owned cask desktop entry", () => {
@@ -1764,6 +1772,31 @@ describe("descriptor validation", () => {
           "vscode",
         ),
       /must be a dotted field path/,
+    );
+  });
+
+  it("rejects a Wayland switch on an app that opted out of the rule", () => {
+    // The hook that reads the switch is not installed for an opt-out, so a
+    // declared backend there would be a field nothing honours.
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("thinkrail", (copy) => {
+            copy["waylandBackend"] = "gdk";
+          }),
+          "thinkrail",
+        ),
+      /waylandBackend is set on an app that opts out of the rule/,
+    );
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("vscode", (copy) => {
+            copy["waylandBackend"] = "gtk";
+          }),
+          "vscode",
+        ),
+      /waylandBackend: Invalid option/,
     );
   });
 });

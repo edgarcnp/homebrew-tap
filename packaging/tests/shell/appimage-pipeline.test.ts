@@ -11,7 +11,7 @@ import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { afterEach, beforeEach, describe, it } from "node:test";
+import { after, afterEach, beforeEach, describe, it } from "node:test";
 import { REPO_ROOT } from "../../lib/core/paths.ts";
 
 const PIPELINE_LIB = path.join(REPO_ROOT, "packaging", "lib", "shell", "appimage-pipeline.sh");
@@ -894,6 +894,7 @@ function runSmoke(
       encoding: "utf8",
       env: {
         ...process.env,
+        PATH: `${westonStubDir()}:${process.env.PATH ?? ""}`,
         COMMON: SHELL_COMMON,
         APPIMAGE: appimage,
         SMOKE_TIMEOUT: "8",
@@ -905,7 +906,75 @@ function runSmoke(
   return { status: result.status, stderr: result.stderr ?? "" };
 }
 
+// The smoke gate wants a Wayland compositor; these fake AppImages never draw,
+// so a stub that binds the socket weston would and then idles is enough. It
+// keeps the real readiness wait in the gate honest without needing weston.
+let westonStub: string | undefined;
+
+// A host weston would make the missing-compositor test vacuous instead of
+// failing it, so that test runs only where the gate really has none.
+const HAS_SYSTEM_WESTON = spawnSync("weston", ["--version"], { encoding: "utf8" }).status === 0;
+
+after(() => {
+  if (westonStub !== undefined) fs.rmSync(westonStub, { recursive: true, force: true });
+});
+
+function westonStubDir(): string {
+  if (westonStub === undefined) {
+    westonStub = fs.mkdtempSync(path.join(os.tmpdir(), "fbr-weston-stub."));
+    const file = path.join(westonStub, "weston");
+    fs.writeFileSync(
+      file,
+      [
+        "#!/bin/sh",
+        'for arg do case "${arg}" in --socket=*) socket="${arg#--socket=}" ;; esac; done',
+        '[ -n "${socket:-}" ] || exit 1',
+        "exec python3 -c 'import socket, sys, time",
+        "s = socket.socket(socket.AF_UNIX); s.bind(sys.argv[1]); s.listen(8); time.sleep(600)' \\",
+        '  "${XDG_RUNTIME_DIR}/${socket}"',
+        "",
+      ].join("\n"),
+    );
+    fs.chmodSync(file, 0o755);
+    // The X11 branch: xvfb-run takes -a before the command it wraps. The
+    // marker is how a test proves the branch was taken without an X server.
+    const xvfb = path.join(westonStub, "xvfb-run");
+    fs.writeFileSync(
+      xvfb,
+      [
+        "#!/bin/sh",
+        "shift",
+        'echo used > "${XVFB_MARKER:-/dev/null}"',
+        'exec "$@"',
+        "",
+      ].join("\n"),
+    );
+    fs.chmodSync(xvfb, 0o755);
+  }
+  return westonStub;
+}
+
 describe("smoke_test_appimage", () => {
+  it("fails the gate when no weston can be found", { skip: HAS_SYSTEM_WESTON }, () => {
+    const failure = path.join(workDir, "failure.json");
+
+    const { status, stderr } = runSmoke(smokeApp("#!/bin/sh\nsleep 1\n"), {
+      // The stub is what PATH normally resolves weston through.
+      PATH: (process.env.PATH ?? "")
+        .split(":")
+        .filter((dir) => dir !== westonStubDir())
+        .join(":"),
+      FBR_FAILURE_OUT: failure,
+    });
+
+    assert.equal(status, 1);
+    assert.match(stderr, /needs weston/);
+    assert.deepEqual(JSON.parse(fs.readFileSync(failure, "utf8")), {
+      code: "GUARD_VIOLATION",
+      message: "smoke test: weston is missing",
+    });
+  });
+
   it("fails when the launcher keeps its child defunct", { skip: !HAS_PYTHON, timeout: 20000 }, () => {
     const appimage = smokeApp(
       [
@@ -923,12 +992,24 @@ describe("smoke_test_appimage", () => {
     assert.match(stderr, /kept pid \d+ defunct/);
   });
 
-  it("passes an app that exits on its own", () => {
+  it("gives an app that opted out of Wayland an X11 display", { skip: !HAS_PYTHON }, () => {
+    const marker = path.join(workDir, "xvfb-stub-used");
+
+    const { status, stderr } = runSmoke(smokeApp("#!/bin/sh\nsleep 1\n"), {
+      SMOKE_XVFB: "1",
+      XVFB_MARKER: marker,
+    });
+
+    assert.equal(status, 0, stderr);
+    assert.equal(fs.existsSync(marker), true);
+  });
+
+  it("passes an app that exits on its own", { skip: !HAS_PYTHON }, () => {
     const { status, stderr } = runSmoke(smokeApp("#!/bin/sh\nsleep 1\n"));
     assert.equal(status, 0, stderr);
   });
 
-  it("still fails on loader errors", () => {
+  it("still fails on loader errors", { skip: !HAS_PYTHON }, () => {
     const { status, stderr } = runSmoke(
       smokeApp('#!/bin/sh\necho "symbol lookup error: /lib/x.so.1: undefined symbol: foo"\n'),
     );

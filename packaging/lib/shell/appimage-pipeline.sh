@@ -833,7 +833,18 @@ Install the Anylinux tools (packaging/scripts/install-anylinux-tools.sh) or add 
   then
     smoke_launch_args=(--no-sandbox)
   fi
-  SMOKE_IGNORE_DEFUNCT="$(descriptor_field '.smoke.ignoreDefunct // [] | join(" ")')" \
+  # The gate gives the app the display it declares: Wayland-only apps get the
+  # hook's own contract (a headless weston socket), and an app whose runtime
+  # pins itself to X11 gets an Xvfb display instead of failing on a compositor
+  # it never asked for. `//` is wrong here: jq's alternative operator falls
+  # through on `false`, so an explicit opt-out would read as "true".
+  local smoke_xvfb=0
+  if [[ "$(descriptor_field '.waylandOnly == false')" = "true" ]]
+  then
+    smoke_xvfb=1
+  fi
+  SMOKE_XVFB="${smoke_xvfb}" \
+    SMOKE_IGNORE_DEFUNCT="$(descriptor_field '.smoke.ignoreDefunct // [] | join(" ")')" \
     smoke_test_appimage "${output_file}" "${smoke_launch_args[@]}"
   info "Built AppImage: ${output_file}"
 }

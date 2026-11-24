@@ -121,6 +121,8 @@ record whose `app` does not — `fbr report` refuses such a record first.
 | `extraFiles` | Optional `{source, target}` pairs copied verbatim from the app directory into the AppDir after quick-sharun, e.g. Firefox's default prefs under `bin/defaults/pref/`. `target` is AppDir-relative and unique; an existing target whose bytes differ fails the build instead of overwriting the payload. |
 | `appDirLinks` | Optional `{link, target}` pairs creating relative symlinks in the finished AppDir before packing, for an app that resolves its own files beside the launcher at the extracted AppImage root: Orca's self-extraction asks for `resources/bin/<launcher>` there and its launcher then needs the executable beside `resources`, so the descriptor links `resources -> bin/resources` and `orca-ide -> bin/orca-ide`. Both paths are AppDir-relative, link paths are unique, and a missing target or an existing link path fails the build. |
 | `smoke` | Optional post-build smoke-gate exceptions. `ignoreDefunct` names the `/proc/<pid>/comm` values a defunct descendant may carry without failing the gate (Orca's parcel watcher leaves a `sh` zombie); a known upstream leak only, never a stuck launcher. Loader errors and every other defunct child still fail. |
+| `waylandOnly` | Optional boolean, on unless it is `false`: the finished AppImage refuses to start without a Wayland session. The guard is one repo-owned hook (`lib/shell/wayland-only.hook`, installed by `fbr finalize` as `bin/00-wayland-only.hook`), so it is a field rather than a per-app file. Only an app whose runtime pins itself to X11 sets it to `false`: `thinkrail`, whose Electrobun wrapper calls `setenv("GDK_BACKEND", "x11", 1)` before `gtk_init` and cannot be talked out of it from outside the process. |
+| `waylandBackend` | Optional, one of `gdk`, `electron` or `moz`: the toolkit switch `fbr finalize` appends to that guard, so the window is the toolkit's native Wayland one whatever the host environment says. `gdk` exports `GDK_BACKEND=wayland` (GTK and WebKit payloads); `moz` exports `MOZ_ENABLE_WAYLAND=1`; `electron` exports `XDG_SESSION_TYPE=wayland` and `ELECTRON_OZONE_PLATFORM_HINT=wayland`, because Electron 38 made `--ozone-platform=auto` the default and removed the hint variable, selecting Wayland on `XDG_SESSION_TYPE`, while 20-37 only read the hint — a build container exports neither. Absent means the toolkit already follows `WAYLAND_DISPLAY` (GPUI's Zed and GitComet, winit's ArtCraft), so no variable is exported that nothing reads. |
 | `watch` | Optional release-watch block (`feedUrl`, `format`, `versionPattern`, optional `skipPattern`, `repo`, and `versionField` for `"json"`). `format` — `"atom"`, `"json"` or `"github-release"` — must be declared: the API's reader still defaults an absent one to atom, but this validator does not, so a forgotten format fails here instead of silently watching the wrong reader. The pattern matches the feed entry *title* and capture group 1 is the version: the atom entry title, the release `name` for `"github-release"` (falling back to `tag_name` when GitHub left the name empty), or the `versionField` value (a dotted path, e.g. `version`) for `"json"`, which reads a single version string from a JSON document for upstreams like avakot that publish no feed. A `"github-release"` feed must be the pinned `https://api.github.com/repos/<owner>/<repo>/releases/latest` URL: that endpoint answers only a release that is neither a draft nor a prerelease, so a watch can never dispatch one and a `skipPattern` for prerelease titles has nothing left to drop, while a repository that has published no such release answers no entry rather than an error. The API reads this block for the version it dispatches; the tap never fetches it, so there is no feed-versus-artifact comparison. |
 
 ### Artifact kinds
@@ -281,9 +283,15 @@ Each check lives in one place:
   dynamic-loader errors and on a launcher left waiting on a defunct child (a
   child still unreaped after `SMOKE_DEFUNCT_SECONDS`, default 3, means the app
   never got past it — the way a host-glibc mismatch reaches the gate, because
-  the dead child's stderr goes nowhere). A descriptor's `smoke.ignoreDefunct`
-  skips a known upstream leak by process name; every other defunct child still
-  fails. It passes `--no-sandbox` only to
+  the dead child's stderr goes nowhere). It is a Wayland display for a
+  Wayland-only app, not Xvfb: the gate starts
+  `weston --no-config --backend=headless-backend.so` in a private
+  `XDG_RUNTIME_DIR`, hands the app that socket by absolute path, and stops the
+  compositor after the window. An app that opted out (`waylandOnly: false`) is
+  given an Xvfb display instead, so the gate keeps starting it rather than
+  watching it refuse a compositor it never asked for. A descriptor's
+  `smoke.ignoreDefunct` skips a known upstream leak by process name; every
+  other defunct child still fails. It passes `--no-sandbox` only to
   Chromium-based payloads: a native bundle rejects the flag and exits before it
   starts, which would make the gate vacuous. The release pins the AppImage
   SHA-256 back into the cask.
@@ -407,8 +415,10 @@ returns that version's artifact, and the build fails if the resolved version
 differs (CI always sets it from the dispatch or the cask pin). Requires an
 Arch Linux system — the builder image (`packaging/builder/Dockerfile`) is the
 supported one — plus `bun` ≥ 1.4.5, `jq`, the app's own tooling (`dpkg-deb`,
-`gpg`/`gpgv`), `quick-sharun` in `PATH` and `APPIMAGETOOL` pointing at the
-uruntime `appimagetool`. The build script runs `packaging/bin/fbr.ts`; Zod's
+`gpg`/`gpgv`), `quick-sharun` in `PATH`, `weston` and `xvfb-run` for the smoke
+gate (it runs a Wayland-only app on a headless Wayland compositor and an
+X11-only one on Xvfb) and `APPIMAGETOOL` pointing at the uruntime
+`appimagetool`. The build script runs `packaging/bin/fbr.ts`; Zod's
 `node_modules` must be installed first. Output lands in `<tap>/dist/`.
 
 ## Dependency pinning

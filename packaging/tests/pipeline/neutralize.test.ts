@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import { finalizeApp, isElf, neutralizeUpdater } from "../../lib/pipeline/neutralize.ts";
-import { APPS_DIR } from "../../lib/core/paths.ts";
+import { APPS_DIR, PACKAGING_DIR } from "../../lib/core/paths.ts";
 import type { AppDescriptor } from "../../lib/descriptor/app.ts";
 import type { UpdaterConfig } from "../../lib/descriptor/updater.ts";
 
@@ -43,6 +44,9 @@ function descriptorWith(updater: UpdaterConfig, id = "vscode"): AppDescriptor {
     desktopTemplate: "templates/vscode.desktop",
     updater,
     quickSharun: {},
+    // The Wayland-only hook is the tap's rule rather than this fixture's
+    // subject: the tests that exercise it turn it back on explicitly.
+    waylandOnly: false,
   };
 }
 
@@ -239,6 +243,104 @@ describe("finalizeApp", () => {
     const hook = path.join(appDir, "bin/prevent-autoupdate.hook");
     assert.equal(fs.existsSync(hook), true);
     assert.equal(fs.statSync(hook).mode & 0o111, 0o111);
+  });
+
+  it("installs the Wayland-only hook unless the app opts out", () => {
+    write("bin/app", "binary");
+    const descriptor = { ...fixtureDescriptor({}) };
+    delete descriptor.waylandOnly;
+
+    const notes = finalizeApp(descriptor, appDir);
+
+    const installed = path.join(appDir, "bin/00-wayland-only.hook");
+    assert.equal(fs.statSync(installed).mode & 0o111, 0o111);
+    assert.equal(
+      fs.readFileSync(installed, "utf8"),
+      fs.readFileSync(path.join(PACKAGING_DIR, "lib/shell/wayland-only.hook"), "utf8"),
+    );
+    assert.match(notes.join("\n"), /Wayland-only hook/);
+  });
+
+  // One value per toolkit family, each carrying only its own switches: the
+  // record in neutralize.ts is exhaustive over the same union.
+  for (const [backend, lines] of [
+    ["gdk", ["export GDK_BACKEND=wayland"]],
+    [
+      "electron",
+      ["export XDG_SESSION_TYPE=wayland", "export ELECTRON_OZONE_PLATFORM_HINT=wayland"],
+    ],
+    ["moz", ["export MOZ_ENABLE_WAYLAND=1"]],
+  ] as const)
+  {
+    it(`adds only the ${backend} switches the app declares`, () => {
+      write("bin/app", "binary");
+      const descriptor = { ...fixtureDescriptor({}), waylandBackend: backend };
+      delete descriptor.waylandOnly;
+
+      finalizeApp(descriptor, appDir);
+
+      const hook = fs.readFileSync(path.join(appDir, "bin/00-wayland-only.hook"), "utf8");
+      const exports = hook.split("\n").filter((entry) => entry.startsWith("export "));
+      assert.deepEqual(exports, [...lines]);
+      // The guard still comes first, so a host without Wayland never reaches the
+      // export.
+      assert.ok(hook.indexOf("WAYLAND_DISPLAY is unset") < hook.indexOf("export "));
+    });
+  }
+
+  it("refuses to start when PATH has no compositor", () => {
+    write("bin/app", "binary");
+    const descriptor = { ...fixtureDescriptor({}) };
+    delete descriptor.waylandOnly;
+    finalizeApp(descriptor, appDir);
+    const hook = path.join(appDir, "bin/00-wayland-only.hook");
+    const env: NodeJS.ProcessEnv = { ...process.env, DISPLAY: ":1" };
+    delete env.WAYLAND_DISPLAY;
+
+    // AppRun sources the hook, so the guard's `exit` ends the launcher.
+    const refused = spawnSync("sh", ["-c", '. "$1"', "sh", hook], { env, encoding: "utf8" });
+
+    assert.equal(refused.status, 1);
+    assert.match(refused.stderr, /needs a Wayland session/);
+    assert.match(refused.stderr, /WAYLAND_DISPLAY is unset/);
+  });
+
+  it("keeps DISPLAY for the subsystems that need it on a compositor host", () => {
+    write("bin/app", "binary");
+    const descriptor = { ...fixtureDescriptor({}), waylandBackend: "gdk" as const };
+    delete descriptor.waylandOnly;
+    finalizeApp(descriptor, appDir);
+
+    const sourced = spawnSync(
+      "sh",
+      ["-c", '. "$1"; printf "%s|%s" "${DISPLAY:-}" "${GDK_BACKEND:-}"', "sh", path.join(appDir, "bin/00-wayland-only.hook")],
+      { env: { ...process.env, WAYLAND_DISPLAY: "wayland-0", DISPLAY: ":1" }, encoding: "utf8" },
+    );
+
+    assert.equal(sourced.status, 0);
+    assert.equal(sourced.stdout, ":1|wayland");
+  });
+
+  it("replaces a symlink at the hook path instead of writing through it", () => {
+    write("bin/app", "binary");
+    write("bin/payload-file", "payload bytes\n");
+    fs.symlinkSync(path.join(appDir, "bin/payload-file"), path.join(appDir, "bin/00-wayland-only.hook"));
+    const descriptor = { ...fixtureDescriptor({}) };
+    delete descriptor.waylandOnly;
+
+    finalizeApp(descriptor, appDir);
+
+    assert.equal(fs.readFileSync(path.join(appDir, "bin/payload-file"), "utf8"), "payload bytes\n");
+    assert.equal(fs.lstatSync(path.join(appDir, "bin/00-wayland-only.hook")).isFile(), true);
+  });
+
+  it("leaves an app that cannot draw on Wayland alone", () => {
+    write("bin/app", "binary");
+
+    const notes = finalizeApp(fixtureDescriptor({}), appDir);
+
+    assert.deepEqual(notes, []);
+    assert.equal(fs.existsSync(path.join(appDir, "bin/00-wayland-only.hook")), false);
   });
 
   it("fails when the hook template is missing", () => {

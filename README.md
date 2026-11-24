@@ -12,6 +12,15 @@ A Homebrew tap of Linux desktop apps with FUSE3 support, repackaged as AppImages
 > belong to their respective projects, which are not affiliated with this tap
 > and do not endorse these builds.
 
+> [!CAUTION]
+> These builds are Wayland-only, from the release that carries this rule: an
+> AppImage already published keeps running wherever it did until it is rebuilt.
+> Launched from an X11 session a Wayland-only build exits with a message instead
+> of opening a window, and Xwayland is not what these builds are tested against,
+> so a window drawn there can still misbehave. `thinkrail` is the one exception:
+> its runtime pins itself to X11, so it runs on X11 or Xwayland and the rule
+> does not apply to it.
+
 ## Install
 
 Install an app by its full cask name:
@@ -81,7 +90,10 @@ the packaging around them is different.
 
 - Linux with Homebrew. Fedora is the best-supported system here, Atomic flavor
   included, though the apps run on other distributions too.
-- Both Wayland and X11 work, and nothing forces one or the other.
+- A Wayland desktop, for every cask except `thinkrail`. Each one refuses to
+  start without a Wayland session and asks its toolkit for a native Wayland
+  window; `thinkrail` still runs on X11 and Xwayland because the runtime it
+  ships chooses X11 itself.
 
 ## What a cask installs
 

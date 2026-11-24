@@ -1,0 +1,18 @@
+#!/bin/sh
+# Every AppImage in this tap is Wayland-only: it refuses to start without a
+# Wayland session. `DISPLAY` is left in place on purpose — toolkits with no
+# Wayland switch of their own still reach for X11 for a subsystem (a browser
+# plugin, a capture path, a menu), and removing the variable breaks those.
+#
+# What each app exports on top of this guard is its own: the descriptor's
+# `waylandBackend` names the toolkit switch, and `fbr finalize` appends that one
+# line here, so an app that needs no switch carries no variable it ignores.
+#
+# `${VAR:-}` rather than `${VAR}`: AppRun sources this file into its own shell,
+# so a `set -u` there would abort on the unset variable before the guard speaks.
+if [ -z "${WAYLAND_DISPLAY:-}" ]
+then
+  printf '%s\n' "This AppImage needs a Wayland session." >&2
+  printf '%s\n' "WAYLAND_DISPLAY is unset, so there is no compositor to draw on." >&2
+  exit 1
+fi

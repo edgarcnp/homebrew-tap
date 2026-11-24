@@ -161,6 +161,78 @@ smoke_defunct_ignored() {
   return 1
 }
 
+# The AppImages are Wayland-only, so the smoke window needs a Wayland
+# compositor: weston's headless backend renders through pixman, needs no GPU or
+# seat, and is what the build container carries. The caller reads
+# SMOKE_WAYLAND_DISPLAY; the runtime directory, the pid and the caller's EXIT
+# trap are this function's own.
+smoke_start_compositor() {
+  command -v weston >/dev/null 2>&1 || {
+    classify_failure GUARD_VIOLATION "smoke test: weston is missing"
+    error "The smoke test needs weston.
+Install it on the host, or build with the image from packaging/builder/Dockerfile."
+  }
+  SMOKE_RUNTIME_DIR="$(mktemp -d "${TMPDIR:-/tmp}/fbr-smoke-wayland.XXXXXX")" || error "mktemp failed for the smoke compositor"
+  # An absolute socket path, so the app keeps the session's own XDG_RUNTIME_DIR:
+  # replacing it would also hide the pipewire, portal and dbus sockets a real
+  # launch has, and the gate would then judge an environment no user has.
+  # weston still takes a plain name, resolved inside its private directory.
+  SMOKE_WAYLAND_SOCKET="wayland-fbr-smoke"
+  SMOKE_WAYLAND_DISPLAY="${SMOKE_RUNTIME_DIR}/${SMOKE_WAYLAND_SOCKET}"
+  # `--no-config` so a weston.ini on the host cannot choose another backend or
+  # socket for a gate that must behave the same way everywhere.
+  XDG_RUNTIME_DIR="${SMOKE_RUNTIME_DIR}" weston \
+    --no-config \
+    --backend=headless-backend.so \
+    --socket="${SMOKE_WAYLAND_SOCKET}" \
+    --width=1280 --height=800 --idle-time=0 \
+    >"${SMOKE_RUNTIME_DIR}/weston.log" 2>&1 &
+  SMOKE_COMPOSITOR_PID=$!
+  # The pipeline already owns an EXIT trap; this one is restored rather than
+  # replaced, and it covers the paths between start and the deliberate stop: an
+  # interrupt, or an `error` added to the window later.
+  SMOKE_EXIT_TRAP="$(trap -p EXIT)"
+  trap 'smoke_stop_compositor' EXIT
+  local attempt=0
+  while ((attempt < 150))
+  do
+    [[ -S "${SMOKE_WAYLAND_DISPLAY}" ]] && return 0
+    smoke_process_running "${SMOKE_COMPOSITOR_PID}" || break
+    sleep 0.2
+    attempt=$((attempt + 1))
+  done
+  cat -- "${SMOKE_RUNTIME_DIR}/weston.log" >&2 || true
+  smoke_stop_compositor
+  classify_failure GUARD_VIOLATION "smoke test: weston exposed no Wayland socket"
+  error "weston did not expose a Wayland socket for the smoke test"
+}
+
+# Stops the compositor, removes the runtime directory it owned and puts the
+# caller's EXIT trap back.
+smoke_stop_compositor() {
+  local pid="${SMOKE_COMPOSITOR_PID:-}"
+  if [[ -n "${pid}" ]]
+  then
+    kill "${pid}" 2>/dev/null || true
+    wait "${pid}" 2>/dev/null || true
+  fi
+  if [[ -n "${SMOKE_RUNTIME_DIR:-}" ]]
+  then
+    rm -rf -- "${SMOKE_RUNTIME_DIR}"
+  fi
+  SMOKE_COMPOSITOR_PID=""
+  SMOKE_RUNTIME_DIR=""
+  local previous="${SMOKE_EXIT_TRAP:-}"
+  SMOKE_EXIT_TRAP=""
+  if [[ -n "${previous}" ]]
+  then
+    # shellcheck disable=SC2294  # trap -p prints an installable command; running it is the only way back
+    eval "${previous}"
+  else
+    trap - EXIT
+  fi
+}
+
 # Runs the built AppImage headless and fails on dynamic-loader errors and on a
 # launcher that never gets past its own dead child, mirroring quick-sharun
 # --simple-test. Extra arguments are passed to the app itself (an Electron
@@ -201,10 +273,18 @@ smoke_test_appimage() {
 
   info "Smoke testing: ${appimage}"
   output_file="$(mktemp "${TMPDIR:-/tmp}/fbr-smoke.XXXXXX")" || error "mktemp failed for the smoke output"
+  # An app that opts out of the Wayland rule draws on X11 and is given an X11
+  # display, so the gate keeps starting it instead of watching it refuse.
   local -a runner=()
-  if command -v xvfb-run >/dev/null 2>&1
+  if [[ "${SMOKE_XVFB:-0}" = 1 ]]
   then
+    command -v xvfb-run >/dev/null 2>&1 || error "The smoke test needs xvfb-run for an X11-only app."
     runner=(xvfb-run -a)
+  else
+    smoke_start_compositor
+    # Only the compositor is pointed at the private directory: the app keeps the
+    # session's XDG_RUNTIME_DIR and is told the socket by absolute path.
+    runner=(env "WAYLAND_DISPLAY=${SMOKE_WAYLAND_DISPLAY}")
   fi
   # In the background so the tree can be watched while it runs; the timeout
   # still bounds the whole window.
@@ -237,6 +317,7 @@ smoke_test_appimage() {
     kill "${runner_pid}" 2>/dev/null || true
   fi
   wait "${runner_pid}" 2>/dev/null || true
+  smoke_stop_compositor
 
   output="$(cat -- "${output_file}" 2>/dev/null || true)"
   rm -f -- "${output_file}"

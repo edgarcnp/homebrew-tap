@@ -50,5 +50,6 @@
   },
   "quickSharun": {
     "hooks": ["fix-namespaces.hook"]
-  }
+  },
+  "waylandBackend": "electron"
 }
