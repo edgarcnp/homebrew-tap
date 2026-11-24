@@ -14,8 +14,7 @@ A Homebrew tap of Linux desktop apps with FUSE3 support, repackaged as AppImages
 
 > [!CAUTION]
 > Wayland-only: without a Wayland session these builds exit instead of opening a
-> window, and Xwayland is untested. `thinkrail` is the exception — it is X11 by
-> design.
+> window, and Xwayland is untested.
 
 ## Install
 
@@ -41,7 +40,7 @@ brew install --cask <cask>
 | `gitcomet` | [GitComet](https://gitcomet.dev/) | |
 | `little-genius` | [Little Genius](https://lg.avakot.org/) | |
 | `opencode-desktop` | [OpenCode Desktop](https://opencode.ai/) | |
-| `thinkrail` | [ThinkRail](https://github.com/JetBrains/thinkrail) | stable channel only |
+| `thinkrail` | [ThinkRail](https://github.com/JetBrains/thinkrail) | stable channel only; X11 only, since Electrobun forces it |
 | `vscode` | [Visual Studio Code](https://code.visualstudio.com/) | |
 | `wfhelper` | [WFHelper](https://github.com/WFHelper/WFHelper) | |
 | `zed` | [Zed](https://zed.dev/) | stable channel only |
