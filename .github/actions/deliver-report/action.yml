@@ -51,7 +51,7 @@ runs:
           echo "API response headers: server=$(header_value server) cf-ray=$(header_value cf-ray) cf-mitigated=$(header_value cf-mitigated) content-type=$(header_value content-type)"
         }
         # Three attempts total, each with a fresh OIDC token: a token may
-        # deliver exactly one body, and an iat older than 10 minutes is
+        # deliver exactly one body, and an iat older than two minutes is
         # rejected. The body file is unchanged across attempts, so the same
         # event_id is re-sent and the inbox dedupes.
         for attempt in 1 2 3; do
