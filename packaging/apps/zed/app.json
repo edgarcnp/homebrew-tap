@@ -51,5 +51,6 @@
       "DEPLOY_OPENGL": "1",
       "DEPLOY_VULKAN": "1"
     }
-  }
+  },
+  "waylandBackend": "auto"
 }

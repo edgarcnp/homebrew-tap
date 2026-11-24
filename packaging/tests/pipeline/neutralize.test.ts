@@ -263,6 +263,7 @@ describe("finalizeApp", () => {
   // One value per toolkit family, each carrying only its own switches: the
   // record in neutralize.ts is exhaustive over the same union.
   for (const [backend, lines] of [
+    ["auto", []],
     ["gdk", ["export GDK_BACKEND=wayland"]],
     [
       "electron",
@@ -280,9 +281,11 @@ describe("finalizeApp", () => {
       const hook = fs.readFileSync(path.join(appDir, "bin/00-wayland-only.hook"), "utf8");
       const exports = hook.split("\n").filter((entry) => entry.startsWith("export "));
       assert.deepEqual(exports, [...lines]);
-      // The guard still comes first, so a host without Wayland never reaches the
+      // The guard still comes first, so a host without Wayland never reaches an
       // export.
-      assert.ok(hook.indexOf("WAYLAND_DISPLAY is unset") < hook.indexOf("export "));
+      if (lines.length > 0) {
+        assert.ok(hook.indexOf("WAYLAND_DISPLAY is unset") < hook.indexOf("export "));
+      }
     });
   }
 

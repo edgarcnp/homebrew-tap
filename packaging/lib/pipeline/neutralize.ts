@@ -27,6 +27,7 @@ const WAYLAND_HOOK_SOURCE = path.join(PACKAGING_DIR, "lib", "shell", "wayland-on
 // session-type line is what a real Wayland session exports anyway; a build
 // container exports nothing, which is why the gate needs it too.
 const WAYLAND_BACKEND_EXPORTS: Record<WaylandBackend, readonly string[]> = {
+  auto: [],
   gdk: ["export GDK_BACKEND=wayland"],
   electron: ["export XDG_SESSION_TYPE=wayland", "export ELECTRON_OZONE_PLATFORM_HINT=wayland"],
   moz: ["export MOZ_ENABLE_WAYLAND=1"],
@@ -258,9 +259,8 @@ export function finalizeApp(descriptor: AppDescriptor, appDirPath: string): stri
     if (!fs.existsSync(WAYLAND_HOOK_SOURCE)) fail(`Missing Wayland-only hook: ${WAYLAND_HOOK_SOURCE}`);
     const guard = fs.readFileSync(WAYLAND_HOOK_SOURCE, "utf8");
     const backend = descriptor.waylandBackend;
-    const content = backend === undefined
-      ? guard
-      : `${guard}\n${WAYLAND_BACKEND_EXPORTS[backend].join("\n")}\n`;
+    const exports = backend === undefined ? [] : WAYLAND_BACKEND_EXPORTS[backend];
+    const content = exports.length === 0 ? guard : `${guard}\n${exports.join("\n")}\n`;
     // Replaced rather than truncated: a payload tree that shipped a symlink at
     // this name would otherwise turn the write into one at whatever it points
     // at. Writing a fresh file also makes `mode` apply, since it only does so

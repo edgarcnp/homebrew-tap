@@ -17,9 +17,18 @@ fi
 
 for app in "${apps[@]}"
 do
-  bun packaging/bin/fbr.ts descriptor --app "${app}" >/dev/null
+  descriptor="$(bun packaging/bin/fbr.ts descriptor --app "${app}")"
   bun packaging/bin/fbr.ts descriptor-env --app "${app}" >/dev/null
   bun packaging/bin/fbr.ts descriptor-env --app "${app}" --format output >/dev/null
+  # A new app inherits the Wayland rule silently; this is the one place that
+  # asks it to say how its toolkit reaches the compositor, so the answer is in
+  # the descriptor rather than in someone's memory.
+  declares_backend="$(jq -r '.waylandBackend' <<<"${descriptor}")"
+  rule_on="$(jq -r '.waylandOnly' <<<"${descriptor}")"
+  if [[ "${declares_backend}" == "null" && "${rule_on}" != "false" ]]
+  then
+    echo "warning: apps/${app}/app.json declares no waylandBackend (auto, gdk, electron or moz)" >&2
+  fi
   echo "checked ${app}"
 done
 

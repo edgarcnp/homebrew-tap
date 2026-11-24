@@ -56,8 +56,9 @@ const smokeSchema = z.strictObject({
 
 // The toolkit switch the Wayland-only hook exports. One value per family, so a
 // descriptor names its toolkit rather than spelling the variable, and a typo
-// fails the load instead of exporting nothing.
-const waylandBackendSchema = z.enum(["gdk", "electron", "moz"]);
+// fails the load instead of exporting nothing. `auto` is the explicit "nothing
+// to export": the toolkit already follows WAYLAND_DISPLAY.
+const waylandBackendSchema = z.enum(["auto", "gdk", "electron", "moz"]);
 
 const quickSharunSchema = z.strictObject({
   // pkgforge hooks to deploy (ADD_HOOKS); names are checked semantically.
@@ -133,7 +134,7 @@ export const appDescriptorSchema = z.strictObject({
   waylandOnly: z.boolean().default(true),
   // The toolkit switch the Wayland-only hook exports for this app, so the
   // window is the toolkit's native Wayland one whatever the host environment
-  // says. Absent means the toolkit follows WAYLAND_DISPLAY by itself.
+  // says. `auto` means the toolkit follows WAYLAND_DISPLAY by itself.
   waylandBackend: waylandBackendSchema.exactOptional(),
   updater: updaterSchema.exactOptional(),
   quickSharun: quickSharunSchema.exactOptional(),
