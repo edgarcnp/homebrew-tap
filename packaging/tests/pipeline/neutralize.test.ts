@@ -247,8 +247,7 @@ describe("finalizeApp", () => {
 
   it("installs the Wayland-only hook unless the app opts out", () => {
     write("bin/app", "binary");
-    const descriptor = { ...fixtureDescriptor({}) };
-    delete descriptor.waylandOnly;
+    const descriptor = { ...fixtureDescriptor({}), waylandOnly: true };
 
     const notes = finalizeApp(descriptor, appDir);
 
@@ -274,8 +273,7 @@ describe("finalizeApp", () => {
   {
     it(`adds only the ${backend} switches the app declares`, () => {
       write("bin/app", "binary");
-      const descriptor = { ...fixtureDescriptor({}), waylandBackend: backend };
-      delete descriptor.waylandOnly;
+      const descriptor = { ...fixtureDescriptor({}), waylandOnly: true, waylandBackend: backend };
 
       finalizeApp(descriptor, appDir);
 
@@ -290,8 +288,7 @@ describe("finalizeApp", () => {
 
   it("refuses to start when PATH has no compositor", () => {
     write("bin/app", "binary");
-    const descriptor = { ...fixtureDescriptor({}) };
-    delete descriptor.waylandOnly;
+    const descriptor = { ...fixtureDescriptor({}), waylandOnly: true };
     finalizeApp(descriptor, appDir);
     const hook = path.join(appDir, "bin/00-wayland-only.hook");
     const env: NodeJS.ProcessEnv = { ...process.env, DISPLAY: ":1" };
@@ -307,8 +304,7 @@ describe("finalizeApp", () => {
 
   it("keeps DISPLAY for the subsystems that need it on a compositor host", () => {
     write("bin/app", "binary");
-    const descriptor = { ...fixtureDescriptor({}), waylandBackend: "gdk" as const };
-    delete descriptor.waylandOnly;
+    const descriptor = { ...fixtureDescriptor({}), waylandOnly: true, waylandBackend: "gdk" as const };
     finalizeApp(descriptor, appDir);
 
     const sourced = spawnSync(
@@ -325,8 +321,7 @@ describe("finalizeApp", () => {
     write("bin/app", "binary");
     write("bin/payload-file", "payload bytes\n");
     fs.symlinkSync(path.join(appDir, "bin/payload-file"), path.join(appDir, "bin/00-wayland-only.hook"));
-    const descriptor = { ...fixtureDescriptor({}) };
-    delete descriptor.waylandOnly;
+    const descriptor = { ...fixtureDescriptor({}), waylandOnly: true };
 
     finalizeApp(descriptor, appDir);
 

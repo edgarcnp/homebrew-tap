@@ -252,7 +252,7 @@ export function finalizeApp(descriptor: AppDescriptor, appDirPath: string): stri
   // Wayland-only is the tap's rule, not this app's: the shared guard gives every
   // AppImage the same refusal, and the app's own `waylandBackend` decides
   // whether one toolkit variable rides along. An opt-out is one field.
-  if (descriptor.waylandOnly !== false) {
+  if (descriptor.waylandOnly) {
     const binDir = path.join(appDirPath, "bin");
     if (!fs.existsSync(binDir)) fail(`Missing AppDir bin directory: ${binDir}`);
     if (!fs.existsSync(WAYLAND_HOOK_SOURCE)) fail(`Missing Wayland-only hook: ${WAYLAND_HOOK_SOURCE}`);

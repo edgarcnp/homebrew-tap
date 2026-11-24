@@ -1798,6 +1798,10 @@ describe("descriptor validation", () => {
         ),
       /waylandBackend: Invalid option/,
     );
+    // Absent means on, and the descriptor a consumer reads says so: one
+    // boolean rather than a value that is sometimes missing.
+    assert.equal(loadDescriptor("zed").waylandOnly, true);
+    assert.equal(loadDescriptor("thinkrail").waylandOnly, false);
   });
 });
 

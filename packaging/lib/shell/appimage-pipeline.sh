@@ -29,6 +29,12 @@ descriptor_field() {
   jq -r "$1" <<<"${APP_JSON}"
 }
 
+# A boolean, as jq's exit status rather than a printed word: `//` counts `false`
+# as absent, so a printed default has already read an opt-out as a yes.
+descriptor_flag() {
+  jq -e "$1" <<<"${APP_JSON}" >/dev/null
+}
+
 # Name of the desktop entry packed into the AppImage: the descriptor's
 # desktopId when it sets one, else the cask token. The cask installs its own
 # entry under the same name, so an app whose generic name belongs to something
@@ -836,10 +842,9 @@ Install the Anylinux tools (packaging/scripts/install-anylinux-tools.sh) or add 
   # The gate gives the app the display it declares: Wayland-only apps get the
   # hook's own contract (a headless weston socket), and an app whose runtime
   # pins itself to X11 gets an Xvfb display instead of failing on a compositor
-  # it never asked for. `//` is wrong here: jq's alternative operator falls
-  # through on `false`, so an explicit opt-out would read as "true".
+  # it never asked for.
   local smoke_xvfb=0
-  if [[ "$(descriptor_field '.waylandOnly == false')" = "true" ]]
+  if descriptor_flag '.waylandOnly == false'
   then
     smoke_xvfb=1
   fi

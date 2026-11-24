@@ -128,8 +128,9 @@ export const appDescriptorSchema = z.strictObject({
   // Post-build smoke-gate exceptions for this app, if any.
   smoke: smokeSchema.exactOptional(),
   // The finished AppImage refuses to start without a Wayland session unless
-  // this is false; only a runtime that cannot draw on Wayland sets it.
-  waylandOnly: z.boolean().exactOptional(),
+  // this is false; only a runtime that cannot draw on Wayland sets it. A
+  // default rather than a tri-state, so every consumer reads one boolean.
+  waylandOnly: z.boolean().default(true),
   // The toolkit switch the Wayland-only hook exports for this app, so the
   // window is the toolkit's native Wayland one whatever the host environment
   // says. Absent means the toolkit follows WAYLAND_DISPLAY by itself.
