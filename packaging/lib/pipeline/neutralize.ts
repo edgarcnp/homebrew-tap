@@ -22,10 +22,10 @@ const WAYLAND_HOOK_SOURCE = path.join(PACKAGING_DIR, "lib", "shell", "wayland-on
 // the switches this app's toolkit actually reads.
 //
 // Electron needs both lines: 38 made `--ozone-platform=auto` the default and
-// removed `ELECTRON_OZONE_PLATFORM_HINT`, choosing Wayland when
-// `XDG_SESSION_TYPE=wayland`, while 20-37 only understand the hint. The
-// session-type line is what a real Wayland session exports anyway; a build
-// container exports nothing, which is why the gate needs it too.
+// removed `ELECTRON_OZONE_PLATFORM_HINT`, while 20-37 only understand the hint.
+// Measured on the bundled 41: with `WAYLAND_DISPLAY` set it opens a Wayland
+// connection whatever `XDG_SESSION_TYPE` says, so the session-type line is what
+// a real session exports anyway rather than the switch that decides.
 const WAYLAND_BACKEND_EXPORTS: Record<WaylandBackend, readonly string[]> = {
   auto: [],
   gdk: ["export GDK_BACKEND=wayland"],
