@@ -320,12 +320,11 @@ describe("descriptor contents (regression against the previous per-app scripts)"
       );
       assert.equal(descriptor.artifact.tagPrefix, "v");
     }
-    // Releases come in two channels with a nightly roughly every day, so the
-    // releases feed is no version source: its ten-entry window already ends
-    // before `v0.4.0`, `?page=2` returns the same document byte for byte, and
-    // four of the ten slots go to `@thinkrail/pi-*` package releases. GitHub's
-    // `releases/latest` filters drafts and prereleases server-side, and its
-    // `tag_name` is what this pattern strips the `v` from.
+    // `releases/latest` filters drafts and prereleases server-side, so the feed
+    // window this watch was written against no longer exists. It stays a `json`
+    // read of `tag_name`, which is what the pattern strips the `v` from: the tag
+    // is the release identifier, where a `"github-release"` watch would judge
+    // the release *name* first.
     assert.deepEqual(descriptor.watch, {
       feedUrl: "https://api.github.com/repos/JetBrains/thinkrail/releases/latest",
       format: "json",
