@@ -26,11 +26,15 @@ const WAYLAND_HOOK_SOURCE = path.join(PACKAGING_DIR, "lib", "shell", "wayland-on
 // Measured on the bundled 41: with `WAYLAND_DISPLAY` set it opens a Wayland
 // connection whatever `XDG_SESSION_TYPE` says, so the session-type line is what
 // a real session exports anyway rather than the switch that decides.
+//
+// Firefox needs both too, for the opposite reason: with `MOZ_ENABLE_WAYLAND=1`
+// alone it logs "fallback to X11" and starts on Xwayland when the socket is
+// missing, while `GDK_BACKEND=wayland` makes GTK refuse the X11 backend instead.
 const WAYLAND_BACKEND_EXPORTS: Record<WaylandBackend, readonly string[]> = {
   auto: [],
   gdk: ["export GDK_BACKEND=wayland"],
   electron: ["export XDG_SESSION_TYPE=wayland", "export ELECTRON_OZONE_PLATFORM_HINT=wayland"],
-  moz: ["export MOZ_ENABLE_WAYLAND=1"],
+  moz: ["export GDK_BACKEND=wayland", "export MOZ_ENABLE_WAYLAND=1"],
 };
 
 export interface NeutralizeReport {

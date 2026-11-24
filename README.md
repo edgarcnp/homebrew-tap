@@ -15,11 +15,11 @@ A Homebrew tap of Linux desktop apps with FUSE3 support, repackaged as AppImages
 > [!CAUTION]
 > These builds are Wayland-only, from the release that carries this rule: an
 > AppImage already published keeps running wherever it did until it is rebuilt.
-> Launched from an X11 session a Wayland-only build exits with a message instead
-> of opening a window, and Xwayland is not what these builds are tested against,
-> so a window drawn there can still misbehave. `thinkrail` is the one exception:
-> its runtime pins itself to X11, so it runs on X11 or Xwayland and the rule
-> does not apply to it.
+> Launched from an X11 session, or with no compositor socket behind the session,
+> a Wayland-only build exits with a message instead of opening a window, and
+> Xwayland is not what these builds are tested against, so a window drawn there
+> can still misbehave. `thinkrail` is the one exception: its runtime pins itself
+> to X11, so it runs on X11 or Xwayland and the rule does not apply to it.
 
 ## Install
 

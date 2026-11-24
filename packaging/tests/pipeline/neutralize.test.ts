@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
+import * as net from "node:net";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
@@ -269,7 +270,7 @@ describe("finalizeApp", () => {
       "electron",
       ["export XDG_SESSION_TYPE=wayland", "export ELECTRON_OZONE_PLATFORM_HINT=wayland"],
     ],
-    ["moz", ["export MOZ_ENABLE_WAYLAND=1"]],
+    ["moz", ["export GDK_BACKEND=wayland", "export MOZ_ENABLE_WAYLAND=1"]],
   ] as const)
   {
     it(`adds only the ${backend} switches the app declares`, () => {
@@ -281,43 +282,110 @@ describe("finalizeApp", () => {
       const hook = fs.readFileSync(path.join(appDir, "bin/00-wayland-only.hook"), "utf8");
       const exports = hook.split("\n").filter((entry) => entry.startsWith("export "));
       assert.deepEqual(exports, [...lines]);
-      // The guard still comes first, so a host without Wayland never reaches an
-      // export.
+      // The guard still comes first, so a host without a compositor never
+      // reaches an export (the comments mention a few, hence the line anchor).
       if (lines.length > 0) {
-        assert.ok(hook.indexOf("WAYLAND_DISPLAY is unset") < hook.indexOf("export "));
+        assert.ok(hook.indexOf("WAYLAND_DISPLAY is unset") < hook.search(/^export /m));
       }
     });
   }
 
-  it("refuses to start when PATH has no compositor", () => {
+  // A real unix socket stands in for the compositor: the guard checks the path
+  // libwayland would connect to.
+  async function withCompositorSocket<T>(run: (args: {
+    socketPath: string;
+    runtimeDir: string;
+  }) => T): Promise<T> {
+    const runtimeDir = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "fbr-wayland-"));
+    const socketPath = path.join(runtimeDir, "wayland-test");
+    const server = net.createServer();
+    await new Promise<void>((resolve) => server.listen(socketPath, resolve));
+    try {
+      return run({ socketPath, runtimeDir });
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      fs.rmSync(runtimeDir, { recursive: true, force: true });
+    }
+  }
+
+  function runHook(hook: string, env: NodeJS.ProcessEnv, command = '. "$1"') {
+    return spawnSync("sh", ["-c", command, "sh", hook], { env, encoding: "utf8" });
+  }
+
+  it("refuses to start when no compositor is named", () => {
     write("bin/app", "binary");
     const descriptor = { ...fixtureDescriptor({}), waylandOnly: true };
     finalizeApp(descriptor, appDir);
-    const hook = path.join(appDir, "bin/00-wayland-only.hook");
     const env: NodeJS.ProcessEnv = { ...process.env, DISPLAY: ":1" };
     delete env.WAYLAND_DISPLAY;
+    delete env.WAYLAND_SOCKET;
 
     // AppRun sources the hook, so the guard's `exit` ends the launcher.
-    const refused = spawnSync("sh", ["-c", '. "$1"', "sh", hook], { env, encoding: "utf8" });
+    const refused = runHook(path.join(appDir, "bin/00-wayland-only.hook"), env);
 
     assert.equal(refused.status, 1);
     assert.match(refused.stderr, /needs a Wayland session/);
     assert.match(refused.stderr, /WAYLAND_DISPLAY is unset/);
   });
 
-  it("keeps DISPLAY for the subsystems that need it on a compositor host", () => {
+  it("refuses a socket path that holds no compositor", () => {
+    // The toolkit would answer this case on its own: Firefox logs "fallback to
+    // X11" and draws on Xwayland when DISPLAY still reaches one.
+    write("bin/app", "binary");
+    const descriptor = { ...fixtureDescriptor({}), waylandOnly: true };
+    finalizeApp(descriptor, appDir);
+    const missing = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "fbr-empty-")), "wayland-0");
+
+    const refused = runHook(path.join(appDir, "bin/00-wayland-only.hook"), {
+      ...process.env,
+      WAYLAND_DISPLAY: missing,
+      DISPLAY: ":1",
+    });
+
+    assert.equal(refused.status, 1);
+    assert.match(refused.stderr, new RegExp(`No compositor socket at ${missing}`));
+  });
+
+  it("names the runtime directory a bare socket name cannot resolve against", () => {
+    write("bin/app", "binary");
+    const descriptor = { ...fixtureDescriptor({}), waylandOnly: true };
+    finalizeApp(descriptor, appDir);
+    const env: NodeJS.ProcessEnv = { ...process.env, WAYLAND_DISPLAY: "wayland-0" };
+    delete env.XDG_RUNTIME_DIR;
+    delete env.WAYLAND_SOCKET;
+
+    const refused = runHook(path.join(appDir, "bin/00-wayland-only.hook"), env);
+
+    assert.equal(refused.status, 1);
+    assert.match(refused.stderr, /XDG_RUNTIME_DIR is unset/);
+  });
+
+  it("accepts an inherited descriptor instead of a path", () => {
+    // WAYLAND_SOCKET hands over a connected fd, so there is no path to check.
+    write("bin/app", "binary");
+    const descriptor = { ...fixtureDescriptor({}), waylandOnly: true };
+    finalizeApp(descriptor, appDir);
+    const env: NodeJS.ProcessEnv = { ...process.env, WAYLAND_SOCKET: "3" };
+    delete env.WAYLAND_DISPLAY;
+
+    const sourced = runHook(path.join(appDir, "bin/00-wayland-only.hook"), env);
+
+    assert.equal(sourced.status, 0, sourced.stderr);
+  });
+
+  it("keeps DISPLAY for the subsystems that need it on a compositor host", async () => {
     write("bin/app", "binary");
     const descriptor = { ...fixtureDescriptor({}), waylandOnly: true, waylandBackend: "gdk" as const };
     finalizeApp(descriptor, appDir);
+    const hook = path.join(appDir, "bin/00-wayland-only.hook");
 
-    const sourced = spawnSync(
-      "sh",
-      ["-c", '. "$1"; printf "%s|%s" "${DISPLAY:-}" "${GDK_BACKEND:-}"', "sh", path.join(appDir, "bin/00-wayland-only.hook")],
-      { env: { ...process.env, WAYLAND_DISPLAY: "wayland-0", DISPLAY: ":1" }, encoding: "utf8" },
+    // A bare name resolves against XDG_RUNTIME_DIR, as libwayland does.
+    const output = await withCompositorSocket(({ runtimeDir }) =>
+      runHook(hook, { ...process.env, XDG_RUNTIME_DIR: runtimeDir, WAYLAND_DISPLAY: "wayland-test", DISPLAY: ":1" }, '. "$1"; printf "%s|%s" "${DISPLAY:-}" "${GDK_BACKEND:-}"'),
     );
 
-    assert.equal(sourced.status, 0);
-    assert.equal(sourced.stdout, ":1|wayland");
+    assert.equal(output.status, 0, output.stderr);
+    assert.equal(output.stdout, ":1|wayland");
   });
 
   it("replaces a symlink at the hook path instead of writing through it", () => {

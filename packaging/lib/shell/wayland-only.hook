@@ -1,18 +1,53 @@
 #!/bin/sh
 # Every AppImage in this tap is Wayland-only: it refuses to start without a
-# Wayland session. `DISPLAY` is left in place on purpose — toolkits with no
-# Wayland switch of their own still reach for X11 for a subsystem (a browser
-# plugin, a capture path, a menu), and removing the variable breaks those.
+# compositor it can reach. `DISPLAY` is left in place on purpose — toolkits with
+# no Wayland switch of their own still reach for X11 for a subsystem (a browser
+# plugin, a capture path, a menu), and removing the variable breaks those. What
+# must not happen is a toolkit answering that and drawing an Xwayland window
+# instead, so the check is the socket rather than the environment:
+#
+#   - Electron (Chromium 146, measured): with a dead `WAYLAND_DISPLAY` it opens
+#     no X11 connection, so the guard is what turns its silence into a message.
+#   - Firefox (157, measured): with `MOZ_ENABLE_WAYLAND=1` alone it logs
+#     "fallback to X11" and starts on Xwayland; its descriptor therefore exports
+#     `GDK_BACKEND=wayland` as well, which makes GTK refuse the X11 backend.
+#   - GTK payloads export `GDK_BACKEND=wayland` for the same reason.
 #
 # What each app exports on top of this guard is its own: the descriptor's
-# `waylandBackend` names the toolkit switch, and `fbr finalize` appends that one
-# line here, so an app that needs no switch carries no variable it ignores.
+# `waylandBackend` names those switches, and `fbr finalize` appends them here,
+# so an app that needs none carries no variable it ignores.
 #
 # `${VAR:-}` rather than `${VAR}`: AppRun sources this file into its own shell,
 # so a `set -u` there would abort on the unset variable before the guard speaks.
-if [ -z "${WAYLAND_DISPLAY:-}" ]
+if [ -z "${WAYLAND_DISPLAY:-}" ] && [ -z "${WAYLAND_SOCKET:-}" ]
 then
   printf '%s\n' "This AppImage needs a Wayland session." >&2
   printf '%s\n' "WAYLAND_DISPLAY is unset, so there is no compositor to draw on." >&2
   exit 1
+fi
+
+# A name resolves against XDG_RUNTIME_DIR and a path is used as it stands, which
+# is how libwayland reads the variable. WAYLAND_SOCKET passes an inherited
+# descriptor instead, so there is no path to check there.
+if [ -n "${WAYLAND_DISPLAY:-}" ]
+then
+  case "${WAYLAND_DISPLAY}" in
+    /*) wayland_socket="${WAYLAND_DISPLAY}" ;;
+    *)
+      if [ -z "${XDG_RUNTIME_DIR:-}" ]
+      then
+        printf '%s\n' "This AppImage needs a Wayland session." >&2
+        printf '%s\n' "XDG_RUNTIME_DIR is unset, so WAYLAND_DISPLAY=${WAYLAND_DISPLAY} names no socket." >&2
+        exit 1
+      fi
+      wayland_socket="${XDG_RUNTIME_DIR}/${WAYLAND_DISPLAY}"
+      ;;
+  esac
+  if [ ! -S "${wayland_socket}" ]
+  then
+    printf '%s\n' "This AppImage needs a Wayland session." >&2
+    printf '%s\n' "No compositor socket at ${wayland_socket}." >&2
+    exit 1
+  fi
+  unset wayland_socket
 fi
