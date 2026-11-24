@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
+import * as path from "node:path";
 import { describe, it } from "node:test";
 import { descriptorLines, listApps, loadDescriptor, resolveApp, validateDescriptor } from "../../lib/descriptor/index.ts";
 import { descriptorPath } from "../../lib/core/paths.ts";
@@ -51,6 +52,18 @@ describe("descriptor loading", () => {
       assert.equal(descriptor.id, app);
       assert.ok(descriptor.binaryTargets.length > 0);
       assert.equal(descriptor.sourceDir, `packaging/apps/${app}`);
+    }
+  });
+
+  it("ships an executable build shim for every app", () => {
+    // The build job runs the descriptor's `buildCommand` as `./build.sh`, so a
+    // shim committed without its executable bit fails a dispatched build with
+    // "Permission denied" before any stage runs. A local run invoking
+    // `bash packaging/apps/<app>/build.sh` never touches the bit, which is why
+    // the check is here rather than in the pipeline.
+    for (const app of APPS) {
+      const shim = path.join(path.dirname(descriptorPath(app)), "build.sh");
+      assert.ok(fs.statSync(shim).mode & 0o111, `${app}: build.sh is not executable`);
     }
   });
 
