@@ -1,6 +1,6 @@
 cask "thinkrail" do
   version "0.4.0"
-  sha256 "e8784b7d6b8bc129a217e04b484eacc0bdb982721af14c250c4dedfa4780858e"
+  sha256 "3f2ee0184f3f8c9fc484ee88b93140a97913bff8d628cecdb51c0c59cb5dc410"
 
   url "https://github.com/edgarcnp/homebrew-tap/releases/download/thinkrail-v#{version}/thinkrail-#{version}-x86_64.AppImage"
   name "ThinkRail"
