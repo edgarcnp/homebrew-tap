@@ -897,6 +897,10 @@ function runSmoke(
         PATH: `${westonStubDir()}:${process.env.PATH ?? ""}`,
         COMMON: SHELL_COMMON,
         APPIMAGE: appimage,
+        // Everything the gate makes for this run — the captured output and the
+        // compositor's runtime dir — lands in the test's own directory, so a
+        // failure path that exits before the cleanup still leaves nothing.
+        TMPDIR: workDir,
         SMOKE_TIMEOUT: "8",
         SMOKE_DEFUNCT_SECONDS: "2",
         ...extraEnv,
