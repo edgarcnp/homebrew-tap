@@ -5,7 +5,7 @@
   "comment": "Fast, resource-efficient Git GUI written in Rust",
   "cask": "gitcomet",
   "watch": {
-    "feedUrl": "https://api.github.com/repos/Auto-Explore/GitComet/releases",
+    "feedUrl": "https://api.github.com/repos/Auto-Explore/GitComet/releases/latest",
     "format": "github-release",
     "versionPattern": "^GitComet v(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
     "skipPattern": "^GitComet v\\d+\\.\\d+\\.\\d+-rc",

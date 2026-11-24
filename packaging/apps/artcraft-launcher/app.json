@@ -5,7 +5,7 @@
   "comment": "Install, update and launch the Craft App Suite",
   "cask": "artcraft-launcher",
   "watch": {
-    "feedUrl": "https://api.github.com/repos/storytold/craft-launcher/releases",
+    "feedUrl": "https://api.github.com/repos/storytold/craft-launcher/releases/latest",
     "format": "github-release",
     "versionPattern": "^ArtCraft Launcher v(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
     "skipPattern": "^ArtCraft Launcher v\\d+\\.\\d+\\.\\d+-",

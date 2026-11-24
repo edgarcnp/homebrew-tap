@@ -24,8 +24,9 @@ export const DEB_VERSION = /^[0-9][0-9A-Za-z.+~-]*$/;
 export const GITHUB_API_REPOSITORY =
   /^https:\/\/api\.github\.com\/repos\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 
-// The GitHub releases-list URL a `"github-release"` watch may name: the same
-// pinned API repository path plus `/releases` (the readers strip an optional
-// trailing slash). Mirror of the API's GITHUB_RELEASE_FEED.
+// The GitHub latest-release URL a `"github-release"` watch may name: the same
+// pinned API repository path plus `/releases/latest`, the endpoint that answers
+// only a release that is neither a draft nor a prerelease (the readers strip an
+// optional trailing slash). Mirror of the API's GITHUB_RELEASE_FEED.
 export const GITHUB_RELEASE_FEED =
-  /^https:\/\/api\.github\.com\/repos\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/releases\/?$/;
+  /^https:\/\/api\.github\.com\/repos\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/releases\/latest\/?$/;

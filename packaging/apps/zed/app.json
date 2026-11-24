@@ -5,7 +5,7 @@
   "comment": "High-performance, multiplayer code editor",
   "cask": "zed",
   "watch": {
-    "feedUrl": "https://api.github.com/repos/zed-industries/zed/releases",
+    "feedUrl": "https://api.github.com/repos/zed-industries/zed/releases/latest",
     "format": "github-release",
     "versionPattern": "^v(\\d+\\.\\d+\\.\\d+)$",
     "repo": "zed-industries/zed"

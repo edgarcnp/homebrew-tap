@@ -1056,7 +1056,7 @@ describe("release watch", () => {
       repo: "anomalyco/opencode",
     });
     assert.deepEqual(loadDescriptor("gitcomet").watch, {
-      feedUrl: "https://api.github.com/repos/Auto-Explore/GitComet/releases",
+      feedUrl: "https://api.github.com/repos/Auto-Explore/GitComet/releases/latest",
       format: "github-release",
       versionPattern: "^GitComet v(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
       skipPattern: "^GitComet v\\d+\\.\\d+\\.\\d+-rc",
@@ -1069,13 +1069,13 @@ describe("release watch", () => {
       versionPattern: "^(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
     });
     assert.deepEqual(loadDescriptor("wfhelper").watch, {
-      feedUrl: "https://api.github.com/repos/WFHelper/WFHelper/releases",
+      feedUrl: "https://api.github.com/repos/WFHelper/WFHelper/releases/latest",
       format: "github-release",
       versionPattern: "^v(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
       repo: "WFHelper/WFHelper",
     });
     assert.deepEqual(loadDescriptor("artcraft-launcher").watch, {
-      feedUrl: "https://api.github.com/repos/storytold/craft-launcher/releases",
+      feedUrl: "https://api.github.com/repos/storytold/craft-launcher/releases/latest",
       format: "github-release",
       versionPattern: "^ArtCraft Launcher v(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
       skipPattern: "^ArtCraft Launcher v\\d+\\.\\d+\\.\\d+-",
@@ -1657,10 +1657,10 @@ describe("descriptor validation", () => {
       versionPattern: "^(\\d+)$",
     };
     assert.deepEqual(validateDescriptor(mutated("vscode", (copy) => { copy["watch"] = atomWatch; }), "vscode").watch, atomWatch);
-    // The releases format pins the feed to the API's releases list; a trailing
-    // slash is allowed (the readers strip it).
+    // The releases format pins the watch to the API's latest-release endpoint; a
+    // trailing slash is allowed (the readers strip it).
     const releaseWatch = {
-      feedUrl: "https://api.github.com/repos/acme/app/releases",
+      feedUrl: "https://api.github.com/repos/acme/app/releases/latest",
       format: "github-release",
       versionPattern: "^(\\d+)$",
     };
@@ -1684,8 +1684,26 @@ describe("descriptor validation", () => {
           }),
           "vscode",
         ),
-      /must be a GitHub releases-list URL/,
+      /must be a GitHub latest-release URL/,
     );
+    // The list endpoint is the one spelling that must not pass: it answers
+    // drafts and prereleases too, and the watch would dispatch one.
+    for (const refused of [
+      "https://api.github.com/repos/acme/app/releases",
+      "https://api.github.com/repos/acme/app/releases/latest/hop",
+    ]) {
+      assert.throws(
+        () =>
+          validateDescriptor(
+            mutated("vscode", (copy) => {
+              copy["watch"] = { ...releaseWatch, feedUrl: refused };
+            }),
+            "vscode",
+          ),
+        /must be a GitHub latest-release URL/,
+        refused,
+      );
+    }
     assert.throws(
       () =>
         validateDescriptor(

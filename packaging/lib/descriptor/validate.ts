@@ -307,17 +307,17 @@ function validateSmoke(smoke: SmokeConfig, label: string): void {
 
 function validateWatch(watch: WatchConfig, label: string): void {
   assertHttpsUrl(watch.feedUrl, `${label}.feedUrl`);
-  // The GitHub releases transport fetches the pinned API path behind the
+  // The GitHub latest-release transport fetches the pinned API path behind the
   // shared bearer PAT, so only that URL shape may name it.
   if (watch.format === "github-release") {
     if (!GITHUB_RELEASE_FEED.test(watch.feedUrl)) {
       fail(
-        `${label}.feedUrl must be a GitHub releases-list URL ` +
-          `(https://api.github.com/repos/<owner>/<repo>/releases): ${watch.feedUrl}`,
+        `${label}.feedUrl must be a GitHub latest-release URL ` +
+          `(https://api.github.com/repos/<owner>/<repo>/releases/latest): ${watch.feedUrl}`,
       );
     }
     if (watch.repo !== undefined) {
-      const expected = `https://api.github.com/repos/${watch.repo}/releases`;
+      const expected = `https://api.github.com/repos/${watch.repo}/releases/latest`;
       if (watch.feedUrl.replace(/\/+$/, "") !== expected) {
         fail(`${label}.feedUrl does not match watch.repo ${watch.repo}`);
       }
