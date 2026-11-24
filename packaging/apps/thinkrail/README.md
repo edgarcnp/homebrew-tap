@@ -45,6 +45,24 @@ tag, and verified against the SHA-256 in its `SHA256SUMS` asset.
   installs `webkit2gtk-4.1`, `gtk3`, `libayatana-appindicator` and `librsvg`.
   `webkit2gtk-4.1-mini` and `gdk-pixbuf2-mini` follow the pairing the other
   GTK-bundling apps use.
+- **White window on an NVIDIA render node** — WebKit's DMABUF renderer
+  allocates its compositor buffers through GBM on a render node it picks at
+  runtime. Where that node belongs to the NVIDIA proprietary driver
+  (`DRIVER=nvidia` in `/sys/class/drm/renderD128/device/uevent`), every
+  allocation fails with `Failed to create GBM buffer ...: Invalid argument`
+  and nothing is painted: the window stays white while the app runs normally.
+  `templates/webkit-dmabuf.hook` rides the descriptor's `updater.hook` — the
+  pipeline's runtime-hook slot, as Firefox's NVIDIA sandbox hook does — is
+  installed into the AppDir's `bin/`, and is sourced by quick-sharun's
+  `AppRun.sh` before it execs the launcher, so
+  `WEBKIT_DISABLE_DMABUF_RENDERER=1` reaches the launcher and the WebKit
+  child processes it spawns. It applies to every launch, the cask's desktop
+  entry included. The cost is accelerated compositing on hosts without the
+  bug: the software path renders, but it does not use the GPU. Forcing
+  `GDK_BACKEND=x11` and `__NV_DISABLE_EXPLICIT_SYNC=1` do not help, the
+  bundle's WebKit (2.54.3) is current and `webkitgtk-6.0` is unavailable
+  (`bin/libNativeWrapper.so` has `NEEDED libwebkit2gtk-4.1.so.0`), so the
+  hook is the only lever until the driver renders.
 
 ## Updater neutralization
 

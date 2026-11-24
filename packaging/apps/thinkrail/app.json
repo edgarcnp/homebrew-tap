@@ -54,7 +54,8 @@
     "residualScan": {
       "patterns": ["releases/download/desktop-updates"],
       "severity": "error"
-    }
+    },
+    "hook": "templates/webkit-dmabuf.hook"
   },
   "quickSharun": {
     "hooks": ["fix-namespaces.hook"]

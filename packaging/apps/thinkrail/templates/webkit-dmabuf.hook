@@ -1,0 +1,12 @@
+#!/bin/sh
+# WebKit's DMABUF renderer allocates its compositor buffers through GBM on a
+# render node it picks at runtime; where that node belongs to the NVIDIA
+# proprietary driver (DRIVER=nvidia in /sys/class/drm/renderD*/device/uevent),
+# every allocation fails with "Failed to create GBM buffer ...: Invalid
+# argument" and the window stays white while the app itself runs normally. The
+# software path allocates no GBM buffer, so it paints.
+#
+# Unconditional by design: this hook can see the host's render nodes but not
+# which one WebKit would composite through, so the choice is a window that
+# paints on every host against accelerated compositing where the driver works.
+export WEBKIT_DISABLE_DMABUF_RENDERER=1
