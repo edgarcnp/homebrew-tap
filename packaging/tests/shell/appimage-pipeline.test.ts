@@ -1004,6 +1004,31 @@ describe("smoke_test_appimage", () => {
     assert.equal(fs.existsSync(marker), true);
   });
 
+  it("leaves the caller's EXIT trap in place", { skip: !HAS_PYTHON }, () => {
+    // The gate installs a trap of its own while the compositor runs; the
+    // pipeline's cleanup must survive it.
+    const result = spawnSync(
+      "bash",
+      [
+        "-c",
+        'set -Eeuo pipefail; . "$COMMON"; trap \'echo caller-trap-ran >&2\' EXIT; smoke_test_appimage "$APPIMAGE"',
+      ],
+      {
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          PATH: `${westonStubDir()}:${process.env.PATH ?? ""}`,
+          COMMON: SHELL_COMMON,
+          APPIMAGE: smokeApp("#!/bin/sh\nsleep 1\n"),
+          SMOKE_TIMEOUT: "8",
+        },
+      },
+    );
+
+    assert.equal(result.status, 0, result.stderr ?? "");
+    assert.match(result.stderr ?? "", /caller-trap-ran/);
+  });
+
   it("passes an app that exits on its own", { skip: !HAS_PYTHON }, () => {
     const { status, stderr } = runSmoke(smokeApp("#!/bin/sh\nsleep 1\n"));
     assert.equal(status, 0, stderr);

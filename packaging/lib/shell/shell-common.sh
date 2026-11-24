@@ -211,6 +211,12 @@ Install it on the host, or build with the image from packaging/builder/Dockerfil
 # caller's EXIT trap back.
 smoke_stop_compositor() {
   local pid="${SMOKE_COMPOSITOR_PID:-}"
+  # Nothing was started (an app that draws on X11), so there is no trap of ours
+  # to take back either.
+  if [[ -z "${pid}" && -z "${SMOKE_RUNTIME_DIR:-}" ]]
+  then
+    return 0
+  fi
   if [[ -n "${pid}" ]]
   then
     kill "${pid}" 2>/dev/null || true
