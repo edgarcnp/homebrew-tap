@@ -1059,7 +1059,6 @@ describe("release watch", () => {
       feedUrl: "https://api.github.com/repos/Auto-Explore/GitComet/releases/latest",
       format: "github-release",
       versionPattern: "^GitComet v(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
-      skipPattern: "^GitComet v\\d+\\.\\d+\\.\\d+-rc",
       repo: "Auto-Explore/GitComet",
     });
     assert.deepEqual(loadDescriptor("little-genius").watch, {
@@ -1078,7 +1077,6 @@ describe("release watch", () => {
       feedUrl: "https://api.github.com/repos/storytold/craft-launcher/releases/latest",
       format: "github-release",
       versionPattern: "^ArtCraft Launcher v(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
-      skipPattern: "^ArtCraft Launcher v\\d+\\.\\d+\\.\\d+-",
       repo: "storytold/craft-launcher",
     });
   });
@@ -1103,15 +1101,15 @@ describe("release watch", () => {
     }
   });
 
-  it("skips the pre-release lines each pattern excludes", () => {
-    const gitcomet = loadDescriptor("gitcomet").watch;
-    assert.ok(gitcomet?.skipPattern !== undefined);
-    assert.equal(new RegExp(gitcomet.skipPattern).test("GitComet v0.3.0-rc.1"), true);
-    assert.equal(new RegExp(gitcomet.skipPattern).test("GitComet v0.3.0"), false);
-    const artcraft = loadDescriptor("artcraft-launcher").watch;
-    assert.ok(artcraft?.skipPattern !== undefined);
-    assert.equal(new RegExp(artcraft.skipPattern).test("ArtCraft Launcher v0.3.0-beta.2"), true);
-    assert.equal(new RegExp(artcraft.skipPattern).test("ArtCraft Launcher v0.3.0"), false);
+  it("carries no skip list for the pre-releases the endpoint already excludes", () => {
+    // `releases/latest` answers only a release that is neither a draft nor a
+    // prerelease, so a skip list for those titles has nothing left to drop —
+    // and a stale one now costs the watch its only candidate: there is no
+    // second entry to fall back to, so a stable release whose name matched
+    // would read as no entry forever.
+    for (const app of ["gitcomet", "artcraft-launcher"]) {
+      assert.equal(loadDescriptor(app).watch?.skipPattern, undefined, app);
+    }
   });
 });
 

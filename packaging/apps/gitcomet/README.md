@@ -34,13 +34,12 @@ filled on the first publish, pinning the final AppImage at install.
   `GITCOMET_NO_UPDATE_CHECK=1` — upstream's supported switch, written to the
   AppDir `.env` by `fbr finalize` — disables it, so there is no endpoint to
   patch and no residual scan to assert one.
-- **Release watch** — the pattern matches the release *title* (`GitComet
-  v<version>`), not the tag, so capture group 1 is the version. `skipPattern`
-  drops `-rc` entries: upstream's release workflow accepts `-rc.N` versions, and
-  an rc that has no declared release asset would be a not-ready the tap can
-  never build. The cask's livecheck reads
-  this tap's own release tags (the versions the pipeline published), so it never
-  sees an upstream rc.
+- **Release watch** — the pattern matches the release *name* (`GitComet
+  v<version>`), not the tag, so capture group 1 is the version.
+  `releases/latest` answers only a release that is neither a draft nor a
+  prerelease, so upstream's `-rc.N` versions can never reach the watch and no
+  skip list is needed. The cask's livecheck reads this tap's own release tags
+  (the versions the pipeline published), so it never sees an upstream rc.
 - **Local data** — the app keeps everything under XDG data and state only
   (`~/.local/share/gitcomet`, `~/.local/state/gitcomet`; upstream defines no
   config directory), which is exactly what the cask's zap removes.

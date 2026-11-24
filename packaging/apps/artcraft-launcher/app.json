@@ -8,7 +8,6 @@
     "feedUrl": "https://api.github.com/repos/storytold/craft-launcher/releases/latest",
     "format": "github-release",
     "versionPattern": "^ArtCraft Launcher v(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
-    "skipPattern": "^ArtCraft Launcher v\\d+\\.\\d+\\.\\d+-",
     "repo": "storytold/craft-launcher"
   },
   "assetPrefix": "artcraft-launcher",

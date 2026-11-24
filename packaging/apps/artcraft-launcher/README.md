@@ -22,12 +22,12 @@ first publish replaces with the built AppImage's SHA-256.
   `artcraft-launcher-{version}-linux-x86_64.tar.gz`; upstream uses the machine
   spelling (`x86_64`, `aarch64`) in the asset name. The app is amd64-only here,
   matching the tap.
-- **Release watch** — the pattern matches the release *title*, not the tag, so
+- **Release watch** — the pattern matches the release *name*, not the tag, so
   capture group 1 is the version. Upstream marks every `-suffix` version
-  (`1.2.3-rc.1`) as a GitHub prerelease, but the feed reader lists titles and
-  never sees that flag, so `skipPattern` drops those titles instead; without it
-  the watcher would advertise a version `resolve` (which skips prerelease
-  releases) can never reach.
+  (`1.2.3-rc.1`) as a GitHub prerelease, and `releases/latest` answers only a
+  release that is neither a draft nor a prerelease, so the watch never sees one
+  and needs no skip list. The `[.-]\w+` tail stays for a vendor that ever ships
+  a suffix on a release it does mark stable.
 - **Payload** — `tarball-tree` with the default `target: "root"`: the tarball's
   single versioned top-level directory is detected, so its `bin/` lands at the
   AppDir root. `exclude: ["share"]` skips the tarball's inert
