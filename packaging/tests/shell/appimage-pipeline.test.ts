@@ -996,7 +996,7 @@ describe("smoke_test_appimage", () => {
     const marker = path.join(workDir, "xvfb-stub-used");
 
     const { status, stderr } = runSmoke(smokeApp("#!/bin/sh\nsleep 1\n"), {
-      SMOKE_XVFB: "1",
+      SMOKE_DISPLAY: "xvfb",
       XVFB_MARKER: marker,
     });
 

@@ -843,12 +843,12 @@ Install the Anylinux tools (packaging/scripts/install-anylinux-tools.sh) or add 
   # hook's own contract (a headless weston socket), and an app whose runtime
   # pins itself to X11 gets an Xvfb display instead of failing on a compositor
   # it never asked for.
-  local smoke_xvfb=0
+  local smoke_display=wayland
   if descriptor_flag '.waylandOnly == false'
   then
-    smoke_xvfb=1
+    smoke_display=xvfb
   fi
-  SMOKE_XVFB="${smoke_xvfb}" \
+  SMOKE_DISPLAY="${smoke_display}" \
     SMOKE_IGNORE_DEFUNCT="$(descriptor_field '.smoke.ignoreDefunct // [] | join(" ")')" \
     smoke_test_appimage "${output_file}" "${smoke_launch_args[@]}"
   info "Built AppImage: ${output_file}"

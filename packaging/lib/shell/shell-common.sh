@@ -276,16 +276,21 @@ smoke_test_appimage() {
   # An app that opts out of the Wayland rule draws on X11 and is given an X11
   # display, so the gate keeps starting it instead of watching it refuse.
   local -a runner=()
-  if [[ "${SMOKE_XVFB:-0}" = 1 ]]
-  then
-    command -v xvfb-run >/dev/null 2>&1 || error "The smoke test needs xvfb-run for an X11-only app."
-    runner=(xvfb-run -a)
-  else
-    smoke_start_compositor
-    # Only the compositor is pointed at the private directory: the app keeps the
-    # session's XDG_RUNTIME_DIR and is told the socket by absolute path.
-    runner=(env "WAYLAND_DISPLAY=${SMOKE_WAYLAND_DISPLAY}")
-  fi
+  case "${SMOKE_DISPLAY:-wayland}" in
+    wayland)
+      smoke_start_compositor
+      # Only the compositor is pointed at the private directory: the app keeps
+      # the session's XDG_RUNTIME_DIR and is told the socket by absolute path.
+      runner=(env "WAYLAND_DISPLAY=${SMOKE_WAYLAND_DISPLAY}")
+      ;;
+    xvfb)
+      command -v xvfb-run >/dev/null 2>&1 || error "The smoke test needs xvfb-run for an X11-only app."
+      runner=(xvfb-run -a)
+      ;;
+    *)
+      error "SMOKE_DISPLAY must be wayland or xvfb: ${SMOKE_DISPLAY}"
+      ;;
+  esac
   # In the background so the tree can be watched while it runs; the timeout
   # still bounds the whole window.
   APPIMAGE_EXTRACT_AND_RUN=1 "${runner[@]}" timeout -k 5 "${timeout_seconds}" \
