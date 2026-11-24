@@ -3,7 +3,7 @@
 # cask installs. Homebrew's app_image artifact installs the entry packed into
 # the AppImage and the cask's postflight writes its own, so a name mismatch
 # hands the user two identical launchers while every file on its own still
-# parses (the orca.desktop that shipped beside orca-ide.desktop).
+# parses (a second entry named after the cask token beside a renamed one).
 #
 # Usage: check-desktop-entries.sh --app <app> [--applications-dir <dir>]
 #   --app                descriptor whose entry name and binaries are the contract

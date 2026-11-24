@@ -83,8 +83,8 @@ export const appDescriptorSchema = z.strictObject({
   // Desktop entry Comment= value.
   comment: nonEmptyString,
   // Desktop entry file name and icon name. Absent means the cask token; set
-  // it when the generic name is already taken on a user's desktop (Orca the
-  // IDE versus Orca the screen reader).
+  // it when the generic name is already taken on a user's desktop by another
+  // program.
   desktopId: appId.exactOptional(),
   // Cask token: Casks/<cask>.rb.
   cask: appId,

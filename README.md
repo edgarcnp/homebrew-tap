@@ -45,7 +45,6 @@ brew install --cask <cask>
 | `gitcomet` | [GitComet](https://gitcomet.dev/) | |
 | `little-genius` | [Little Genius](https://lg.avakot.org/) | |
 | `opencode-desktop` | [OpenCode Desktop](https://opencode.ai/) | |
-| `orca` | [Orca](https://github.com/stablyai/orca) | |
 | `thinkrail` | [ThinkRail](https://github.com/JetBrains/thinkrail) | stable channel only |
 | `vscode` | [Visual Studio Code](https://code.visualstudio.com/) | |
 | `wfhelper` | [WFHelper](https://github.com/WFHelper/WFHelper) | |

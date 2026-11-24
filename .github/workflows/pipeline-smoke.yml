@@ -2,9 +2,8 @@ name: Pipeline smoke (build only)
 
 # Manual production gate for pipeline changes: run the real builder and smoke
 # test for one app from every artifact/payload family, without publishing a
-# release or touching a cask. The six apps cover:
+# release or touching a cask. The five apps cover:
 #   vscode            json-asset + tarball-tree
-#   orca              github-release + deb-tree
 #   wfhelper          github-release + appimage-tree
 #   firefox           mozilla-release + tarball-tree
 #   little-genius     avakot + deb-files
@@ -12,7 +11,7 @@ name: Pipeline smoke (build only)
 #
 # Run this before releasing a change that touches the descriptor schema, the
 # shell staging stages, or the pack/smoke path. It is intentionally manual:
-# six full AppImage builds are expensive and must not gate every push. A main
+# five full AppImage builds are expensive and must not gate every push. A main
 # push runs the fast `check-tools` and test gates instead.
 
 on:
@@ -42,7 +41,6 @@ jobs:
       matrix:
         app:
           - vscode
-          - orca
           - wfhelper
           - firefox
           - little-genius

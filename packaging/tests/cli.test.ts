@@ -251,7 +251,7 @@ describe("fbr CLI contract", () => {
       const result = fbr([
         "neutralize",
         "--app",
-        "orca",
+        "wfhelper",
         "--appdir",
         dir,
         "--failure-out",
@@ -317,24 +317,9 @@ describe("fbr CLI contract", () => {
 });
 
 // The entry at the AppDir root is the one Homebrew's app_image artifact
-// installs into ~/.local/share/applications. It carries the cask's launcher
-// name: named after the cask token instead, it lands beside the entry the
-// cask's postflight writes whenever the descriptor renames the launcher (an
-// `orca.desktop` next to `orca-ide.desktop`), and the app gets two launchers.
+// installs into ~/.local/share/applications. With no descriptor renaming the
+// launcher it carries the cask token, which is what every app in the tap does.
 describe("render-desktop destination", () => {
-  it("names the AppDir entry after the launcher id", () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "fbr-desktop-"));
-    try {
-      const result = fbr(["render-desktop", "--app", "orca", "--version", "1.4.271", "--appdir", dir]);
-      assert.equal(result.status, 0, result.stderr);
-      assert.equal(result.stdout.trim(), path.join(dir, "orca-ide.desktop"));
-      assert.equal(fs.existsSync(path.join(dir, "orca-ide.desktop")), true);
-      assert.equal(fs.existsSync(path.join(dir, "orca.desktop")), false);
-    } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
   it("keeps the cask token when the descriptor sets no desktopId", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "fbr-desktop-"));
     try {

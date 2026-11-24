@@ -38,7 +38,7 @@ descriptor_flag() {
 # Name of the desktop entry packed into the AppImage: the descriptor's
 # desktopId when it sets one, else the cask token. The cask installs its own
 # entry under the same name, so an app whose generic name belongs to something
-# else (Orca the IDE versus the GNOME Orca screen reader) does not ship a
+# else (a name another program on the desktop already uses) does not ship a
 # second "<cask>.desktop" for the app's own desktop integration to install
 # beside it.
 launcher_name() {
@@ -342,7 +342,8 @@ pipeline_stage() {
 
 # Creates the descriptor's relative symlinks in the finished AppDir. An app that
 # resolves its own files beside the launcher at the extracted AppImage root
-# (Orca looks for resources/bin/<launcher> there) needs the staged tree linked
+# (a self-extracting launcher looks for resources/bin/<launcher> there) needs
+# the staged tree linked
 # into that shape before the image is packed.
 pipeline_link_appdir_entries() {
   local link target full target_relative
@@ -762,7 +763,7 @@ desktop_entry_names() {
 # Fails unless the packed AppImage's root carries the entry the cask installs,
 # and nothing else. The artifact installs every root "*.desktop" it finds, so
 # an entry under another name lands beside the cask's own postflight entry and
-# the app gets two launchers (an orca.desktop beside orca-ide.desktop).
+# the app gets two launchers (one under the cask token, one renamed).
 pipeline_assert_packaged_desktop() {
   local appimage="$1" extract_dir expected names
   expected="${LAUNCHER_NAME}.desktop"

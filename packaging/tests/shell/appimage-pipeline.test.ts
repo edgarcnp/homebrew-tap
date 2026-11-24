@@ -1075,12 +1075,12 @@ describe("smoke_test_appimage", () => {
 });
 
 // AppDir links: an app whose self-extraction expects its payload beside the
-// launcher at the AppImage root (Orca asks for resources/bin/<launcher>) needs
-// the staged tree linked into that shape before the image is packed.
+// launcher at the AppImage root (it asks for resources/bin/<launcher>) needs the
+// staged tree linked into that shape before the image is packed.
 
 describe("pipeline_link_appdir_entries", () => {
   it("creates a relative symlink at the AppDir root", () => {
-    writeHelperFile("bin/resources/bin/orca-ide", "#!/bin/sh\nexit 0\n");
+    writeHelperFile("bin/resources/bin/app-helper", "#!/bin/sh\nexit 0\n");
 
     const { status, stderr } = runHelperStage("pipeline_link_appdir_entries", {
       appDirLinks: [{ link: "resources", target: "bin/resources" }],
@@ -1089,8 +1089,8 @@ describe("pipeline_link_appdir_entries", () => {
     assert.equal(fs.lstatSync(pathIn("resources")).isSymbolicLink(), true);
     assert.equal(fs.readlinkSync(pathIn("resources")), "bin/resources");
     assert.equal(
-      fs.realpathSync(pathIn("resources/bin/orca-ide")),
-      fs.realpathSync(pathIn("bin/resources/bin/orca-ide")),
+      fs.realpathSync(pathIn("resources/bin/app-helper")),
+      fs.realpathSync(pathIn("bin/resources/bin/app-helper")),
     );
   });
 
@@ -1131,9 +1131,8 @@ describe("pipeline_link_appdir_entries", () => {
 
 // The desktop entry packed into the AppImage carries the launcher name. The
 // cask installs its own entry under the same name, so an app whose generic
-// name belongs to something else (Orca the IDE versus the GNOME Orca screen
-// reader) must not ship a second "orca.desktop" for the app's own desktop
-// integration to install beside it.
+// name belongs to another program on the desktop must not ship a second entry
+// under that name for the app's own desktop integration to install beside it.
 describe("launcher_name", () => {
   function launcherName(appJson: string): { status: number | null; stdout: string; stderr: string } {
     const result = spawnSync("bash", ["-c", `set -Eeuo pipefail; . "$PIPELINE_LIB"; launcher_name`], {
@@ -1148,7 +1147,9 @@ describe("launcher_name", () => {
   }
 
   it("uses the descriptor's desktopId", () => {
-    assert.equal(launcherName(realDescriptor("orca")).stdout, "orca-ide");
+    // No app renames its launcher today, so the synthetic descriptor is what
+    // keeps the branch covered.
+    assert.equal(launcherName(JSON.stringify({ cask: "gitcomet", desktopId: "gitcomet-ide" })).stdout, "gitcomet-ide");
   });
 
   it("falls back to the cask token", () => {
@@ -1156,7 +1157,7 @@ describe("launcher_name", () => {
   });
 
   it("refuses a name that would leave the applications directory", () => {
-    const result = launcherName(JSON.stringify({ cask: "orca", desktopId: "../evil" }));
+    const result = launcherName(JSON.stringify({ cask: "gitcomet", desktopId: "../evil" }));
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /unsafe desktop entry name: \.\.\/evil/);
   });
@@ -1165,8 +1166,7 @@ describe("launcher_name", () => {
 // The pack gate: Homebrew's app_image artifact installs every "*.desktop" the
 // AppImage carries at its root, so the root has to hold the one entry the
 // cask's postflight writes and nothing else. A second name there is a second
-// launcher in the user's applications directory (the orca.desktop that shipped
-// beside orca-ide.desktop).
+// launcher in the user's applications directory.
 describe("pipeline_assert_packaged_desktop", () => {
   let scratch: string;
   let imageRoot: string;
@@ -1175,7 +1175,7 @@ describe("pipeline_assert_packaged_desktop", () => {
   beforeEach(() => {
     scratch = fs.mkdtempSync(path.join(os.tmpdir(), "fbr-pack-gate-"));
     imageRoot = path.join(scratch, "root");
-    appimage = path.join(scratch, "orca-x86_64.AppImage");
+    appimage = path.join(scratch, "app-x86_64.AppImage");
     fs.mkdirSync(imageRoot);
     // What the AppImage runtime does for "--appimage-extract '*.desktop'":
     // it puts the matched root files under ./squashfs-root in the cwd.
@@ -1202,11 +1202,11 @@ describe("pipeline_assert_packaged_desktop", () => {
 
   function entryNames(...names: string[]): void {
     for (const name of names) {
-      fs.writeFileSync(path.join(imageRoot, name), "[Desktop Entry]\nName=Orca IDE\n");
+      fs.writeFileSync(path.join(imageRoot, name), "[Desktop Entry]\nName=App\n");
     }
   }
 
-  function run(launcher = "orca-ide"): { status: number | null; stderr: string } {
+  function run(launcher = "app"): { status: number | null; stderr: string } {
     const result = spawnSync(
       "bash",
       ["-c", `set -Eeuo pipefail; . "$PIPELINE_LIB"; LAUNCHER_NAME="$LAUNCHER"; pipeline_assert_packaged_desktop "$IMAGE"`],
@@ -1225,24 +1225,24 @@ describe("pipeline_assert_packaged_desktop", () => {
   }
 
   it("accepts the launcher's entry alone", () => {
-    entryNames("orca-ide.desktop");
+    entryNames("app.desktop");
     const { status, stderr } = run();
     assert.equal(status, 0, stderr);
     assert.equal(fs.readFileSync(path.join(scratch, "args"), "utf8"), "--appimage-extract\n*.desktop\n");
   });
 
   it("rejects a root entry under the cask token", () => {
-    entryNames("orca.desktop");
+    entryNames("app-token.desktop");
     const { status, stderr } = run();
     assert.equal(status, 1);
-    assert.match(stderr, /ships 'orca\.desktop' at its root; expected only orca-ide\.desktop/);
+    assert.match(stderr, /ships 'app-token\.desktop' at its root; expected only app\.desktop/);
   });
 
   it("rejects a second entry beside the launcher's", () => {
-    entryNames("orca-ide.desktop", "orca.desktop");
+    entryNames("app.desktop", "app-token.desktop");
     const { status, stderr } = run();
     assert.equal(status, 1);
-    assert.match(stderr, /ships 'orca-ide\.desktop\norca\.desktop' at its root/);
+    assert.match(stderr, /ships 'app-token\.desktop\napp\.desktop' at its root/);
   });
 
   it("rejects an image with no root entry at all", () => {
@@ -1252,9 +1252,9 @@ describe("pipeline_assert_packaged_desktop", () => {
   });
 
   it("leaves no scratch directory behind", () => {
-    entryNames("orca-ide.desktop");
+    entryNames("app.desktop");
     run();
-    assert.deepEqual(fs.readdirSync(scratch).sort(), ["args", "root", "orca-x86_64.AppImage"].sort());
+    assert.deepEqual(fs.readdirSync(scratch).sort(), ["app-x86_64.AppImage", "args", "root"].sort());
   });
 });
 

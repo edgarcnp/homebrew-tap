@@ -281,38 +281,6 @@ describe("descriptor contents (regression against the previous per-app scripts)"
     assert.equal(descriptor.updater.residualScan, undefined);
   });
 
-  it("keeps orca's deb payload, root resources link and updater patch", () => {
-    const descriptor = loadDescriptor("orca");
-    assert.equal(descriptor.artifact.kind, "github-release");
-    if (descriptor.artifact.kind === "github-release") {
-      assert.equal(descriptor.artifact.assetNameTemplate, "orca-ide_{version}_{arch}.deb");
-      assert.equal(descriptor.artifact.tagPrefix, "v");
-    }
-    assert.equal(descriptor.payload.kind, "deb-tree");
-    assert.equal(descriptor.payload.kind === "deb-tree" ? descriptor.payload.tree : "", "opt/Orca");
-    assert.deepEqual(descriptor.appDirLinks, [
-      { link: "resources", target: "bin/resources" },
-      { link: "orca-ide", target: "bin/orca-ide" },
-    ]);
-    assert.deepEqual(descriptor.smoke, { ignoreDefunct: ["sh"] });
-    assert.deepEqual(descriptor.hostHelpers, ["bin/resources/bin/orca-wayland-clipboard"]);
-    assert.deepEqual(descriptor.binaryTargets, ["orca-ide"]);
-    // The app pins its own generic GitHub release feed, so app-update.yml alone
-    // is not enough: the repo literal is patched at both copies of the updater.
-    assert.deepEqual(descriptor.updater.removeFeed, {
-      paths: ["bin/resources/app-update.yml"],
-      required: true,
-    });
-    const patch = descriptor.updater.patchEndpoint;
-    assert.equal(patch?.from, "stablyai/orca");
-    assert.equal(patch?.from.length, patch?.binaryReplacement.length);
-    assert.deepEqual(patch?.targets, [
-      "bin/resources/app.asar",
-      "bin/resources/app.asar.unpacked/out/shared/updater/release-channel.js",
-    ]);
-    assert.equal(descriptor.updater.residualScan?.severity, "error");
-  });
-
   it("keeps thinkrail's zstd bundle, layout links and updater patch", () => {
     const descriptor = loadDescriptor("thinkrail");
     assert.equal(descriptor.artifact.kind, "github-release");
@@ -407,25 +375,24 @@ describe("descriptor contents (regression against the previous per-app scripts)"
   });
 
   it("validates an optional desktop id that renames the entry and the icon", () => {
-    assert.equal(loadDescriptor("orca").desktopId, "orca-ide");
-    // Absent means the cask token stands, as for every other app.
+    // Absent means the cask token stands, which is every app in the tap.
     assert.equal(loadDescriptor("gitcomet").desktopId, undefined);
 
     const assertRejects = (value: unknown, expected: RegExp): void => {
       assert.throws(
         () =>
           validateDescriptor(
-            mutated("orca", (copy) => {
+            mutated("gitcomet", (copy) => {
               copy["desktopId"] = value;
             }),
-            "orca",
+            "gitcomet",
           ),
         expected,
       );
     };
     // A desktop file name, not a display name: no space, no separator.
-    assertRejects("Orca IDE", /desktopId: must be a lowercase app id/);
-    assertRejects("orca/ide", /desktopId: must be a lowercase app id/);
+    assertRejects("Git Comet", /desktopId: must be a lowercase app id/);
+    assertRejects("gitcomet/ide", /desktopId: must be a lowercase app id/);
     assertRejects("", /desktopId: must be a lowercase app id/);
   });
 
@@ -557,10 +524,10 @@ describe("descriptor contents (regression against the previous per-app scripts)"
     assert.throws(
       () =>
         validateDescriptor(
-          mutated("orca", (copy) => {
-            nested(copy, "payload")["trees"] = [{ source: "opt/Orca", target: "lib/Orca" }];
+          mutated("opencode-desktop", (copy) => {
+            nested(copy, "payload")["trees"] = [{ source: "opt/opencode", target: "lib/opencode" }];
           }),
-          "orca",
+          "opencode-desktop",
         ),
       /payload\.trees is not a known field/,
     );
