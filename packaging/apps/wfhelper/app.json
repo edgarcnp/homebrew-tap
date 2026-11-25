@@ -6,7 +6,8 @@
   "cask": "wfhelper",
   "watch": {
     "feedUrl": "https://api.github.com/repos/WFHelper/WFHelper/releases/latest",
-    "format": "github-release",
+    "format": "json",
+    "versionField": "tag_name",
     "versionPattern": "^v(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
     "repo": "WFHelper/WFHelper"
   },

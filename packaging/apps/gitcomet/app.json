@@ -6,8 +6,9 @@
   "cask": "gitcomet",
   "watch": {
     "feedUrl": "https://api.github.com/repos/Auto-Explore/GitComet/releases/latest",
-    "format": "github-release",
-    "versionPattern": "^GitComet v(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
+    "format": "json",
+    "versionField": "tag_name",
+    "versionPattern": "^v(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
     "repo": "Auto-Explore/GitComet"
   },
   "assetPrefix": "gitcomet",
@@ -24,16 +25,15 @@
     "repository": "https://api.github.com/repos/Auto-Explore/GitComet",
     "packageName": "gitcomet",
     "tagPrefix": "v",
-    "assetNameTemplate": "gitcomet-v{version}-linux-x86_64.tar.gz"
+    "assetNameTemplate": "gitcomet_{version}-1_{arch}.deb"
   },
   "payload": {
-    "kind": "tarball-tree",
-    "target": "bin"
+    "kind": "deb-files",
+    "files": ["usr/bin/gitcomet"]
   },
   "icon": {
-    "source": "templates/gitcomet.png",
-    "size": "512x512",
-    "base": "app"
+    "source": "usr/share/icons/hicolor/512x512/apps/gitcomet.png",
+    "size": "512x512"
   },
   "desktopTemplate": "templates/gitcomet.desktop",
   "updater": {

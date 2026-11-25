@@ -5,36 +5,37 @@ the [pipeline README](../../README.md).
 
 Built from ArtCraft Launcher's GitHub releases
 ([`storytold/craft-launcher`](https://github.com/storytold/craft-launcher)): the
-Linux x86_64 `.tar.gz` asset is staged and repacked as this tap's AppImage.
+Linux x86_64 `.deb` is staged and repacked as this tap's AppImage.
 
 ## Trust model
 
 GitHub release assets: the artifact pins the repository, tag prefix and
-asset-name template, and verifies the downloaded tarball against the SHA-256
-the releases API publishes for that exact asset. A missing tag, asset or digest
-is a typed not-ready. The cask starts with a placeholder checksum that the
-first publish replaces with the built AppImage's SHA-256.
+asset-name template, and verifies the downloaded `.deb` against the SHA-256 the
+releases API publishes for that exact asset. A missing tag, asset or digest is
+a typed not-ready. The cask starts with a placeholder checksum that the first
+publish replaces with the built AppImage's SHA-256.
 
 ## App-specific
 
-- **Version source** — `github-release`: tag `v<version>`, release title
-  `ArtCraft Launcher v<version>`. The asset template is
-  `artcraft-launcher-{version}-linux-x86_64.tar.gz`; upstream uses the machine
+- **Version source** — `github-release`: tag `v<version>`. The asset template is
+  `artcraft-launcher-{version}-linux-x86_64.deb`; upstream uses the machine
   spelling (`x86_64`, `aarch64`) in the asset name. The app is amd64-only here,
   matching the tap.
-- **Release watch** — the pattern matches the release *name*, not the tag, so
-  capture group 1 is the version. Upstream marks every `-suffix` version
+- **Release watch** — `json` over the release object, reading `tag_name`, so
+  capture group 1 is the version from a machine-set field rather than the
+  release title (`ArtCraft Launcher v<version>`), which upstream could retitle
+  without touching the tag. Upstream marks every `-suffix` version
   (`1.2.3-rc.1`) as a GitHub prerelease, and `releases/latest` answers only a
   release that is neither a draft nor a prerelease, so the watch never sees one
   and needs no skip list. The `[.-]\w+` tail stays for a vendor that ever ships
   a suffix on a release it does mark stable.
-- **Payload** — `tarball-tree` with the default `target: "root"`: the tarball's
-  single versioned top-level directory is detected, so its `bin/` lands at the
-  AppDir root. `exclude: ["share"]` skips the tarball's inert
-  `share/doc`/`share/metainfo` files, which repeat `storytold/craft-launcher`
-  and would otherwise trip the error-level residual scan; the icon stage reads
-  the tarball's `share/icons` tree directly from the extracted payload. The
-  binary is `bin/artcraft-launcher`.
+- **Payload** — `deb-files`: `usr/bin/artcraft-launcher` and its `craft-ai-mcp`
+  companion land in `AppDir/bin`, the same two binaries the tarball this
+  descriptor used before carried, and the package's declared `Architecture` is
+  checked before extraction. The icon is the package's own
+  `usr/share/icons/hicolor/scalable/apps/ai.storyteller.artcraft-launcher.svg`.
+  Its `usr/share/doc` and `metainfo` files are never staged, so the upstream
+  slug they repeat cannot trip the error-level residual scan.
 - **dlopen libraries** — the binary links only libc/libgcc/libm; the whole
   windowing stack (X11/XCB/cursor/Xi, xkbcommon, Wayland, EGL) is loaded with
   `dlopen`, so no `ldd` closure would find it. `quickSharun.libraries` names

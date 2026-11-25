@@ -174,29 +174,27 @@ describe("descriptor contents (regression against the previous per-app scripts)"
     assert.deepEqual(descriptor.hostHelpers, ["bin/resources/opencode-cli"]);
   });
 
-  it("keeps gitcomet's release tarball and repo-owned icon", () => {
+  it("keeps gitcomet's release .deb and its payload icon", () => {
     const descriptor = loadDescriptor("gitcomet");
     assert.equal(descriptor.artifact.kind, "github-release");
     if (descriptor.artifact.kind === "github-release") {
       assert.equal(descriptor.artifact.repository, "https://api.github.com/repos/Auto-Explore/GitComet");
       assert.equal(descriptor.artifact.tagPrefix, "v");
-      assert.equal(
-        descriptor.artifact.assetNameTemplate,
-        "gitcomet-v{version}-linux-x86_64.tar.gz",
-      );
+      assert.equal(descriptor.artifact.assetNameTemplate, "gitcomet_{version}-1_{arch}.deb");
       assert.equal(descriptor.artifact.packageName, "gitcomet");
     }
     assert.equal(descriptor.debloatArgs, "--add-common");
     assert.deepEqual(descriptor.architectures, ["amd64"]);
-    assert.equal(descriptor.payload.kind, "tarball-tree");
-    assert.equal(descriptor.payload.kind === "tarball-tree" ? descriptor.payload.root : "", undefined);
-    assert.equal(descriptor.payload.kind === "tarball-tree" ? descriptor.payload.target : "", "bin");
+    assert.equal(descriptor.payload.kind, "deb-files");
+    assert.deepEqual(
+      descriptor.payload.kind === "deb-files" ? descriptor.payload.files : undefined,
+      ["usr/bin/gitcomet"],
+    );
+    // The .deb carries the icon the tarball never did, so the repo-owned copy
+    // this descriptor used with `base: "app"` is gone.
+    assert.equal(descriptor.icon.source, "usr/share/icons/hicolor/512x512/apps/gitcomet.png");
     assert.equal(descriptor.icon.size, "512x512");
-    assert.deepEqual(descriptor.icon, {
-      source: "templates/gitcomet.png",
-      size: "512x512",
-      base: "app",
-    });
+    assert.equal(descriptor.icon.base, undefined);
     // The upstream check is a read-only toast, so upstream's supported switch
     // (seeded into the AppDir .env) is the whole neutralization: no endpoint to
     // patch, no residual scan and no runtime hook.
@@ -438,23 +436,23 @@ describe("descriptor contents (regression against the previous per-app scripts)"
     // An omitted root is valid: the pipeline uses the tarball's single
     // top-level directory.
     const withoutRoot = validateDescriptor(
-      mutated("artcraft-launcher", (copy) => {
+      mutated("thinkrail", (copy) => {
         delete nested(copy, "payload")["root"];
       }),
-      "artcraft-launcher",
+      "thinkrail",
     );
     assert.equal(withoutRoot.payload.kind === "tarball-tree" ? withoutRoot.payload.root : "x", undefined);
     assert.deepEqual(
       withoutRoot.payload.kind === "tarball-tree" ? withoutRoot.payload.exclude : undefined,
-      ["share"],
+      ["ThinkRail.desktop"],
     );
     assert.throws(
       () =>
         validateDescriptor(
-          mutated("artcraft-launcher", (copy) => {
+          mutated("thinkrail", (copy) => {
             nested(copy, "payload")["exclude"] = ["../evil"];
           }),
-          "artcraft-launcher",
+          "thinkrail",
         ),
       /payload\.exclude\[0\] must be a top-level name or glob/,
     );
@@ -1031,8 +1029,9 @@ describe("release watch", () => {
     });
     assert.deepEqual(loadDescriptor("gitcomet").watch, {
       feedUrl: "https://api.github.com/repos/Auto-Explore/GitComet/releases/latest",
-      format: "github-release",
-      versionPattern: "^GitComet v(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
+      format: "json",
+      versionField: "tag_name",
+      versionPattern: "^v(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
       repo: "Auto-Explore/GitComet",
     });
     assert.deepEqual(loadDescriptor("little-genius").watch, {
@@ -1043,35 +1042,46 @@ describe("release watch", () => {
     });
     assert.deepEqual(loadDescriptor("wfhelper").watch, {
       feedUrl: "https://api.github.com/repos/WFHelper/WFHelper/releases/latest",
-      format: "github-release",
+      format: "json",
+      versionField: "tag_name",
       versionPattern: "^v(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
       repo: "WFHelper/WFHelper",
     });
     assert.deepEqual(loadDescriptor("artcraft-launcher").watch, {
       feedUrl: "https://api.github.com/repos/storytold/craft-launcher/releases/latest",
-      format: "github-release",
-      versionPattern: "^ArtCraft Launcher v(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
+      format: "json",
+      versionField: "tag_name",
+      versionPattern: "^v(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
       repo: "storytold/craft-launcher",
+    });
+    assert.deepEqual(loadDescriptor("zed").watch, {
+      feedUrl: "https://api.github.com/repos/zed-industries/zed/releases/latest",
+      format: "json",
+      versionField: "tag_name",
+      versionPattern: "^v(\\d+\\.\\d+\\.\\d+)$",
+      repo: "zed-industries/zed",
     });
   });
 
-  it("captures the version from a real feed title", () => {
-    // Feed titles are release names, not tags (e.g. "GitComet v0.2.5").
-    const titles: Record<string, [string, string]> = {
-      "artcraft-launcher": ["ArtCraft Launcher v0.2.0", "0.2.0"],
+  it("captures the version from a real feed value", () => {
+    // Every GitHub app reads the release *tag* (a machine-set field, and what
+    // resolution matches); the other feeds carry their own version string.
+    const values: Record<string, [string, string]> = {
+      "artcraft-launcher": ["v0.2.0", "0.2.0"],
       vscode: ["1.137.0", "1.137.0"],
       "opencode-desktop": ["2.0.18", "2.0.18"],
-      gitcomet: ["GitComet v0.2.5", "0.2.5"],
+      gitcomet: ["v0.2.5", "0.2.5"],
       // JSON feeds carry no titles; the pattern applies to the versionField
       // value instead — vscode reads "productVersion", while opencode-desktop
       // and little-genius read their top-level "version".
       "little-genius": ["0.6.7", "0.6.7"],
       wfhelper: ["v2.1.0", "2.1.0"],
+      zed: ["v1.30.2", "1.30.2"],
     };
-    for (const [app, [title, version]] of Object.entries(titles)) {
+    for (const [app, [value, version]] of Object.entries(values)) {
       const watch = loadDescriptor(app).watch;
       assert.ok(watch !== undefined, `${app} must declare a watch block`);
-      assert.equal(new RegExp(watch.versionPattern).exec(title)?.[1], version);
+      assert.equal(new RegExp(watch.versionPattern).exec(value)?.[1], version);
     }
   });
 
@@ -1676,6 +1686,56 @@ describe("descriptor validation", () => {
         refused,
       );
     }
+    // A json watch pointed at the releases API reads the release object itself
+    // (ThinkRail's tag), which is the same transport: the pinned path and the
+    // identifier fields are enforced there too, so the tag read cannot walk
+    // back out of the guard.
+    const tagWatch = {
+      feedUrl: "https://api.github.com/repos/acme/app/releases/latest",
+      format: "json",
+      versionField: "tag_name",
+      versionPattern: "^(\\d+)$",
+    };
+    assert.deepEqual(
+      validateDescriptor(mutated("vscode", (copy) => { copy["watch"] = tagWatch; }), "vscode").watch,
+      tagWatch,
+    );
+    for (const refused of [
+      "https://api.github.com/repos/acme/app/releases",
+      "https://api.github.com/repos/acme/app/releases/latest/hop",
+    ]) {
+      assert.throws(
+        () =>
+          validateDescriptor(
+            mutated("vscode", (copy) => {
+              copy["watch"] = { ...tagWatch, feedUrl: refused };
+            }),
+            "vscode",
+          ),
+        /must be a GitHub latest-release URL/,
+        refused,
+      );
+    }
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("vscode", (copy) => {
+            copy["watch"] = { ...tagWatch, versionField: "id" };
+          }),
+          "vscode",
+        ),
+      /versionField must be tag_name or name/,
+    );
+    assert.throws(
+      () =>
+        validateDescriptor(
+          mutated("vscode", (copy) => {
+            copy["watch"] = { ...tagWatch, repo: "other/app" };
+          }),
+          "vscode",
+        ),
+      /does not match watch\.repo/,
+    );
     assert.throws(
       () =>
         validateDescriptor(

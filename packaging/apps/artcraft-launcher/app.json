@@ -6,8 +6,9 @@
   "cask": "artcraft-launcher",
   "watch": {
     "feedUrl": "https://api.github.com/repos/storytold/craft-launcher/releases/latest",
-    "format": "github-release",
-    "versionPattern": "^ArtCraft Launcher v(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
+    "format": "json",
+    "versionField": "tag_name",
+    "versionPattern": "^v(\\d+\\.\\d+\\.\\d+(?:[.-]\\w+)*)$",
     "repo": "storytold/craft-launcher"
   },
   "assetPrefix": "artcraft-launcher",
@@ -24,14 +25,14 @@
     "repository": "https://api.github.com/repos/storytold/craft-launcher",
     "packageName": "artcraft-launcher",
     "tagPrefix": "v",
-    "assetNameTemplate": "artcraft-launcher-{version}-linux-x86_64.tar.gz"
+    "assetNameTemplate": "artcraft-launcher-{version}-linux-x86_64.deb"
   },
   "payload": {
-    "kind": "tarball-tree",
-    "exclude": ["share"]
+    "kind": "deb-files",
+    "files": ["usr/bin/artcraft-launcher", "usr/bin/craft-ai-mcp"]
   },
   "icon": {
-    "source": "share/icons/hicolor/scalable/apps/ai.storyteller.artcraft-launcher.svg",
+    "source": "usr/share/icons/hicolor/scalable/apps/ai.storyteller.artcraft-launcher.svg",
     "size": "scalable"
   },
   "desktopTemplate": "templates/artcraft-launcher.desktop",
