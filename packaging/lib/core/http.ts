@@ -113,11 +113,23 @@ export interface ReadPayloadOptions {
   idleTimeoutMs?: number;
 }
 
-type ReadChunk = Awaited<ReturnType<ReadableStreamDefaultReader<Uint8Array>["read"]>>;
+// The reader is described by the two members this module uses rather than by
+// the streams class: Bun's `Response` comes from `undici-types`, which declares
+// its own copy of `ReadableStream`, so naming the class picks a copy the body's
+// reader does not match.
+interface BodyReader {
+  read(): Promise<ReadChunk>;
+  cancel(): Promise<void>;
+}
+
+interface ReadChunk {
+  done: boolean;
+  value?: Uint8Array | undefined;
+}
 
 // Resolves with the next chunk, or rejects once nothing arrives for idleMs.
 async function readChunk(
-  reader: ReadableStreamDefaultReader<Uint8Array>,
+  reader: BodyReader,
   idleMs: number,
   url: string,
 ): Promise<ReadChunk> {

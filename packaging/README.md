@@ -7,7 +7,7 @@ script.
 The TypeScript runs directly on Bun — no build step. The descriptor schema is
 plain **Zod**, so `bun install` is required and the CLI runs directly as
 `packaging/bin/fbr.ts`. `zod` is the runtime dependency; `typescript` and
-`@types/node` are dev-only.
+`@types/bun` are dev-only.
 
 ## Layout
 
@@ -431,7 +431,7 @@ grouped rules in `renovate.json` for routine bumps:
 
 | Dependency | Declared in | Manager |
 | --- | --- | --- |
-| `zod`, `typescript`, `@types/node` | `package.json` | npm (exact pins, no `^`) |
+| `zod`, `typescript`, `@types/bun` | `package.json` | npm (exact pins, no `^`) |
 | GitHub Actions | workflow `uses:` | github-actions (SHA re-pinned) |
 | `Homebrew/actions` | workflow `uses:` (SHA plus CalVer comment) | regex custom manager (the built-in manager truncates the four-part CalVer tag) |
 | Container images | workflow `container:`, including the nested matrix image, and the builder Dockerfile's `FROM` | docker (regex for the matrix) |
@@ -465,8 +465,8 @@ pkgforge `appimagetool` are downloaded from a URL addressed by the version
 Renovate bumps, so a version PR needs no hand-edited pin — both trust whatever
 GitHub serves over HTTPS (pkgforge publishes only b3sum sidecars, served from
 the same release as the binary, so they would add no trust). `typescript`
-stays on the stable 6.x line, and `@types/node` on the Node major line Bun
-implements; both are `renovate.json` rules.
+stays on the stable 6.x line, and `@types/bun` on the Bun release line that
+runtime is pinned to; both are `renovate.json` rules.
 
 ## Production gate
 

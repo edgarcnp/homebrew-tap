@@ -163,14 +163,14 @@
       "allowedVersions": ">=6.0.3 <7"
     },
     {
-      "description": "@types/node names the Node API surface Bun implements, so it stays on that major line",
+      "description": "@types/bun ships Bun's own typings, so it stays on the Bun release line the runtime is pinned to",
       "matchDatasources": [
         "npm"
       ],
       "matchPackageNames": [
-        "@types/node"
+        "@types/bun"
       ],
-      "allowedVersions": ">=24 <25"
+      "allowedVersions": ">=1.4 <1.5"
     },
     {
       "description": "Actions are SHA-pinned; one grouped PR keeps the review small",

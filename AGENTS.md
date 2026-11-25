@@ -26,7 +26,7 @@ is **data** (`packaging/apps/<app>/app.json`), never a forked script.
 - TypeScript runs directly on Bun — no build step. The descriptor schema is
   plain **Zod**, so `bun install` is required and `packaging/bin/fbr.ts` is the
   only process entry point. `zod` is the runtime dependency; `typescript` and
-  `@types/node` are dev-only. Adding another dependency is a decision, not a
+  `@types/bun` are dev-only. Adding another dependency is a decision, not a
   convenience.
 - `packaging/lib/` is a library with no import-time side effects;
   `lib/cli.ts` composes the CLI. `lib/descriptor/` owns the `app.json` schema,
