@@ -832,11 +832,14 @@ Install the Anylinux tools (packaging/scripts/install-anylinux-tools.sh) or add 
   # Before the smoke gate: a wrong root entry is a structural defect that a
   # successful launch says nothing about.
   pipeline_assert_packaged_desktop "${output_file}"
-  # Chromium-based payloads need --no-sandbox to start headless. A native
-  # bundle (Zed) rejects it as an unknown flag and exits 2 before launching
-  # anything, which would let the gate pass without ever starting the app.
+  # Chromium bundles need --no-sandbox to start headless. Any other toolkit
+  # rejects it as an unknown flag and exits 2 before launching anything, which
+  # would let the gate pass without ever starting the app (Zed). The flag follows
+  # the toolkit the descriptor already names for the Wayland switch, not the
+  # payload container: a Chromium AppDir is Chromium however its tree was
+  # staged, and a native one is native with or without dpkg.
   local -a smoke_launch_args=()
-  if [[ "$(descriptor_field '.payload.kind')" != "tarball-tree" ]]
+  if [[ "$(descriptor_field '.waylandBackend // "auto"')" = "electron" ]]
   then
     smoke_launch_args=(--no-sandbox)
   fi

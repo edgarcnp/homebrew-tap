@@ -18,7 +18,12 @@ import {
   fail,
   isRecord,
 } from "../core/guards.ts";
-import { GITHUB_API_REPOSITORY, GITHUB_RELEASE_FEED, SAFE_REFERENCE } from "../core/patterns.ts";
+import {
+  GITHUB_API_REPOSITORY,
+  GITHUB_RELEASE_FEED,
+  GITHUB_RELEASES_API,
+  SAFE_REFERENCE,
+} from "../core/patterns.ts";
 import { hasPlaceholder } from "../core/template.ts";
 import { ARTIFACT_KINDS, type Artifact } from "./artifact.ts";
 import { appDescriptorSchema, type AppDescriptor, type AppDescriptorInput, type QuickSharunConfig, type SmokeConfig } from "./app.ts";
@@ -313,15 +318,35 @@ function validateWayland(input: AppDescriptorInput, label: string): void {
   }
 }
 
+// The fields of a GitHub release object that carry the release identifier: the
+// tag (machine-set, and what artifact resolution matches) or the release name.
+const GITHUB_RELEASE_VERSION_FIELDS = ["tag_name", "name"];
+
 function validateWatch(watch: WatchConfig, label: string): void {
   assertHttpsUrl(watch.feedUrl, `${label}.feedUrl`);
-  // The GitHub latest-release transport fetches the pinned API path behind the
-  // shared bearer PAT, so only that URL shape may name it.
-  if (watch.format === "github-release") {
+  // Two readers take the GitHub release object: `"github-release"`, and a
+  // `"json"` watch pointed at the releases API to read a field of it (the tag,
+  // whose text the artifact resolution matches). Both fetch the pinned API path
+  // behind the shared bearer PAT, so only that URL shape may name either, and
+  // only a field carrying the release identifier may be read from it.
+  const readsGithubRelease =
+    watch.format === "github-release" ||
+    (watch.format === "json" && GITHUB_RELEASES_API.test(watch.feedUrl));
+  if (readsGithubRelease) {
     if (!GITHUB_RELEASE_FEED.test(watch.feedUrl)) {
       fail(
         `${label}.feedUrl must be a GitHub latest-release URL ` +
           `(https://api.github.com/repos/<owner>/<repo>/releases/latest): ${watch.feedUrl}`,
+      );
+    }
+    if (
+      watch.format === "json" &&
+      watch.versionField !== undefined &&
+      !GITHUB_RELEASE_VERSION_FIELDS.includes(watch.versionField)
+    ) {
+      fail(
+        `${label}.versionField must be tag_name or name when the watch reads a ` +
+          `GitHub release object: ${watch.versionField}`,
       );
     }
     if (watch.repo !== undefined) {

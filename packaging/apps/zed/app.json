@@ -6,7 +6,8 @@
   "cask": "zed",
   "watch": {
     "feedUrl": "https://api.github.com/repos/zed-industries/zed/releases/latest",
-    "format": "github-release",
+    "format": "json",
+    "versionField": "tag_name",
     "versionPattern": "^v(\\d+\\.\\d+\\.\\d+)$",
     "repo": "zed-industries/zed"
   },

@@ -30,3 +30,10 @@ export const GITHUB_API_REPOSITORY =
 // optional trailing slash). Mirror of the API's GITHUB_RELEASE_FEED.
 export const GITHUB_RELEASE_FEED =
   /^https:\/\/api\.github\.com\/repos\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/releases\/latest\/?$/;
+
+// Any GitHub releases API URL. A `"json"` watch may name one to read a field of
+// the release object itself (the tag, whose text resolution matches), which is
+// the same transport the `"github-release"` reader uses, so the validator
+// applies that reader's pinned-path rule to it as well.
+export const GITHUB_RELEASES_API =
+  /^https:\/\/api\.github\.com\/repos\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/releases(?:[/?#]|$)/;
