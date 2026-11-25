@@ -1,12 +1,25 @@
 #!/bin/sh
 # WebKit's DMABUF renderer allocates its compositor buffers through GBM on a
-# render node it picks at runtime; where that node belongs to the NVIDIA
+# render node it picks at runtime. Where that node belongs to the NVIDIA
 # proprietary driver (DRIVER=nvidia in /sys/class/drm/renderD*/device/uevent),
 # every allocation fails with "Failed to create GBM buffer ...: Invalid
-# argument" and the window stays white while the app itself runs normally. The
-# software path allocates no GBM buffer, so it paints.
+# argument" and the window stays white while the app itself runs normally.
 #
-# Unconditional by design: this hook can see the host's render nodes but not
-# which one WebKit would composite through, so the choice is a window that
-# paints on every host against accelerated compositing where the driver works.
-export WEBKIT_DISABLE_DMABUF_RENDERER=1
+# WEBKIT_DMABUF_RENDERER_FORCE_SHM keeps accelerated compositing and moves only
+# the transport: the swap chain then allocates a ShareableBitmap instead of a
+# GBM buffer, so the allocation that fails never happens. The heavier
+# WEBKIT_DISABLE_DMABUF_RENDERER=1 is not used because on WebKitGTK 2.44+ it
+# leaves the transport mode set empty, which turns accelerated compositing off
+# and drops the app to CPU rasterization.
+#
+# The probe exists because WebKit chooses the node at runtime: any NVIDIA render
+# node means the failure is reachable. A host whose render nodes are all Mesa
+# keeps DMA-BUF, since shared memory costs a synchronous full-surface readback
+# per composited frame and Mesa has no such bug.
+for uevent in /sys/class/drm/renderD*/device/uevent; do
+  if [ -r "${uevent}" ] && grep -qx 'DRIVER=nvidia' "${uevent}"
+  then
+    export WEBKIT_DMABUF_RENDERER_FORCE_SHM=1
+    break
+  fi
+done

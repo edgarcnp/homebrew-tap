@@ -54,15 +54,27 @@ tag, and verified against the SHA-256 in its `SHA256SUMS` asset.
   `templates/webkit-dmabuf.hook` rides the descriptor's `updater.hook` — the
   pipeline's runtime-hook slot, as Firefox's NVIDIA sandbox hook does — is
   installed into the AppDir's `bin/`, and is sourced by quick-sharun's
-  `AppRun.sh` before it execs the launcher, so
-  `WEBKIT_DISABLE_DMABUF_RENDERER=1` reaches the launcher and the WebKit
-  child processes it spawns. It applies to every launch, the cask's desktop
-  entry included. The cost is accelerated compositing on hosts without the
-  bug: the software path renders, but it does not use the GPU. Forcing
-  `GDK_BACKEND=x11` and `__NV_DISABLE_EXPLICIT_SYNC=1` do not help, the
-  bundle's WebKit (2.54.3) is current and `webkitgtk-6.0` is unavailable
-  (`bin/libNativeWrapper.so` has `NEEDED libwebkit2gtk-4.1.so.0`), so the
-  hook is the only lever until the driver renders.
+  `AppRun.sh` before it execs the launcher, so what it exports reaches the
+  launcher and the WebKit child processes it spawns. It applies to every
+  launch, the cask's desktop entry included.
+  The hook exports `WEBKIT_DMABUF_RENDERER_FORCE_SHM=1`, not
+  `WEBKIT_DISABLE_DMABUF_RENDERER=1`: forcing shared memory swaps the
+  allocation that fails (a GBM buffer) for a `ShareableBitmap` and keeps
+  accelerated compositing, while the disable variable leaves the transport mode
+  set empty on WebKitGTK 2.44+ and drops the app to CPU rasterization. It only
+  does so when a render node belongs to the NVIDIA proprietary driver, because
+  WebKit picks the node at runtime and the shared-memory transport costs a
+  synchronous full-surface readback per composited frame. Measured on the
+  0.4.0 AppImage with an RTX 3080 (`renderD128` under the `nvidia` driver,
+  COSMIC on Wayland, the app an Xwayland client), hook neutralised: four
+  `Failed to create GBM buffer of size 1440x920: Invalid argument` lines and a
+  uniformly white window; `WEBKIT_DMABUF_RENDERER_FORCE_SHM=1`, no GBM failure
+  and the full interface painted. `__NV_DISABLE_EXPLICIT_SYNC=1` on its own
+  changed neither (four GBM failures, still white), so it is not set. The rest
+  of the stack is current — the bundle's WebKit is 2.54.3 and
+  `webkitgtk-6.0` is unavailable (`bin/libNativeWrapper.so` has
+  `NEEDED libwebkit2gtk-4.1.so.0`) — so the transport switch is the lever until
+  the driver renders GBM buffers.
 - **X11 only** — the bundled Electrobun native wrapper (1.0.2) calls
   `setenv("GDK_BACKEND", "x11", 1)` immediately before `gtk_init`, and its
   screen-capture path refuses anything that is not a `GDK_IS_X11_DISPLAY`, so
