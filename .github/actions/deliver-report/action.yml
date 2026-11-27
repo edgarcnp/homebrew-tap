@@ -36,7 +36,9 @@ runs:
         body="${RUNNER_TEMP}/delivery-body.txt"
         # A rejected report must name which layer answered: the API edge adds
         # server, cf-ray and cf-mitigated, the API does not. The excerpt is
-        # bounded to 512 bytes and flattened onto one line.
+        # bounded to 512 bytes and flattened onto one line. The
+        # www-authenticate value is logged too: its invalid_token error
+        # separates a token that was refused from a header that never arrived.
         header_value() {
           tr -d '\r' <"${headers}" 2>/dev/null \
             | awk -F: -v name="$1" 'tolower($1) == name { sub(/^[^:]*:[ ]*/, ""); value=$0 } END { print value }' \
@@ -48,7 +50,7 @@ runs:
             | tr '\r\n\t' ' ' \
             | LC_ALL=C tr -c '[:print:]' '?' || true)"
           echo "API response body (first 512 bytes): ${excerpt}"
-          echo "API response headers: server=$(header_value server) cf-ray=$(header_value cf-ray) cf-mitigated=$(header_value cf-mitigated) content-type=$(header_value content-type)"
+          echo "API response headers: server=$(header_value server) cf-ray=$(header_value cf-ray) cf-mitigated=$(header_value cf-mitigated) content-type=$(header_value content-type) www-authenticate=$(header_value www-authenticate)"
         }
         # Three attempts total, each with a fresh OIDC token: a token may
         # deliver exactly one body, and an iat older than two minutes is
